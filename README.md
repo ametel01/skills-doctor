@@ -75,6 +75,8 @@ the Agent Skills standards from <https://agentskills.io/home>, including:
 - eval guidance for non-trivial skills
 - divergent same-name skills across Claude and Codex/agents roots
 
+See `docs/RULES.md` for a full rule catalog, severity, and intended rationale.
+
 Findings are grouped as blocking errors, warnings, and advisory improvements.
 The human summary opens with a score header showing a face, `0` to `100` score,
 label, and proportional terminal bar. The score starts at 100 and deducts 1.5

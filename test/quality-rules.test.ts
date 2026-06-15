@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -164,6 +165,30 @@ describe("quality rules", () => {
     const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
 
     expect(ruleIds).toContain("resource-reference-escapes-skill");
+  });
+
+  it("documents all emitted rule IDs", async () => {
+    const qualitySource = await readFile(
+      fileURLToPath(new URL("../src/domain/rules/quality.ts", import.meta.url)),
+      "utf8",
+    );
+    const structuralSource = await readFile(
+      fileURLToPath(new URL("../src/domain/rules/structural.ts", import.meta.url)),
+      "utf8",
+    );
+    const ruleCatalog = await readFile(fileURLToPath(new URL("../docs/RULES.md", import.meta.url)), "utf8");
+
+    const qualityRuleIds = Array.from(qualitySource.matchAll(/ruleId:\s*\"([^\"]+)\"/g)).map(
+      (match) => match[1],
+    );
+    const structuralRuleIds = Array.from(
+      structuralSource.matchAll(/ruleId:\s*\"([^\"]+)\"/g),
+    ).map((match) => match[1]);
+    const emittedRuleIds = [...new Set([...qualityRuleIds, ...structuralRuleIds])].sort();
+
+    for (const ruleId of emittedRuleIds) {
+      expect(ruleCatalog).toContain(`\`${ruleId}\``);
+    }
   });
 });
 
