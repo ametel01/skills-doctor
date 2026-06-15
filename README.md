@@ -29,6 +29,18 @@ You can also run the built binary through package managers after publishing:
 skills-doctor
 ```
 
+## Distribution as an Agent Skill
+
+Skills Doctor is also available as an agent-facing skill wrapper at `skills/skills-doctor/SKILL.md`.
+
+Use the `skills-doctor` skill when people ask for an agent workflow to:
+
+- audit skills with `bunx skills-doctor@latest --json` for deterministic, machine-readable output.
+- launch interactive repair handoff through `bunx skills-doctor@latest` after explicit consent.
+
+The CLI is the primary source of rule logic and output shape.
+The skill wrapper is a convenience entrypoint so agents can discover and invoke the same scanner from within skill workflows.
+
 ## What It Scans
 
 Skills Doctor detects these project-local roots relative to the directory you
