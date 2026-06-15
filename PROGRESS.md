@@ -14,7 +14,7 @@
 
 - [x] Step 0: Progress Tracking Setup
 - [x] Step 1: Bun, TypeScript, Biome, Vitest, and Package Scaffold
-- [ ] Step 2: CI, Release Workflow, Release Notes Script, and Changelog
+- [x] Step 2: CI, Release Workflow, Release Notes Script, and Changelog
 - [ ] Step 3: Domain Types, Skill Root Discovery, and Skill Parsing
 - [ ] Step 4: Structural Rule Engine
 - [ ] Step 5: Quality, Progressive Disclosure, Script, Eval, and Cross-Ecosystem Rules
@@ -28,7 +28,7 @@
 
 ## Current Status
 
-Step 1 complete. Next step: Step 2.
+Step 2 complete. Next step: Step 3.
 
 ## Update Rule
 
@@ -65,5 +65,26 @@ After each completed step:
   - `bun run build`
   - `bun run verify`
   - `bun run pack:dry-run`
-- Commit: pending
+- Commit: `d349c1b`
 - Next step: Step 2
+
+### Step 2: CI, Release Workflow, Release Notes Script, and Changelog
+
+- Status: Complete
+- Changes:
+  - Added Bun CI for pull requests and `main`.
+  - Added tag-driven release workflow modeled after Ritual's Bun publish flow.
+  - Added `scripts/extract-release-notes.mjs`.
+  - Added `CHANGELOG.md` in the Keep a Changelog/Semantic Versioning format.
+  - Added a release-note extraction unit test.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+  - `bun run pack:dry-run`
+  - Temporary changelog smoke test with `node scripts/extract-release-notes.mjs 0.1.0 <temp CHANGELOG.md>`
+- Commit: pending
+- Next step: Step 3
