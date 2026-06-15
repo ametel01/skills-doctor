@@ -24,14 +24,17 @@ export const buildProgram = (): Command => {
 };
 
 export const main = async (argv: readonly string[] = process.argv): Promise<void> => {
-  process.stdin.unref();
   process.on("SIGINT", () => process.exit(130));
   process.on("SIGTERM", () => process.exit(143));
   process.stdout.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EPIPE") process.exit(0);
   });
 
-  await buildProgram().parseAsync([...argv]);
+  try {
+    await buildProgram().parseAsync([...argv]);
+  } finally {
+    process.stdin.unref();
+  }
 };
 
-await main().catch(handleCliError);
+main().catch(handleCliError);

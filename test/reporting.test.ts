@@ -35,7 +35,10 @@ describe("scan reports", () => {
       ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
     );
 
-    const discovered = await discoverSkillRoots({ cwd: directory });
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
     const scan = await scanSkillRoots({ roots: discovered.roots });
     const report = buildScanReport({
       version: "0.0.0-test",

@@ -104,7 +104,10 @@ describe("quality rules", () => {
       body: "## Workflow\n\n- Use Codex-specific instructions.",
     });
 
-    const discovered = await discoverSkillRoots({ cwd: directory });
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
     const scan = await scanSkillRoots({ roots: discovered.roots });
 
     expect(scan.findings.map((finding) => finding.ruleId)).toContain(

@@ -3,7 +3,7 @@ export type SkillEcosystem = "claude" | "codex" | "custom";
 export type SkillRoot = {
   readonly ecosystem: SkillEcosystem;
   readonly rootPath: string;
-  readonly source: "detected" | "custom";
+  readonly source: "local" | "global" | "custom";
 };
 
 export type DiagnosticSeverity = "info" | "warning" | "error";

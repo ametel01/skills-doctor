@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Avoid Node unsettled top-level-await warnings while the interactive CLI is waiting for prompts.
+- Discover global `~/.claude/skills` and `~/.agents/skills` roots and prompt for local, global/root, or both when both scopes exist.
+
 ## [0.1.0] - 2026-06-15
 
 ### Added

@@ -33,6 +33,7 @@ describe("scanAction", () => {
       { yes: true },
       {
         cwd: directory,
+        homeDir: path.join(directory, "home"),
         stdinIsTty: true,
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
@@ -56,6 +57,7 @@ describe("scanAction", () => {
       {},
       {
         cwd: directory,
+        homeDir: path.join(directory, "home"),
         stdinIsTty: true,
         prompts,
         writeStdout: () => {},
@@ -74,6 +76,7 @@ describe("scanAction", () => {
         { yes: true },
         {
           cwd: directory,
+          homeDir: path.join(directory, "home"),
           stdinIsTty: false,
           writeStdout: () => {},
           writeStderr: () => {},
@@ -99,6 +102,7 @@ describe("scanAction", () => {
       {},
       {
         cwd: directory,
+        homeDir: path.join(directory, "home"),
         stdinIsTty: true,
         prompts: queuedPrompts({
           selects: ["repair", "errors"],
@@ -137,6 +141,7 @@ describe("scanAction", () => {
       {},
       {
         cwd: directory,
+        homeDir: path.join(directory, "home"),
         stdinIsTty: true,
         prompts: queuedPrompts({
           selects: ["repair", "errors"],
@@ -169,6 +174,7 @@ describe("scanAction", () => {
       {},
       {
         cwd: directory,
+        homeDir: path.join(directory, "home"),
         stdinIsTty: true,
         prompts: queuedPrompts({
           selects: ["repair", "errors"],
@@ -203,6 +209,7 @@ describe("scanAction", () => {
       {},
       {
         cwd: directory,
+        homeDir: path.join(directory, "home"),
         stdinIsTty: true,
         prompts: queuedPrompts({ selects: ["repair"] }),
         writeStdout: (message) => stdout.push(message),
@@ -213,6 +220,33 @@ describe("scanAction", () => {
     );
 
     expect(stdout.join("")).toContain("No local repair agent was found.");
+  });
+
+  it("lets the user choose global/root skills when local and global roots exist", async () => {
+    const homeDir = path.join(directory, "home");
+    await writeSkill(path.join(directory, ".agents", "skills", "local-skill"), "local-skill");
+    await writeSkill(path.join(homeDir, ".agents", "skills", "global-skill"), "global-skill");
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        stdinIsTty: true,
+        prompts: fakePrompts(["global", "exit"]),
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(report.scannedRoots).toHaveLength(1);
+    expect(report.scannedRoots[0]).toMatchObject({
+      ecosystem: "codex",
+      source: "global",
+      rootPath: path.join(homeDir, ".agents", "skills"),
+    });
   });
 });
 

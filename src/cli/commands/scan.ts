@@ -27,6 +27,7 @@ export type ScanFlags = {
 
 export type ScanActionOptions = {
   readonly cwd?: string;
+  readonly homeDir?: string | undefined;
   readonly env?: NodeJS.ProcessEnv;
   readonly stdinIsTty?: boolean;
   readonly prompts?: PromptAdapter;
@@ -41,6 +42,7 @@ export type ScanActionOptions = {
 };
 
 type RootSelection = "all" | "claude" | "codex" | "custom";
+type RootScopeSelection = "all" | "local" | "global" | "custom";
 type ReviewAction = "all" | "errors" | "by-skill" | "repair" | "exit";
 
 export const scanAction = async (
@@ -70,7 +72,7 @@ export const scanAction = async (
   }
 
   const discovered = await spinner.run("Finding local skill roots...", () =>
-    discoverSkillRoots({ cwd }),
+    discoverSkillRoots({ cwd, homeDir: options.homeDir }),
   );
   let roots = discovered.roots;
 
@@ -83,10 +85,12 @@ export const scanAction = async (
     const customRoot = await prompts.input("Skills directory path", ".");
     const custom = await discoverSkillRoots({
       cwd,
+      homeDir: options.homeDir,
       customRoots: [{ rootPath: customRoot, ecosystem: "custom" }],
     });
     roots = custom.roots;
   } else if (!skipPrompts) {
+    roots = await selectRootScopes(roots, prompts);
     roots = await selectRoots(roots, prompts);
   }
 
@@ -144,6 +148,24 @@ const selectRoots = async (
 
   if (selection === "all") return roots;
   return roots.filter((root) => root.ecosystem === selection);
+};
+
+const selectRootScopes = async (
+  roots: readonly SkillRoot[],
+  prompts: PromptAdapter,
+): Promise<readonly SkillRoot[]> => {
+  const hasLocal = roots.some((root) => root.source === "local");
+  const hasGlobal = roots.some((root) => root.source === "global");
+  if (!hasLocal || !hasGlobal) return roots;
+
+  const selection = await prompts.select<RootScopeSelection>("Choose skills scope to scan", [
+    { name: "Both local project and global/root skills", value: "all" },
+    { name: "Local project skills (./.claude/skills, ./.agents/skills)", value: "local" },
+    { name: "Global/root skills (~/.claude/skills, ~/.agents/skills)", value: "global" },
+  ]);
+
+  if (selection === "all") return roots;
+  return roots.filter((root) => root.source === selection);
 };
 
 type ReviewFindingsInput = {

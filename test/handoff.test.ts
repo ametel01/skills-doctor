@@ -193,7 +193,7 @@ const makeReport = (findings: readonly Finding[]): ScanReport => {
     version: "0.0.0-test",
     directory: "/repo",
     elapsedMilliseconds: 12,
-    scannedRoots: [{ ecosystem: "codex", rootPath: "/repo/.agents/skills", source: "detected" }],
+    scannedRoots: [{ ecosystem: "codex", rootPath: "/repo/.agents/skills", source: "local" }],
     skillCount: uniqueSkills.length,
     findingCount: findings.length,
     errorCount: findings.filter((finding) => finding.severity === "error").length,

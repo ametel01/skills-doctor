@@ -1,13 +1,14 @@
 # Skills Doctor
 
-Skills Doctor is a local-first CLI for auditing Agent Skills in project
-repositories. It scans `.claude/skills/`, `.agents/skills/`, or both, checks
-each `SKILL.md` against the local skill quality specification, and can hand a
-findings-specific repair prompt to `claude` or `codex`.
+Skills Doctor is a local-first CLI for auditing Agent Skills in project and
+user-level skill roots. It scans `.claude/skills/`, `.agents/skills/`, or both,
+checks each `SKILL.md` against the local skill quality specification, and can
+hand a findings-specific repair prompt to `claude` or `codex`.
 
 ## Install And Run
 
-From a repository that contains project-local skills:
+From a repository that contains project-local skills, or from anywhere when you
+want to scan global user-level skills:
 
 ```bash
 bunx skills-doctor@latest
@@ -29,15 +30,23 @@ skills-doctor
 
 ## What It Scans
 
-Skills Doctor detects these roots relative to the directory you run it from:
+Skills Doctor detects these project-local roots relative to the directory you
+run it from:
 
 - `.claude/skills/`
 - `.agents/skills/`
 
-When both roots exist, the interactive CLI asks whether to scan Claude skills,
-Codex/agents skills, or both. When no known root exists, it prompts for a custom
-skills directory. Non-interactive runs use conservative defaults and fail with a
-clear user error when a required choice cannot be made.
+It also detects these global user-level roots:
+
+- `~/.claude/skills/`
+- `~/.agents/skills/`
+
+When local and global roots both exist, the interactive CLI first asks whether
+to scan local project skills, global/root skills, or both. When both Claude and
+Codex/agents roots exist in the selected scope, it asks whether to scan Claude,
+Codex/agents, or both. When no known root exists, it prompts for a custom skills
+directory. Non-interactive runs use conservative defaults and fail with a clear
+user error when a required choice cannot be made.
 
 ## What It Checks
 

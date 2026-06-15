@@ -3,7 +3,7 @@
 ## Summary
 
 Skills Doctor is an interactive local CLI that scans agent skills in
-`.claude/skills/`, `.agents/skills/`, or both, grades them against
+project-local and global `.claude/skills/` and `.agents/skills/` roots, grades them against
 `docs/SKILLS_SPEC.md`, builds a findings-specific repair prompt, lets the user
 choose a local agent CLI (`claude` or `codex`), and launches that agent to fix
 the skills in place.
@@ -88,8 +88,10 @@ the coding agent they already use.
 ## Goals
 
 - Discover `.claude/skills/` and `.agents/skills/` skill roots in the current
-  project.
-- Let the user choose Claude skills, Codex/agents skills, or both.
+  project and in the user's home directory.
+- Let the user choose local project skills, global/root skills, or both.
+- Let the user choose Claude skills, Codex/agents skills, or both within the
+  selected scope.
 - Scan each skill directory containing `SKILL.md`.
 - Validate structural correctness against the Agent Skills format.
 - Detect quality risks from `docs/SKILLS_SPEC.md`, including weak descriptions,
@@ -137,36 +139,39 @@ handoff behavior.
 ## MVP User Flow
 
 1. The user runs `bunx skills-doctor@latest` inside a project.
-2. Skills Doctor detects whether `./.claude/skills/` and `./.agents/skills/`
-   exist.
-3. If both roots exist, the user chooses one of:
+2. Skills Doctor detects whether local roots (`./.claude/skills/`,
+   `./.agents/skills/`) and global roots (`~/.claude/skills/`,
+   `~/.agents/skills/`) exist.
+3. If both local and global roots exist, the user chooses local project skills,
+   global/root skills, or both.
+4. If multiple ecosystems exist in the selected scope, the user chooses one of:
    - Claude skills.
    - Codex/agents skills.
    - Both.
-4. If no known root exists, the user can enter an extra skills directory path or
+5. If no known root exists, the user can enter an extra skills directory path or
    cancel.
-5. Skills Doctor scans selected roots for skill directories containing
+6. Skills Doctor scans selected roots for skill directories containing
    `SKILL.md`.
-6. Skills Doctor validates each skill against `docs/SKILLS_SPEC.md`.
-7. Skills Doctor prints a summary:
+7. Skills Doctor validates each skill against `docs/SKILLS_SPEC.md`.
+8. Skills Doctor prints a summary:
    - number of roots scanned
    - number of skills scanned
    - blocking errors
    - warnings
    - advisory improvements
    - top affected skills
-8. The user reviews findings by skill or severity.
-9. The user chooses whether to fix all findings or only a selected subset.
-10. Skills Doctor detects local `claude` and `codex` executables.
-11. The user chooses the local CLI to use.
-12. Skills Doctor builds a custom repair prompt from the selected findings.
-13. Skills Doctor writes the full report to a local output directory.
-14. Skills Doctor previews the command and asks for confirmation.
-15. Skills Doctor launches the selected CLI with `stdio: "inherit"` and the
+9. The user reviews findings by skill or severity.
+10. The user chooses whether to fix all findings or only a selected subset.
+11. Skills Doctor detects local `claude` and `codex` executables.
+12. The user chooses the local CLI to use.
+13. Skills Doctor builds a custom repair prompt from the selected findings.
+14. Skills Doctor writes the full report to a local output directory.
+15. Skills Doctor previews the command and asks for confirmation.
+16. Skills Doctor launches the selected CLI with `stdio: "inherit"` and the
     generated prompt.
-16. The selected agent edits the skill files directly.
-17. When the agent exits, Skills Doctor re-scans the same roots.
-18. Skills Doctor reports which findings were fixed and which remain.
+17. The selected agent edits the skill files directly.
+18. When the agent exits, Skills Doctor re-scans the same roots.
+19. Skills Doctor reports which findings were fixed and which remain.
 
 ## Functional Requirements
 
@@ -174,6 +179,9 @@ handoff behavior.
 
 - Detect project-local Claude skills at `./.claude/skills/`.
 - Detect project-local Codex/agents skills at `./.agents/skills/`.
+- Detect global Claude skills at `~/.claude/skills/`.
+- Detect global Codex/agents skills at `~/.agents/skills/`.
+- If both local and global roots exist, prompt for local, global/root, or both.
 - Support scanning either root or both roots in one run.
 - If neither root exists, prompt for a custom skills root.
 - Resolve all selected roots to absolute paths.
@@ -682,8 +690,9 @@ top-level crash-reporting path if telemetry is later added.
 
 ## MVP Decisions
 
-- MVP scans project-local roots by default: `./.claude/skills` and
-  `./.agents/skills`. Global user-level roots can be added later.
+- MVP scans project-local and global user-level roots:
+  `./.claude/skills`, `./.agents/skills`, `~/.claude/skills`, and
+  `~/.agents/skills`.
 - Repair handoff asks the user to choose the subset: blocking errors, blocking
   errors plus warnings, all findings, or selected skills.
 - The scanner remains deterministic before handoff. There is no optional LLM

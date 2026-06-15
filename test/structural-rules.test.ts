@@ -24,7 +24,10 @@ describe("structural rules", () => {
   it("reports missing SKILL.md in child skill directories", async () => {
     await mkdir(path.join(directory, ".agents", "skills", "empty-skill"), { recursive: true });
 
-    const discovered = await discoverSkillRoots({ cwd: directory });
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
     const scan = await scanSkillRoots({ roots: discovered.roots });
 
     expect(scan.findings).toMatchObject([
@@ -123,7 +126,10 @@ describe("structural rules", () => {
       ].join("\n"),
     );
 
-    const discovered = await discoverSkillRoots({ cwd: directory });
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
     const scan = await scanSkillRoots({ roots: discovered.roots });
 
     expect(scan.findings.map((finding) => finding.ruleId)).toContain("name-directory-mismatch");

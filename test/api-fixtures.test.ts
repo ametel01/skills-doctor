@@ -99,7 +99,7 @@ describe("fixture scanner coverage", () => {
 
 const scanFixture = async (name: string): Promise<ScanReport> => {
   const directory = fixturePath(name);
-  const discovered = await discoverSkillRoots({ cwd: directory });
+  const discovered = await discoverSkillRoots({ cwd: directory, homeDir: `${directory}-home` });
   const scan = await scanSkillRoots({ roots: discovered.roots });
   return buildScanReport({
     version: "0.0.0-test",

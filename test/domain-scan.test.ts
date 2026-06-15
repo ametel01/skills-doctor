@@ -19,10 +19,25 @@ describe("skill discovery and parsing", () => {
     await mkdir(path.join(directory, ".claude", "skills"), { recursive: true });
     await mkdir(path.join(directory, ".agents", "skills"), { recursive: true });
 
-    const result = await discoverSkillRoots({ cwd: directory });
+    const result = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
 
     expect(result.diagnostics).toEqual([]);
     expect(result.roots.map((root) => root.ecosystem)).toEqual(["claude", "codex"]);
+    expect(result.roots.map((root) => root.source)).toEqual(["local", "local"]);
+  });
+
+  it("discovers Claude and Codex global skill roots", async () => {
+    const homeDir = path.join(directory, "home");
+    await mkdir(path.join(homeDir, ".claude", "skills"), { recursive: true });
+    await mkdir(path.join(homeDir, ".agents", "skills"), { recursive: true });
+
+    const result = await discoverSkillRoots({ cwd: directory, homeDir });
+
+    expect(result.roots.map((root) => root.ecosystem)).toEqual(["claude", "codex"]);
+    expect(result.roots.map((root) => root.source)).toEqual(["global", "global"]);
   });
 
   it("reports missing custom roots without failing detected roots", async () => {
@@ -30,6 +45,7 @@ describe("skill discovery and parsing", () => {
 
     const result = await discoverSkillRoots({
       cwd: directory,
+      homeDir: path.join(directory, "home"),
       customRoots: [{ rootPath: "missing-skills" }],
     });
 
@@ -40,6 +56,28 @@ describe("skill discovery and parsing", () => {
         severity: "warning",
       },
     ]);
+  });
+
+  it("expands tilde custom roots against the configured home directory", async () => {
+    const homeDir = path.join(directory, "home");
+    await mkdir(path.join(homeDir, ".agents", "skills"), { recursive: true });
+
+    const result = await discoverSkillRoots({
+      cwd: directory,
+      homeDir,
+      customRoots: [{ rootPath: "~/.agents/skills" }],
+    });
+
+    expect(result.roots).toContainEqual({
+      ecosystem: "codex",
+      rootPath: path.join(homeDir, ".agents", "skills"),
+      source: "global",
+    });
+    expect(result.roots).toContainEqual({
+      ecosystem: "custom",
+      rootPath: path.join(homeDir, ".agents", "skills"),
+      source: "custom",
+    });
   });
 
   it("scans direct child skill directories that contain SKILL.md", async () => {
@@ -59,7 +97,10 @@ describe("skill discovery and parsing", () => {
       ].join("\n"),
     );
 
-    const discovered = await discoverSkillRoots({ cwd: directory });
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
     const scan = await scanSkillRoots({ roots: discovered.roots });
 
     expect(scan.skills).toHaveLength(1);
@@ -72,7 +113,10 @@ describe("skill discovery and parsing", () => {
     await mkdir(skillsRoot, { recursive: true });
     await writeFile(path.join(skillsRoot, "SKILL.md"), "name: broken-skill\n");
 
-    const discovered = await discoverSkillRoots({ cwd: directory });
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
     const scan = await scanSkillRoots({ roots: discovered.roots });
 
     expect(scan.skills).toHaveLength(1);

@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import type { Diagnostic, SkillEcosystem, SkillRoot } from "./types.js";
 
@@ -9,6 +10,7 @@ export type CustomSkillRootInput = {
 
 export type DiscoverSkillRootsInput = {
   readonly cwd: string;
+  readonly homeDir?: string | undefined;
   readonly customRoots?: readonly CustomSkillRootInput[];
 };
 
@@ -20,20 +22,31 @@ export type DiscoverSkillRootsResult = {
 export const discoverSkillRoots = async (
   input: DiscoverSkillRootsInput,
 ): Promise<DiscoverSkillRootsResult> => {
+  const homeDir = input.homeDir ?? os.homedir();
   const candidates: readonly SkillRoot[] = [
     {
       ecosystem: "claude",
       rootPath: path.resolve(input.cwd, ".claude", "skills"),
-      source: "detected",
+      source: "local",
     },
     {
       ecosystem: "codex",
       rootPath: path.resolve(input.cwd, ".agents", "skills"),
-      source: "detected",
+      source: "local",
+    },
+    {
+      ecosystem: "claude",
+      rootPath: path.join(homeDir, ".claude", "skills"),
+      source: "global",
+    },
+    {
+      ecosystem: "codex",
+      rootPath: path.join(homeDir, ".agents", "skills"),
+      source: "global",
     },
     ...(input.customRoots ?? []).map((root) => ({
       ecosystem: root.ecosystem ?? "custom",
-      rootPath: path.resolve(input.cwd, root.rootPath),
+      rootPath: resolveRootPath(input.cwd, homeDir, root.rootPath),
       source: "custom" as const,
     })),
   ];
@@ -59,6 +72,12 @@ export const discoverSkillRoots = async (
   }
 
   return { roots, diagnostics };
+};
+
+const resolveRootPath = (cwd: string, homeDir: string, rootPath: string): string => {
+  if (rootPath === "~") return homeDir;
+  if (rootPath.startsWith("~/")) return path.join(homeDir, rootPath.slice(2));
+  return path.resolve(cwd, rootPath);
 };
 
 const isDirectory = async (targetPath: string): Promise<boolean> => {
