@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 *No changes yet.*
 
+## [0.3.0] - 2026-06-16
+
+### Added
+
+- Kept the interactive review menu available after viewing grouped and/or error findings so users can still launch repair in the same session.
+- Added support for selecting a custom skills directory during interactive scans even when standard Claude/Codex roots are already detected.
+
+### Fixed
+
+- Ignored direct skill-root child directories that do not contain `SKILL.md` instead of reporting a blocking `missing-skill` finding.
+- Classified missing referenced assets under the `assets` finding category instead of falling back to another resource category.
+
 ## [0.2.0] - 2026-06-16
 
 ### Added
