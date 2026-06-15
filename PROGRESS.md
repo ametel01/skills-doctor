@@ -18,7 +18,7 @@
 - [x] Step 3: Domain Types, Skill Root Discovery, and Skill Parsing
 - [x] Step 4: Structural Rule Engine
 - [x] Step 5: Quality, Progressive Disclosure, Script, Eval, and Cross-Ecosystem Rules
-- [ ] Step 6: Report Model, Human Summary, JSON Output, and Exit Codes
+- [x] Step 6: Report Model, Human Summary, JSON Output, and Exit Codes
 - [ ] Step 7: CLI Entrypoint, Prompts, Spinners, and Scan Target Selection
 - [ ] Step 8: Command Execution, Agent Detection, and Agent Selection
 - [ ] Step 9: Findings Report Directory and Custom Handoff Prompt
@@ -28,7 +28,7 @@
 
 ## Current Status
 
-Step 5 complete. Next step: Step 6.
+Step 6 complete. Next step: Step 7.
 
 ## Update Rule
 
@@ -145,5 +145,24 @@ After each completed step:
   - `bun run test`
   - `bun run build`
   - `bun run verify`
-- Commit: pending
+- Commit: `bd701a2`
 - Next step: Step 6
+
+### Step 6: Report Model, Human Summary, JSON Output, and Exit Codes
+
+- Status: Complete
+- Changes:
+  - Added scan report construction with schema version, counts, skill summaries, findings, elapsed time, and handoff metadata.
+  - Added finding summaries, top affected skills/categories, human summary rendering, and exit-code decisions for blocking findings.
+  - Added JSON-mode helpers for compact/pretty reports and valid JSON error reports.
+  - Added basic CLI logger and expected/unexpected error handling utilities.
+  - Added report and JSON-mode tests.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+- Commit: pending
+- Next step: Step 7
