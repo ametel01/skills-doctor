@@ -106,6 +106,7 @@ describe("skill discovery and parsing", () => {
     expect(scan.skills).toHaveLength(1);
     expect(scan.skills[0]?.directoryName).toBe("valid-skill");
     expect(scan.skills[0]?.parseResult.ok).toBe(true);
+    expect(scan.findings.map((finding) => finding.ruleId)).not.toContain("missing-skill");
   });
 
   it("records parse failures on malformed skill frontmatter", async () => {

@@ -34,6 +34,7 @@ export type FindingCategory =
   | "body-quality"
   | "progressive-disclosure"
   | "references"
+  | "assets"
   | "scripts"
   | "evals"
   | "portability"

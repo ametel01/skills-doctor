@@ -122,7 +122,7 @@ describe("scanAction", () => {
         homeDir: path.join(directory, "home"),
         env: {},
         stdinIsTty: true,
-        prompts: fakePrompts(["by-skill"]),
+        prompts: fakePrompts(["all", "by-skill", "exit"]),
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
@@ -131,6 +131,61 @@ describe("scanAction", () => {
 
     expect(stdout.join("")).toContain("bad-name:");
     expect(stdout.join("")).toContain("- [error] name-directory-mismatch");
+  });
+
+  it("lets users view findings by skill and then repair", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    const skillPath = path.join(skillDir, "SKILL.md");
+    await writeFile(
+      skillPath,
+      ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    const stdout: string[] = [];
+    const launches: string[] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        env: {},
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "by-skill", "repair", "errors"],
+          confirms: [true, true, false],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async (command) => command === "codex",
+        launchAgent: async (_agentId, prompt) => {
+          launches.push(prompt);
+          await writeFile(
+            skillPath,
+            [
+              "---",
+              "name: bad-skill",
+              "description: Helps with PDFs.",
+              "---",
+              "",
+              "## Workflow",
+              "",
+              "- Inspect PDFs.",
+            ].join("\n"),
+          );
+          return 0;
+        },
+      },
+    );
+
+    expect(stdout.join("")).toContain("other-name:");
+    expect(stdout.join("")).toContain("- [error] name-directory-mismatch");
+    expect(stdout.join("")).toContain("Post-handoff re-scan:");
+    expect(launches).toHaveLength(1);
+    expect(report.errorCount).toBe(0);
+    expect(process.exitCode).toBe(0);
   });
 
   it("throws a user error when no roots exist and prompts are skipped", async () => {
@@ -170,7 +225,7 @@ describe("scanAction", () => {
         env: {},
         stdinIsTty: true,
         prompts: queuedPrompts({
-          selects: ["repair", "errors"],
+          selects: ["all", "repair", "errors"],
           confirms: [true, true, false],
         }),
         writeStdout: (message) => stdout.push(message),
@@ -210,7 +265,7 @@ describe("scanAction", () => {
         env: {},
         stdinIsTty: true,
         prompts: queuedPrompts({
-          selects: ["repair", "errors"],
+          selects: ["all", "repair", "errors"],
           confirms: [true, true, false],
         }),
         writeStdout: (message) => stdout.push(message),
@@ -244,7 +299,7 @@ describe("scanAction", () => {
         env: {},
         stdinIsTty: true,
         prompts: queuedPrompts({
-          selects: ["repair", "errors"],
+          selects: ["all", "repair", "errors"],
           confirms: [true, true],
         }),
         writeStdout: (message) => stdout.push(message),
@@ -279,7 +334,7 @@ describe("scanAction", () => {
         homeDir: path.join(directory, "home"),
         env: {},
         stdinIsTty: true,
-        prompts: queuedPrompts({ selects: ["repair"] }),
+        prompts: queuedPrompts({ selects: ["all", "repair"] }),
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
@@ -316,6 +371,41 @@ describe("scanAction", () => {
       source: "global",
       rootPath: path.join(homeDir, ".agents", "skills"),
     });
+  });
+
+  it("lets users add a custom skills path while standard roots exist", async () => {
+    await writeSkill(path.join(directory, ".agents", "skills", "local-skill"), "local-skill");
+    const customRoot = path.join(directory, "custom-skills");
+    await writeSkill(path.join(customRoot, "custom-skill"), "custom-skill");
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        env: {},
+        stdinIsTty: true,
+        prompts: fakePrompts(["custom", path.join(customRoot)]),
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(report.scannedRoots).toHaveLength(2);
+    expect(report.scannedRoots).toMatchObject([
+      expect.objectContaining({
+        ecosystem: "codex",
+        source: "local",
+        rootPath: path.join(directory, ".agents", "skills"),
+      }),
+      expect.objectContaining({
+        ecosystem: "custom",
+        source: "custom",
+        rootPath: customRoot,
+      }),
+    ]);
   });
 });
 

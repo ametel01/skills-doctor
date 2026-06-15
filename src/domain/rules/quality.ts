@@ -404,12 +404,10 @@ const exists = async (targetPath: string): Promise<boolean> => {
   }
 };
 
-const resourceCategory = (
-  referencePath: string,
-): "references" | "scripts" | "progressive-disclosure" => {
+const resourceCategory = (referencePath: string): "references" | "scripts" | "assets" => {
   if (referencePath.startsWith("references/")) return "references";
   if (referencePath.startsWith("scripts/")) return "scripts";
-  return "progressive-disclosure";
+  return "assets";
 };
 
 const isNonTrivialSkill = (body: string): boolean =>

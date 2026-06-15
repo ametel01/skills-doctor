@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { SkillRecord } from "../src/index.js";
 import {
+  buildMissingSkillFinding,
   discoverSkillRoots,
   parseSkillContent,
   scanSkillRoots,
@@ -21,23 +22,23 @@ describe("structural rules", () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it("reports missing SKILL.md in child skill directories", async () => {
+  it("builds a missing-SKILL.md finding for an empty child directory", async () => {
     await mkdir(path.join(directory, ".agents", "skills", "empty-skill"), { recursive: true });
-
-    const discovered = await discoverSkillRoots({
-      cwd: directory,
-      homeDir: path.join(directory, "home"),
-    });
-    const scan = await scanSkillRoots({ roots: discovered.roots });
-
-    expect(scan.findings).toMatchObject([
-      {
-        ruleId: "missing-skill",
-        severity: "error",
-        category: "frontmatter",
-        skillName: "empty-skill",
+    const finding = buildMissingSkillFinding({
+      root: {
+        ecosystem: "codex",
+        rootPath: path.join(directory, ".agents", "skills"),
+        source: "local",
       },
-    ]);
+      skillDir: path.join(directory, ".agents", "skills", "empty-skill"),
+    });
+
+    expect(finding).toMatchObject({
+      ruleId: "missing-skill",
+      severity: "error",
+      category: "frontmatter",
+      skillName: "empty-skill",
+    });
   });
 
   it("reports required frontmatter name and description problems", async () => {

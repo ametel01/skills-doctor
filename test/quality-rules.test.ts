@@ -77,6 +77,7 @@ describe("quality rules", () => {
       "## Workflow",
       "",
       "- Run scripts/missing.py.",
+      "- Read assets/missing-template.md.",
       "- The script prompts the user for input.",
       "- You can use npx eslint or npx prettier or another tool.",
       "- Delete generated files.",
@@ -93,6 +94,21 @@ describe("quality rules", () => {
         "destructive-without-safety",
       ]),
     );
+
+    const findings = await validateQualityRules([skill]);
+    const missingScript = findings.find(
+      (finding) =>
+        finding.ruleId === "missing-referenced-resource" &&
+        finding.message.includes("scripts/missing.py"),
+    );
+    const missingAsset = findings.find(
+      (finding) =>
+        finding.ruleId === "missing-referenced-resource" &&
+        finding.message.includes("assets/missing-template.md"),
+    );
+
+    expect(missingScript?.category).toBe("scripts");
+    expect(missingAsset?.category).toBe("assets");
   });
 
   it("reports divergent same-name skills across Claude and Codex roots", async () => {

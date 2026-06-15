@@ -57,9 +57,10 @@ It also detects these global user-level roots:
 When local and global roots both exist, the interactive CLI first asks whether
 to scan local project skills, global/root skills, or both. When both Claude and
 Codex/agents roots exist in the selected scope, it asks whether to scan Claude,
-Codex/agents, or both. When no known root exists, it prompts for a custom skills
-directory. Non-interactive runs use conservative defaults and fail with a clear
-user error when a required choice cannot be made.
+Codex/agents, or both. If you already have standard roots detected, it also lets
+you add a custom skills directory path in the same interactive flow. Non-interactive
+runs use conservative defaults and fail with a clear user error when a required
+choice cannot be made.
 
 ## What It Checks
 

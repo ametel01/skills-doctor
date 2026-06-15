@@ -89,16 +89,25 @@ export const scanAction = async (
         "No .claude/skills or .agents/skills root was found. Re-run interactively or add a supported skills root.",
       );
     }
-    const customRoot = await prompts.input("Skills directory path", ".");
-    const custom = await discoverSkillRoots({
+    roots = await selectCustomRoot({
       cwd,
       homeDir: options.homeDir,
-      customRoots: [{ rootPath: customRoot, ecosystem: "custom" }],
+      prompts,
+      roots,
     });
-    roots = custom.roots;
   } else if (!skipPrompts) {
-    roots = await selectRootScopes(roots, prompts);
-    roots = await selectRoots(roots, prompts);
+    roots = await selectRootScopes({
+      roots,
+      prompts,
+      cwd,
+      homeDir: options.homeDir,
+    });
+    roots = await selectRoots({
+      roots,
+      prompts,
+      cwd,
+      homeDir: options.homeDir,
+    });
   }
 
   if (roots.length === 0) {
@@ -149,40 +158,126 @@ export const scanAction = async (
   return finalReport;
 };
 
-const selectRoots = async (
-  roots: readonly SkillRoot[],
-  prompts: PromptAdapter,
-): Promise<readonly SkillRoot[]> => {
-  const hasClaude = roots.some((root) => root.ecosystem === "claude");
-  const hasCodex = roots.some((root) => root.ecosystem === "codex");
+const selectRoots = async (input: {
+  readonly roots: readonly SkillRoot[];
+  readonly prompts: PromptAdapter;
+  readonly cwd: string;
+  readonly homeDir?: string | undefined;
+}): Promise<readonly SkillRoot[]> => {
+  const { prompts, cwd, homeDir, roots } = input;
+  const customRoots = roots.filter((root) => root.source === "custom");
+  const standardRoots = roots.filter((root) => root.source !== "custom");
+  const hasClaude = standardRoots.some((root) => root.ecosystem === "claude");
+  const hasCodex = standardRoots.some((root) => root.ecosystem === "codex");
   if (!hasClaude || !hasCodex) return roots;
 
   const selection = await prompts.select<RootSelection>("Choose skills folder to scan", [
     { name: "Both", value: "all" },
     { name: "Claude (.claude/skills)", value: "claude" },
     { name: "Codex/agents (.agents/skills)", value: "codex" },
+    { name: "Add custom skills path", value: "custom" },
   ]);
 
   if (selection === "all") return roots;
-  return roots.filter((root) => root.ecosystem === selection);
+  if (selection === "custom") {
+    return selectCustomRoot({
+      cwd,
+      homeDir,
+      prompts,
+      roots,
+    });
+  }
+  return [...standardRoots.filter((root) => root.ecosystem === selection), ...customRoots];
 };
 
-const selectRootScopes = async (
-  roots: readonly SkillRoot[],
-  prompts: PromptAdapter,
-): Promise<readonly SkillRoot[]> => {
+const selectRootScopes = async (input: {
+  readonly roots: readonly SkillRoot[];
+  readonly prompts: PromptAdapter;
+  readonly cwd: string;
+  readonly homeDir?: string | undefined;
+}): Promise<readonly SkillRoot[]> => {
+  const { prompts, cwd, homeDir, roots } = input;
   const hasLocal = roots.some((root) => root.source === "local");
   const hasGlobal = roots.some((root) => root.source === "global");
-  if (!hasLocal || !hasGlobal) return roots;
+  const hasBothScopes = hasLocal && hasGlobal;
+  if (!hasLocal && !hasGlobal) return roots;
+  const allLabel = hasBothScopes
+    ? "Both local project and global/root skills"
+    : "Detected skills root";
 
-  const selection = await prompts.select<RootScopeSelection>("Choose skills scope to scan", [
-    { name: "Both local project and global/root skills", value: "all" },
-    { name: "Local project skills (./.claude/skills, ./.agents/skills)", value: "local" },
-    { name: "Global/root skills (~/.claude/skills, ~/.agents/skills)", value: "global" },
-  ]);
+  const choices: { name: string; value: RootSelection | RootScopeSelection }[] = [
+    { name: allLabel, value: "all" },
+  ];
+  if (hasBothScopes) {
+    choices.push({
+      name: "Local project skills (./.claude/skills, ./.agents/skills)",
+      value: "local",
+    });
+    choices.push({
+      name: "Global/root skills (~/.claude/skills, ~/.agents/skills)",
+      value: "global",
+    });
+  }
+  choices.push({ name: "Add custom skills path", value: "custom" });
 
+  if (choices.length <= 1) {
+    return roots;
+  }
+
+  const selection = await prompts.select<RootSelection | RootScopeSelection>(
+    "Choose skills scope to scan",
+    choices,
+  );
+  if (selection === "custom") {
+    return selectCustomRoot({
+      cwd,
+      homeDir,
+      prompts,
+      roots,
+    });
+  }
   if (selection === "all") return roots;
-  return roots.filter((root) => root.source === selection);
+  if (selection === "claude") {
+    return roots.filter((root) => root.ecosystem === "claude");
+  }
+  if (selection === "codex") {
+    return roots.filter((root) => root.ecosystem === "codex");
+  }
+  if (selection === "local" || selection === "global") {
+    return roots.filter((root) => root.source === selection);
+  }
+  return roots;
+};
+
+const selectCustomRoot = async (input: {
+  readonly roots: readonly SkillRoot[];
+  readonly cwd: string;
+  readonly homeDir?: string | undefined;
+  readonly prompts: PromptAdapter;
+}): Promise<readonly SkillRoot[]> => {
+  const customRoot = await input.prompts.input("Skills directory path", ".");
+  const custom = await discoverSkillRoots({
+    cwd: input.cwd,
+    homeDir: input.homeDir,
+    customRoots: [{ rootPath: customRoot, ecosystem: "custom" }],
+  });
+  return mergeRoots(input.roots, custom.roots);
+};
+
+const mergeRoots = (
+  existingRoots: readonly SkillRoot[],
+  additionalRoots: readonly SkillRoot[],
+): readonly SkillRoot[] => {
+  const merged = new Map<string, SkillRoot>();
+  for (const root of existingRoots) {
+    merged.set(root.rootPath, root);
+  }
+  for (const root of additionalRoots) {
+    if (!merged.has(root.rootPath)) {
+      merged.set(root.rootPath, root);
+    }
+  }
+  return [...merged.values()];
 };
 
 type ReviewFindingsInput = {
@@ -204,29 +299,30 @@ const reviewFindings = async (
   input: ReviewFindingsInput,
 ): Promise<ScanReport | undefined> => {
   const { prompts, write } = input;
-  const action = await prompts.select<ReviewAction>("Next step", [
-    { name: "Fix skills with Claude or Codex", value: "repair" },
-    ...(report.errorCount > 0 ? [{ name: "View errors", value: "errors" as const }] : []),
-    { name: "View all findings", value: "all" },
-    { name: "View findings by skill", value: "by-skill" },
-    { name: "Exit", value: "exit" },
-  ]);
+  while (true) {
+    const action = await prompts.select<ReviewAction>("Next step", [
+      { name: "Fix skills with Claude or Codex", value: "repair" },
+      ...(report.errorCount > 0 ? [{ name: "View errors", value: "errors" as const }] : []),
+      { name: "View all findings", value: "all" },
+      { name: "View findings by skill", value: "by-skill" },
+      { name: "Exit", value: "exit" },
+    ]);
 
-  if (action === "exit") return;
-  if (action === "repair") {
-    return runRepairAgentFlow(report, input);
-  }
+    if (action === "exit") return;
+    if (action === "repair") {
+      return runRepairAgentFlow(report, input);
+    }
 
-  const selectedFindings =
-    action === "errors"
-      ? report.findings.filter((finding) => finding.severity === "error")
-      : report.findings;
-  if (action === "by-skill") {
-    write(renderFindingsBySkill(selectedFindings));
-    return;
+    const selectedFindings =
+      action === "errors"
+        ? report.findings.filter((finding) => finding.severity === "error")
+        : report.findings;
+    if (action === "by-skill") {
+      write(renderFindingsBySkill(selectedFindings));
+      continue;
+    }
+    write(renderFindings(selectedFindings));
   }
-  write(renderFindings(selectedFindings));
-  return undefined;
 };
 
 const runRepairAgentFlow = async (

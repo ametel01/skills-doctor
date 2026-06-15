@@ -6,7 +6,7 @@ Rules are grouped by the scanner category. Severity and intent can be refined he
 
 | Rule ID | Severity | Category | What it checks |
 | --- | --- | --- | --- |
-| `missing-skill` | error | frontmatter | A skill directory is missing `SKILL.md`. |
+| `missing-skill` | error | frontmatter | A manually validated skill directory is missing `SKILL.md`. |
 | `invalid-frontmatter` | error | frontmatter | `SKILL.md` frontmatter is not parseable or incomplete. |
 | `unknown-frontmatter-field` | warning | frontmatter | Frontmatter contains unsupported fields. |
 | `missing-name` | error | frontmatter | Required `name` field is missing or empty. |
@@ -52,7 +52,7 @@ Rules are grouped by the scanner category. Severity and intent can be refined he
 
 | Rule ID | Severity | Category | What it checks |
 | --- | --- | --- | --- |
-| `missing-referenced-resource` | warning | references | Referenced `scripts/`, `references/`, or `assets/` file does not exist in-skill. |
-| `resource-reference-escapes-skill` | warning | references | Resource references attempt directory traversal outside the skill directory. |
+| `missing-referenced-resource` | warning | references/scripts/assets | Referenced `scripts/`, `references/`, or `assets/` file does not exist in-skill. |
+| `resource-reference-escapes-skill` | warning | references/scripts/assets | Resource references attempt directory traversal outside the skill directory. |
 | `missing-skill-evals` | advice | evals | Non-trivial skill lacks `evals/evals.json`. |
 | `cross-ecosystem-skill-divergence` | warning | cross-ecosystem | Same-name skills diverge across Claude/Codex within the same scope. |
