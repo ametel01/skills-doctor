@@ -16,3 +16,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Structural Agent Skills validation for required frontmatter, naming, description length, optional fields, missing `SKILL.md`, and unsupported fields.
 - Deterministic quality rules for weak descriptions, generic bodies, progressive-disclosure issues, missing resources, script guidance, missing evals, and divergent cross-ecosystem skills.
 - Scan report construction, human summary rendering, JSON-mode helpers, and blocking-finding exit-code decisions.
+- Interactive scan CLI with Commander, root selection prompts, non-interactive prompt skipping, spinner adapter, and findings review output.

@@ -19,7 +19,7 @@
 - [x] Step 4: Structural Rule Engine
 - [x] Step 5: Quality, Progressive Disclosure, Script, Eval, and Cross-Ecosystem Rules
 - [x] Step 6: Report Model, Human Summary, JSON Output, and Exit Codes
-- [ ] Step 7: CLI Entrypoint, Prompts, Spinners, and Scan Target Selection
+- [x] Step 7: CLI Entrypoint, Prompts, Spinners, and Scan Target Selection
 - [ ] Step 8: Command Execution, Agent Detection, and Agent Selection
 - [ ] Step 9: Findings Report Directory and Custom Handoff Prompt
 - [ ] Step 10: Agent Launch Flow and Post-Handoff Re-Scan
@@ -28,7 +28,7 @@
 
 ## Current Status
 
-Step 6 complete. Next step: Step 7.
+Step 7 complete. Next step: Step 8.
 
 ## Update Rule
 
@@ -164,5 +164,25 @@ After each completed step:
   - `bun run test`
   - `bun run build`
   - `bun run verify`
-- Commit: pending
+- Commit: `fba475f`
 - Next step: Step 7
+
+### Step 7: CLI Entrypoint, Prompts, Spinners, and Scan Target Selection
+
+- Status: Complete
+- Changes:
+  - Added Commander-based scan entrypoint with `--json`, `--json-compact`, and `--yes` flags.
+  - Added prompt adapter utilities, prompt-cancellation handling, non-interactive prompt skipping, and a minimal spinner adapter.
+  - Added interactive root selection for Claude, Codex/agents, or both when both roots are present.
+  - Added findings review choices for blocking errors, all findings, grouped-by-skill output, repair handoff placeholder, or exit.
+  - Added CLI scan tests for non-interactive scans, root selection, and missing-root user errors.
+  - Exported scan action types from the package facade for test coverage.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+- Commit: pending
+- Next step: Step 8

@@ -2,6 +2,8 @@ export const CLI_NAME = "skills-doctor";
 
 export const getCliBanner = (): string => `${CLI_NAME}: scaffold ready`;
 
+export type { ScanActionOptions, ScanFlags } from "./cli/commands/scan.js";
+export { scanAction } from "./cli/commands/scan.js";
 export type {
   BuildScanReportInput,
   ScanReport,
