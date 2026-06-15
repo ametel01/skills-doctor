@@ -39,6 +39,7 @@ export type ScanActionOptions = {
   readonly animateScoreHeader?: boolean;
   readonly spinner?: SpinnerFactory;
   readonly version?: string;
+  readonly now?: () => number;
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe;
   readonly repairReportOutputRoot?: string;
   readonly repairReportTimestamp?: string;
@@ -59,6 +60,7 @@ export const scanAction = async (
   const writeStdout = options.writeStdout ?? ((message) => process.stdout.write(message));
   const writeStderr = options.writeStderr ?? ((message) => process.stderr.write(message));
   const stdoutIsTty = options.stdoutIsTty ?? process.stdout.isTTY === true;
+  const now = options.now ?? performance.now.bind(performance);
   const skipPrompts = shouldSkipPrompts({
     yes: Boolean(flags.yes),
     json: Boolean(flags.json),
@@ -103,11 +105,13 @@ export const scanAction = async (
     throw new CliInputError("No readable skills root was selected.");
   }
 
+  const startedAt = now();
   const scan = await spinner.run("Scanning skills...", () => scanSkillRoots({ roots }));
+  const elapsedMilliseconds = Math.max(0, Math.round(now() - startedAt));
   const report = buildScanReport({
     version: options.version ?? "0.0.0",
     directory: cwd,
-    elapsedMilliseconds: 0,
+    elapsedMilliseconds,
     scan,
   });
   let finalReport = report;
@@ -133,6 +137,7 @@ export const scanAction = async (
           prompts,
           write: writeStdout,
           isRepairAgentAvailable: options.isRepairAgentAvailable,
+          now,
           repairReportOutputRoot: options.repairReportOutputRoot,
           repairReportTimestamp: options.repairReportTimestamp,
           launchAgent: options.launchAgent ?? launchRepairAgent,
@@ -188,6 +193,7 @@ type ReviewFindingsInput = {
   readonly prompts: PromptAdapter;
   readonly write: (message: string) => void;
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe | undefined;
+  readonly now?: () => number;
   readonly repairReportOutputRoot?: string | undefined;
   readonly repairReportTimestamp?: string | undefined;
   readonly launchAgent: RepairAgentLauncher;
@@ -272,13 +278,18 @@ const runRepairAgentFlow = async (
       input.write(`Agent exited with code ${exitCode}.\n`);
     }
 
+    const reScanStartedAt = input.now?.();
     const nextScan = await input.spinner.run("Re-scanning skills...", () =>
       scanSkillRoots({ roots: input.roots }),
     );
+    const nextElapsedMilliseconds =
+      input.now === undefined || reScanStartedAt === undefined
+        ? 0
+        : Math.max(0, Math.round(input.now() - reScanStartedAt));
     const nextReport = buildScanReport({
       version: input.version,
       directory: input.cwd,
-      elapsedMilliseconds: 0,
+      elapsedMilliseconds: nextElapsedMilliseconds,
       scan: nextScan,
       handoffRequested: true,
     });

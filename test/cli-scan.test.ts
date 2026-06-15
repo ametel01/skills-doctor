@@ -50,6 +50,36 @@ describe("scanAction", () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it("reports a measurable elapsed scan time with injected clock", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      ["---", "name: bad-skill", "description: Helps with PDFs.", "---", "", "Body."].join(
+        "\n",
+      ),
+    );
+    let now = 1000;
+
+    const report = await scanAction(
+      ".",
+      { yes: true },
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        now: () => {
+          now += 34;
+          return now;
+        },
+      },
+    );
+
+    expect(report.elapsedMilliseconds).toBe(34);
+  });
+
   it("reports the package version in --version output", () => {
     expect(buildProgram().version()).toBe(packageJson.version);
   });
