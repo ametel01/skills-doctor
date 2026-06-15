@@ -6,18 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-### Added
-
-- Local score calculation for scan reports using distinct violated rules, with React Doctor-style labels in human, JSON, and repair-report output.
-- React Doctor-style score header in human CLI output with a face, proportional bar, terminal-width clamping, score-threshold colors, and TTY animation.
-- Concise human scan summary and streamlined review menu focused on fixing skills first.
-
-### Fixed
-
-- Avoid Node unsettled top-level-await warnings while the interactive CLI is waiting for prompts.
-- Discover global `~/.claude/skills` and `~/.agents/skills` roots and prompt for local, global/root, or both when both scopes exist.
-- Run tests under `CI=true` during local verification and isolate interactive CLI tests from ambient CI environment variables.
-
 ## [0.1.0] - 2026-06-15
 
 ### Added
@@ -36,3 +24,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Local repair-agent launch flow with explicit confirmation, inherited-terminal launcher support, post-handoff re-scan, and fixed/remaining/new finding summaries.
 - Domain-focused public API facade plus fixture coverage for valid, malformed, weak, missing-resource, script, and cross-ecosystem skill scans.
 - README, MIT license, release checklist, and finalized initial release notes.
+- Local score calculation for scan reports using distinct violated rules, with React Doctor-style labels in human, JSON, and repair-report output.
+- React Doctor-style score header in human CLI output with a face, proportional bar, terminal-width clamping, score-threshold colors, and TTY animation.
+- Concise human scan summary and streamlined review menu focused on fixing skills first.
+
+### Fixed
+
+- Avoid Node unsettled top-level-await warnings while the interactive CLI is waiting for prompts.
+- Discover global `~/.claude/skills` and `~/.agents/skills` roots and prompt for local, global/root, or both when both scopes exist.
+- Run tests under `CI=true` during local verification and isolate interactive CLI tests from ambient CI environment variables.
