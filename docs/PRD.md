@@ -680,15 +680,14 @@ top-level crash-reporting path if telemetry is later added.
 - Expected user errors do not render crash reports.
 - Remaining blocking findings set `process.exitCode = 1`.
 
-## Open Questions
+## MVP Decisions
 
-- Should MVP scan only project-local roots, or also offer global user-level
-  roots such as `~/.claude/skills` and `~/.agents/skills`?
-- Should repair handoff default to fixing all findings or only blocking errors
-  and high-confidence warnings?
-- Should the scanner include an optional LLM critique pass, or keep MVP entirely
-  deterministic before handoff?
-- Should same-name skills across Claude and Codex be expected to match exactly,
-  or should divergence only be advisory?
-- What should the published package name be: `skills-doctor`,
-  `agent-skills-doctor`, or another name?
+- MVP scans project-local roots by default: `./.claude/skills` and
+  `./.agents/skills`. Global user-level roots can be added later.
+- Repair handoff asks the user to choose the subset: blocking errors, blocking
+  errors plus warnings, all findings, or selected skills.
+- The scanner remains deterministic before handoff. There is no optional LLM
+  critique pass in the MVP.
+- Same-name Claude and Codex/agents skills with divergent contents are advisory
+  warnings, not blocking errors.
+- The initial package and binary name is `skills-doctor`.

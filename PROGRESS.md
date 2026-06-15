@@ -24,11 +24,11 @@
 - [x] Step 9: Findings Report Directory and Custom Handoff Prompt
 - [x] Step 10: Agent Launch Flow and Post-Handoff Re-Scan
 - [x] Step 11: Public API Facade and Fixture-Based Integration Coverage
-- [ ] Step 12: Documentation, README, Changelog Finalization, and Release Readiness
+- [x] Step 12: Documentation, README, Changelog Finalization, and Release Readiness
 
 ## Current Status
 
-Step 11 complete. Next step: Step 12.
+Step 12 complete. Release-ready for `v0.1.0`.
 
 ## Update Rule
 
@@ -269,5 +269,28 @@ After each completed step:
   - `bun run test`
   - `bun run build`
   - `bun run verify`
-- Commit: pending
+- Commit: `07bc033`
 - Next step: Step 12
+
+### Step 12: Documentation, README, Changelog Finalization, and Release Readiness
+
+- Status: Complete
+- Changes:
+  - Added `README.md` covering purpose, install/run commands, scanned roots, checks, interactive repair flow, JSON mode, exit codes, privacy, and release checklist.
+  - Added an MIT `LICENSE`.
+  - Bumped `package.json` to `0.1.0`.
+  - Finalized `CHANGELOG.md` with `## [0.1.0] - 2026-06-15` and release notes extractable by the release script.
+  - Replaced PRD open questions with implemented MVP decisions.
+  - Confirmed package dry-run includes expected package files and no generated report artifacts.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+  - `bun run pack:dry-run`
+  - `node scripts/extract-release-notes.mjs 0.1.0`
+  - `bun install --frozen-lockfile`
+- Commit: pending
+- Next step: Tag `v0.1.0` when ready to publish.

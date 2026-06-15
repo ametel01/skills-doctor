@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-15
+
 ### Added
 
 - Initial Skills Doctor product requirements, skill quality specification, reusable CLI architecture specification, and incremental implementation plan.
@@ -21,3 +23,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Findings-driven repair handoff prompts with local report directories, subset selection, and prompt/report file output.
 - Local repair-agent launch flow with explicit confirmation, inherited-terminal launcher support, post-handoff re-scan, and fixed/remaining/new finding summaries.
 - Domain-focused public API facade plus fixture coverage for valid, malformed, weak, missing-resource, script, and cross-ecosystem skill scans.
+- README, MIT license, release checklist, and finalized initial release notes.
