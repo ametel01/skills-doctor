@@ -4,6 +4,7 @@ export const getCliBanner = (): string => `${CLI_NAME}: scaffold ready`;
 
 export { discoverSkillRoots } from "./domain/discover-skill-roots.js";
 export { parseSkillContent } from "./domain/parse-skill.js";
+export { validateQualityRules } from "./domain/rules/quality.js";
 export { buildMissingSkillFinding, validateStructuralRules } from "./domain/rules/structural.js";
 export { scanSkillRoots } from "./domain/scan-skills.js";
 export type {

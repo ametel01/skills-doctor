@@ -17,7 +17,7 @@
 - [x] Step 2: CI, Release Workflow, Release Notes Script, and Changelog
 - [x] Step 3: Domain Types, Skill Root Discovery, and Skill Parsing
 - [x] Step 4: Structural Rule Engine
-- [ ] Step 5: Quality, Progressive Disclosure, Script, Eval, and Cross-Ecosystem Rules
+- [x] Step 5: Quality, Progressive Disclosure, Script, Eval, and Cross-Ecosystem Rules
 - [ ] Step 6: Report Model, Human Summary, JSON Output, and Exit Codes
 - [ ] Step 7: CLI Entrypoint, Prompts, Spinners, and Scan Target Selection
 - [ ] Step 8: Command Execution, Agent Detection, and Agent Selection
@@ -28,7 +28,7 @@
 
 ## Current Status
 
-Step 4 complete. Next step: Step 5.
+Step 5 complete. Next step: Step 6.
 
 ## Update Rule
 
@@ -125,5 +125,25 @@ After each completed step:
   - `bun run test`
   - `bun run build`
   - `bun run verify`
-- Commit: pending
+- Commit: `fa5667b`
 - Next step: Step 5
+
+### Step 5: Quality, Progressive Disclosure, Script, Eval, and Cross-Ecosystem Rules
+
+- Status: Complete
+- Changes:
+  - Added deterministic quality findings for weak and vague descriptions, implementation-focused descriptions, placeholder or generic bodies, missing workflow structure, tool menus without defaults, and destructive guidance without safety steps.
+  - Added progressive-disclosure findings for overlong `SKILL.md` files and generic resource-directory references.
+  - Added resource and script findings for missing referenced resources, missing script help guidance, interactive script guidance, and unpinned package-runner commands.
+  - Added missing eval advice for non-trivial skills.
+  - Added cross-ecosystem divergence warnings for same-name Claude and Codex/agents skills with different contents.
+  - Integrated quality findings into scan results after structural validation.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+- Commit: pending
+- Next step: Step 6

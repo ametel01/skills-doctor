@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseSkillContent } from "./parse-skill.js";
+import { validateQualityRules } from "./rules/quality.js";
 import { buildMissingSkillFinding, validateStructuralRules } from "./rules/structural.js";
 import type { Diagnostic, Finding, ScanResult, SkillRecord, SkillRoot } from "./types.js";
 
@@ -50,6 +51,7 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
   }
 
   findings.push(...skills.flatMap(validateStructuralRules));
+  findings.push(...(await validateQualityRules(skills)));
 
   return {
     roots: input.roots,
