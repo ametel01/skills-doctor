@@ -38,4 +38,6 @@ export const main = async (argv: readonly string[] = process.argv): Promise<void
   }
 };
 
-main().catch(handleCliError);
+export const runCli = async (argv: readonly string[] = process.argv): Promise<void> => {
+  await main(argv).catch(handleCliError);
+};

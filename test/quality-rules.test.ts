@@ -35,7 +35,8 @@ describe("quality rules", () => {
       "- Run validation when done.",
     ]);
 
-    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+    const findings = await validateQualityRules([skill]);
+    const ruleIds = findings.map((finding) => finding.ruleId);
 
     expect(ruleIds).toEqual(
       expect.arrayContaining([
@@ -46,6 +47,12 @@ describe("quality rules", () => {
         "missing-skill-evals",
       ]),
     );
+
+    const weakDescription = findings.find((finding) => finding.ruleId === "weak-description-trigger");
+    expect(weakDescription?.line).toBe(3);
+
+    const evalFinding = findings.find((finding) => finding.ruleId === "missing-skill-evals");
+    expect(evalFinding?.line).toBeUndefined();
   });
 
   it("reports progressive-disclosure and generic resource-reference issues", async () => {
@@ -65,6 +72,37 @@ describe("quality rules", () => {
     expect(ruleIds).toEqual(
       expect.arrayContaining(["skill-md-too-many-lines", "generic-resource-reference"]),
     );
+  });
+
+  it("reports deterministic line numbers for resource and body findings", async () => {
+    const skill = buildRecord("line-number-skill", [
+      "---",
+      "name: line-number-skill",
+      "description: Helps with the old way.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Run scripts/missing.py.",
+      "- The script prompts the user for input.",
+      "",
+      "You can use npx prettier or bunx prettier.",
+    ]);
+    const findings = await validateQualityRules([skill]);
+
+    const missingResource = findings.find(
+      (finding) =>
+        finding.ruleId === "missing-referenced-resource" &&
+        finding.message.includes("scripts/missing.py"),
+    );
+    const interactiveGuidance = findings.find(
+      (finding) => finding.ruleId === "interactive-script-guidance",
+    );
+    const weakDescription = findings.find((finding) => finding.ruleId === "weak-description-trigger");
+
+    expect(missingResource?.line).toBe(8);
+    expect(interactiveGuidance?.line).toBe(9);
+    expect(weakDescription?.line).toBe(3);
   });
 
   it("reports missing resources and script guidance issues", async () => {

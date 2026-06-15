@@ -10,4 +10,5 @@ if (module.enableCompileCache && !process.env.NODE_DISABLE_COMPILE_CACHE) {
   }
 }
 
-await import("../dist/cli/index.js");
+const { runCli } = await import("../dist/cli/index.js");
+await runCli();

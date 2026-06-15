@@ -6,7 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-*No changes yet.*
+### Added
+
+- Added line numbers to quality-rule findings where a specific source line can be resolved.
+
+### Fixed
+
+- Hid repair handoff subset options that do not match any findings (for warning-only and advice-only scans).
+- Made CLI module import safe by removing side-effect execution and routing runtime entry through `bin/skills-doctor.js`.
 
 ## [0.3.0] - 2026-06-16
 

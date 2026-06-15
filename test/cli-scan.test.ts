@@ -4,7 +4,6 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
 import { scanAction } from "../src/cli/commands/scan.js";
-import { buildProgram } from "../src/cli/index.js";
 import { CliInputError } from "../src/cli/utils/handle-error.js";
 import type { PromptAdapter } from "../src/cli/utils/prompts.js";
 
@@ -78,7 +77,17 @@ describe("scanAction", () => {
     expect(report.elapsedMilliseconds).toBe(34);
   });
 
-  it("reports the package version in --version output", () => {
+  it("imports the CLI module without running main", async () => {
+    process.exitCode = 123;
+    const cliModule = await import("../src/cli/index.js");
+
+    expect(typeof cliModule.buildProgram).toBe("function");
+    expect(typeof cliModule.main).toBe("function");
+    expect(process.exitCode).toBe(123);
+  });
+
+  it("reports the package version in --version output", async () => {
+    const { buildProgram } = await import("../src/cli/index.js");
     expect(buildProgram().version()).toBe(packageJson.version);
   });
 

@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CliInputError } from "../src/cli/utils/handle-error.js";
-import { prepareRepairHandoff } from "../src/cli/utils/handoff-to-agent.js";
+import {
+  type RepairFindingSubset,
+  prepareRepairHandoff,
+} from "../src/cli/utils/handoff-to-agent.js";
 import type { PromptAdapter } from "../src/cli/utils/prompts.js";
 import type { ScanReport } from "../src/domain/build-report.js";
 import type { Finding } from "../src/index.js";
@@ -196,6 +199,52 @@ describe("repair handoff preparation", () => {
     expect(handoff.prompt).toContain("Full findings report: unavailable");
   });
 
+  it("omits the errors subset for warning-only reports", async () => {
+    const report = makeReport([makeFinding({ severity: "warning", ruleId: "warning-rule" })]);
+    let seenChoices: readonly {
+      readonly name: string;
+      readonly value: RepairFindingSubset;
+    }[] = [];
+    const handoff = await prepareRepairHandoff({
+      report,
+      prompts: fakePrompts({
+        selected: "all",
+        onSelectChoices: (choices) => {
+          seenChoices = choices;
+        },
+      }),
+      outputRoot: directory,
+      timestamp: "2026-06-15T00:00:00.000Z",
+    });
+
+    expect(handoff.findings.map((finding) => finding.ruleId)).toEqual(["warning-rule"]);
+    expect(seenChoices.map((choice) => choice.value)).not.toContain("errors");
+    expect(seenChoices.map((choice) => choice.value)).not.toContain("errors-and-warnings");
+  });
+
+  it("omits the warning-only subset for advice-only reports", async () => {
+    const report = makeReport([makeFinding({ severity: "advice", ruleId: "advice-rule" })]);
+    let seenChoices: readonly {
+      readonly name: string;
+      readonly value: RepairFindingSubset;
+    }[] = [];
+    const handoff = await prepareRepairHandoff({
+      report,
+      prompts: fakePrompts({
+        selected: "all",
+        onSelectChoices: (choices) => {
+          seenChoices = choices;
+        },
+      }),
+      outputRoot: directory,
+      timestamp: "2026-06-15T00:00:00.000Z",
+    });
+
+    expect(handoff.findings.map((finding) => finding.ruleId)).toEqual(["advice-rule"]);
+    expect(seenChoices.map((choice) => choice.value)).not.toContain("errors");
+    expect(seenChoices.map((choice) => choice.value)).not.toContain("errors-and-warnings");
+  });
+
   it("raises a user error when selected skills are empty", async () => {
     const report = makeReport([makeFinding({})]);
 
@@ -211,11 +260,27 @@ describe("repair handoff preparation", () => {
 const fakePrompts = (input: {
   readonly selected: "errors" | "errors-and-warnings" | "all" | "selected-skills";
   readonly checked?: readonly string[];
+  readonly onSelectChoices?: (
+    choices: readonly {
+      readonly name: string;
+      readonly value: RepairFindingSubset;
+    }[],
+  ) => void;
 }): PromptAdapter => ({
   checkbox: async <Value extends string>() => [...(input.checked ?? [])] as Value[],
   confirm: async () => true,
   input: async () => "",
-  select: async <Value extends string>() => input.selected as Value,
+  select: async <Value extends string>(choices: readonly { name: string; value: Value }[]) => {
+    if (input.onSelectChoices !== undefined) {
+      input.onSelectChoices(
+        choices.map((choice) => ({
+          name: choice.name,
+          value: choice.value as RepairFindingSubset,
+        })),
+      );
+    }
+    return input.selected as Value;
+  },
 });
 
 const makeReport = (findings: readonly Finding[]): ScanReport => {

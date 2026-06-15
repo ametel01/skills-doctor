@@ -69,12 +69,21 @@ const chooseRepairFindings = async (
   report: ScanReport,
   prompts: PromptAdapter,
 ): Promise<readonly Finding[]> => {
-  const subset = await prompts.select<RepairFindingSubset>("Choose findings to repair", [
-    { name: "Blocking errors only", value: "errors" },
-    { name: "Blocking errors and warnings", value: "errors-and-warnings" },
-    { name: "All findings", value: "all" },
-    { name: "Selected skills", value: "selected-skills" },
-  ]);
+  const choices: Array<{ name: string; value: RepairFindingSubset }> = [];
+  if (report.errorCount > 0) {
+    choices.push({ name: "Blocking errors only", value: "errors" });
+  }
+  if (report.errorCount + report.warningCount > 0) {
+    choices.push({ name: "Blocking errors and warnings", value: "errors-and-warnings" });
+  }
+  if (report.findingCount > 0) {
+    choices.push({ name: "All findings", value: "all" });
+  }
+  if (report.skills.some((skill) => skill.findingCount > 0)) {
+    choices.push({ name: "Selected skills", value: "selected-skills" });
+  }
+
+  const subset = await prompts.select<RepairFindingSubset>("Choose findings to repair", choices);
 
   if (subset === "errors") {
     return report.findings.filter((finding) => finding.severity === "error");

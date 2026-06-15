@@ -30,7 +30,7 @@ const validateSkillQuality = async (skill: SkillRecord): Promise<Finding[]> => {
   const findings: Finding[] = [];
   const frontmatter = skill.parseResult.frontmatter;
   const description = readString(frontmatter.data.description) ?? "";
-  const body = frontmatter.body.trim();
+  const body = frontmatter.body;
 
   findings.push(...validateDescription(skill, description));
   findings.push(...validateBody(skill, body));
@@ -44,6 +44,7 @@ const validateSkillQuality = async (skill: SkillRecord): Promise<Finding[]> => {
 const validateDescription = (skill: SkillRecord, description: string): Finding[] => {
   const findings: Finding[] = [];
   const normalized = description.trim();
+  const line = findContentLine(skill.content, /^\s*description\s*:/i);
 
   if (normalized.length > 0 && !TRIGGER_PATTERN.test(normalized)) {
     findings.push(
@@ -55,6 +56,7 @@ const validateDescription = (skill: SkillRecord, description: string): Finding[]
         message: "The description should explain when an agent should use this skill.",
         suggestion:
           'Use imperative phrasing such as "Use this skill when..." and include concrete task contexts.',
+        line,
       }),
     );
   }
@@ -69,6 +71,7 @@ const validateDescription = (skill: SkillRecord, description: string): Finding[]
         message:
           "A short generic description is unlikely to trigger reliably or explain the skill's scope.",
         suggestion: "Describe what the skill does, when to use it, and important adjacent cases.",
+        line,
       }),
     );
   }
@@ -86,6 +89,7 @@ const validateDescription = (skill: SkillRecord, description: string): Finding[]
         message:
           "Descriptions should match user intent rather than the skill's internal mechanics.",
         suggestion: "Rewrite the description around the task the user is trying to accomplish.",
+        line,
       }),
     );
   }
@@ -106,6 +110,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
         message: "A skill body should contain complete reusable instructions, not placeholders.",
         suggestion:
           "Replace placeholders with concrete workflow steps, gotchas, examples, or validation guidance.",
+        line: findBodyLine(skill, body, PLACEHOLDER_PATTERN),
       }),
     );
   }
@@ -120,6 +125,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
         message: "The body uses generic advice that does not add skill-specific expertise.",
         suggestion:
           "Replace generic phrasing with concrete project or domain procedures the agent would not already know.",
+        line: findBodyLine(skill, body, GENERIC_BODY_PATTERN),
       }),
     );
   }
@@ -133,6 +139,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
         title: "Body lacks concrete workflow structure",
         message: "The body does not appear to include headings, ordered steps, or checklist items.",
         suggestion: "Add a concise workflow, gotchas section, examples, or validation loop.",
+        line: findFirstBodyLine(skill),
       }),
     );
   }
@@ -146,6 +153,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
         title: "Body presents a tool menu without a default",
         message: "Skills should provide defaults rather than long menus of equal options.",
         suggestion: "Pick a default tool and explain when to use a fallback.",
+        line: findBodyLine(skill, body, TOOL_MENU_PATTERN),
       }),
     );
   }
@@ -161,6 +169,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
           "Destructive, release, migration, or deploy guidance should include validation, preview, backup, or confirmation steps.",
         suggestion:
           "Add a dry-run, validation, backup, or explicit confirmation requirement before the destructive action.",
+        line: findBodyLine(skill, body, DESTRUCTIVE_PATTERN),
       }),
     );
   }
@@ -213,6 +222,7 @@ const validateProgressiveDisclosure = (skill: SkillRecord): Finding[] => {
           "The skill references a resource directory generically instead of naming the file and when to load it.",
         suggestion:
           'Use specific guidance such as "Read references/api-errors.md if the API returns a non-200 status."',
+        line: findBodyLine(skill, skill.parseResult.frontmatter.body, GENERIC_REFERENCE_PATTERN),
       }),
     );
   }
@@ -236,6 +246,7 @@ const validateResources = async (skill: SkillRecord, body: string): Promise<Find
             "The skill references a resource outside the skill directory. Resource references must remain inside scripts/, references/, or assets/ for this skill.",
           suggestion:
             "Use a path rooted inside the skill (for example references/file.md) without '..' segments.",
+          line: findReferenceLine(skill.content, referencePath),
         }),
       );
       continue;
@@ -251,6 +262,7 @@ const validateResources = async (skill: SkillRecord, body: string): Promise<Find
           title: "Referenced resource does not exist",
           message: `The skill references ${referencePath}, but that path does not exist inside the skill directory.`,
           suggestion: "Create the referenced file or remove the stale reference.",
+          line: findReferenceLine(skill.content, referencePath),
         }),
       );
       continue;
@@ -266,6 +278,7 @@ const validateResources = async (skill: SkillRecord, body: string): Promise<Find
           message:
             "Script instructions should document usage or mention --help so agents can learn the interface.",
           suggestion: "Add a short usage example and document that the script supports --help.",
+          line: findReferenceLine(skill.content, referencePath),
         }),
       );
     }
@@ -282,6 +295,7 @@ const validateResources = async (skill: SkillRecord, body: string): Promise<Find
           "Agents need non-interactive scripts that accept flags, stdin, files, or environment variables.",
         suggestion:
           "Replace interactive prompts with command-line flags and clear errors for missing inputs.",
+        line: findBodyLine(skill, body, INTERACTIVE_SCRIPT_PATTERN),
       }),
     );
   }
@@ -296,6 +310,7 @@ const validateResources = async (skill: SkillRecord, body: string): Promise<Find
         message:
           "One-off package-runner commands should pin versions when reproducibility matters.",
         suggestion: "Use a versioned command such as npx eslint@9 or uvx ruff@0.8.0.",
+        line: findBodyLine(skill, body, UNPINNED_RUNNER_PATTERN),
       }),
     );
   }
@@ -371,6 +386,7 @@ const createFinding = (
     readonly title: string;
     readonly message: string;
     readonly suggestion: string;
+    readonly line?: number | undefined;
   },
 ): Finding => ({
   ruleId: input.ruleId,
@@ -386,8 +402,51 @@ const createFinding = (
   skillName: skill.parseResult.ok
     ? readString(skill.parseResult.frontmatter.data.name)
     : skill.directoryName,
+  line: input.line,
   agentRepairable: true,
 });
+
+const findContentLine = (
+  content: string,
+  pattern: string | RegExp,
+): number | undefined => {
+  const linePattern =
+    typeof pattern === "string"
+      ? new RegExp(escapeRegExp(pattern))
+      : new RegExp(pattern.source, pattern.flags.replace(/g/g, ""));
+
+  const lines = content.split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    if (linePattern.test(line)) {
+      return index + 1;
+    }
+  }
+  return undefined;
+};
+
+const findBodyLine = (
+  skill: SkillRecord,
+  body: string,
+  pattern: string | RegExp,
+): number | undefined => {
+  const bodyLine = findContentLine(body, pattern);
+  if (bodyLine === undefined) return undefined;
+  const frontMatterLineCount = skill.parseResult.frontmatter.raw.split(/\r?\n/).length;
+  return frontMatterLineCount + 2 + bodyLine;
+};
+
+const findReferenceLine = (content: string, referencePath: string): number | undefined =>
+  findContentLine(content, referencePath);
+
+const findFirstBodyLine = (skill: SkillRecord): number | undefined => {
+  const lines = skill.parseResult.frontmatter.body.split(/\r?\n/);
+  if (lines.length === 0) return undefined;
+  const frontMatterLineCount = skill.parseResult.frontmatter.raw.split(/\r?\n/).length;
+  return frontMatterLineCount + 2 + 1;
+};
+
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const readString = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
