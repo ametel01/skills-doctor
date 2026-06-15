@@ -15,6 +15,20 @@ describe("post-handoff finding comparison", () => {
     expect(comparison.newFindings).toEqual([newFinding]);
   });
 
+  it("treats same rule and skill with different details as different findings", () => {
+    const fixed = makeFinding("frontmatter-name", "/repo/a/SKILL.md");
+    const remaining = makeFinding("frontmatter-name", "/repo/a/SKILL.md", {
+      line: 3,
+      message: "Different detail",
+    });
+
+    const comparison = compareFindings([fixed], [remaining]);
+
+    expect(comparison.fixed).toEqual([fixed]);
+    expect(comparison.newFindings).toEqual([remaining]);
+    expect(comparison.remaining).toHaveLength(0);
+  });
+
   it("renders a concise re-scan summary", () => {
     const report = makeReport(1);
     const summary = renderPostHandoffSummary(
@@ -56,7 +70,11 @@ const makeReport = (errorCount: number): ScanReport => {
   };
 };
 
-const makeFinding = (ruleId: string, skillPath: string): Finding => ({
+const makeFinding = (
+  ruleId: string,
+  skillPath: string,
+  overrides: Partial<Finding> = {},
+): Finding => ({
   ruleId,
   severity: "error",
   category: "frontmatter",
@@ -69,4 +87,5 @@ const makeFinding = (ruleId: string, skillPath: string): Finding => ({
   skillPath,
   skillName: "skill",
   agentRepairable: true,
+  ...overrides,
 });
