@@ -324,16 +324,21 @@ const validateEvals = async (skill: SkillRecord, body: string): Promise<Finding[
 
 const validateCrossEcosystem = (skills: readonly SkillRecord[]): Finding[] => {
   const findings: Finding[] = [];
-  const byName = new Map<string, SkillRecord[]>();
+  const byNameAndSource = new Map<string, SkillRecord[]>();
 
   for (const skill of skills) {
+    if (skill.source === "custom") continue;
     if (!skill.parseResult.ok) continue;
     const name = readString(skill.parseResult.frontmatter.data.name);
     if (name === undefined) continue;
-    byName.set(name, [...(byName.get(name) ?? []), skill]);
+    byNameAndSource.set(
+      `${name}\u0000${skill.source}`,
+      [...(byNameAndSource.get(`${name}\u0000${skill.source}`) ?? []), skill],
+    );
   }
 
-  for (const [name, namedSkills] of byName) {
+  for (const [nameAndSource, namedSkills] of byNameAndSource) {
+    const [name] = nameAndSource.split("\u0000");
     const ecosystems = new Set(namedSkills.map((skill) => skill.ecosystem));
     if (!ecosystems.has("claude") || !ecosystems.has("codex")) continue;
     const uniqueContents = new Set(namedSkills.map((skill) => normalizeContent(skill.content)));

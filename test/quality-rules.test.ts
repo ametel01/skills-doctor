@@ -115,6 +115,42 @@ describe("quality rules", () => {
     );
   });
 
+  it("does not report divergence across local and global same-name skills", async () => {
+    const homeDir = path.join(directory, "home");
+    await mkdir(path.join(homeDir, ".agents", "skills", "global-shared"), { recursive: true });
+    await writeFile(
+      path.join(homeDir, ".agents", "skills", "global-shared", "SKILL.md"),
+      [
+        "---",
+        "name: global-shared",
+        "description: Use this skill when global-shared runs.",
+        "---",
+        "",
+        "## Workflow",
+        "- Use the global Codex version.",
+      ].join("\n"),
+    );
+    await writeFile(
+      path.join(directory, ".agents", "skills", "global-shared", "SKILL.md"),
+      [
+        "---",
+        "name: global-shared",
+        "description: Use this skill when global-shared runs.",
+        "---",
+        "",
+        "## Workflow",
+        "- Use the local Codex version.",
+      ].join("\n"),
+    );
+
+    const discovered = await discoverSkillRoots({ cwd: directory, homeDir });
+    const scan = await scanSkillRoots({ roots: discovered.roots });
+
+    expect(scan.findings.map((finding) => finding.ruleId)).not.toContain(
+      "cross-ecosystem-skill-divergence",
+    );
+  });
+
   it("flags resource references that escape the skill directory", async () => {
     const skill = buildRecord("escape-skill", [
       "---",
@@ -140,6 +176,7 @@ const buildRecord = (directoryName: string, lines: readonly string[]): SkillReco
   return {
     ecosystem: "custom",
     rootPath,
+    source: "local",
     skillDir,
     skillPath,
     directoryName,

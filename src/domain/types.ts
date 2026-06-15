@@ -68,6 +68,7 @@ export type ParseResult =
 export type SkillRecord = {
   readonly ecosystem: SkillEcosystem;
   readonly rootPath: string;
+  readonly source: "local" | "global" | "custom";
   readonly skillDir: string;
   readonly skillPath: string;
   readonly directoryName: string;

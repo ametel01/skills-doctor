@@ -145,6 +145,7 @@ const buildRecord = (directoryName: string, lines: readonly string[]): SkillReco
   return {
     ecosystem: "custom",
     rootPath,
+    source: "local",
     skillDir,
     skillPath,
     directoryName,

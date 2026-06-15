@@ -41,6 +41,7 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
       skills.push({
         ecosystem: root.ecosystem,
         rootPath: root.rootPath,
+        source: root.source,
         skillDir,
         skillPath,
         directoryName: entry.name,

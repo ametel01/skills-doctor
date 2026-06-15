@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added boundary checks for resource references to prevent `scripts/`, `references/`, and `assets/` paths from escaping a skill directory.
 - Added scan duration measurement to reports using an injectable clock, including post-handoff scans.
 - Added a review-menu option to show findings grouped by skill.
+- Scoped divergence checks to same source roots and added `source` to scanned skill records.
 
 ## [0.1.0] - 2026-06-15
 
