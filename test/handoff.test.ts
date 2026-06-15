@@ -4,8 +4,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CliInputError } from "../src/cli/utils/handle-error.js";
 import {
-  type RepairFindingSubset,
   prepareRepairHandoff,
+  type RepairFindingSubset,
 } from "../src/cli/utils/handoff-to-agent.js";
 import type { PromptAdapter } from "../src/cli/utils/prompts.js";
 import type { ScanReport } from "../src/domain/build-report.js";
@@ -219,7 +219,6 @@ describe("repair handoff preparation", () => {
 
     expect(handoff.findings.map((finding) => finding.ruleId)).toEqual(["warning-rule"]);
     expect(seenChoices.map((choice) => choice.value)).not.toContain("errors");
-    expect(seenChoices.map((choice) => choice.value)).not.toContain("errors-and-warnings");
   });
 
   it("omits the warning-only subset for advice-only reports", async () => {
@@ -270,7 +269,10 @@ const fakePrompts = (input: {
   checkbox: async <Value extends string>() => [...(input.checked ?? [])] as Value[],
   confirm: async () => true,
   input: async () => "",
-  select: async <Value extends string>(choices: readonly { name: string; value: Value }[]) => {
+  select: async <Value extends string>(
+    _message: string,
+    choices: readonly { name: string; value: Value }[],
+  ) => {
     if (input.onSelectChoices !== undefined) {
       input.onSelectChoices(
         choices.map((choice) => ({

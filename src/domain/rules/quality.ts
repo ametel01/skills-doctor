@@ -31,11 +31,12 @@ const validateSkillQuality = async (skill: SkillRecord): Promise<Finding[]> => {
   const frontmatter = skill.parseResult.frontmatter;
   const description = readString(frontmatter.data.description) ?? "";
   const body = frontmatter.body;
+  const frontMatterLineCount = frontmatter.raw.split(/\r?\n/).length;
 
   findings.push(...validateDescription(skill, description));
-  findings.push(...validateBody(skill, body));
-  findings.push(...validateProgressiveDisclosure(skill));
-  findings.push(...(await validateResources(skill, body)));
+  findings.push(...validateBody(skill, body, frontMatterLineCount));
+  findings.push(...validateProgressiveDisclosure(skill, body, frontMatterLineCount));
+  findings.push(...(await validateResources(skill, body, frontMatterLineCount)));
   findings.push(...(await validateEvals(skill, body)));
 
   return findings;
@@ -97,7 +98,11 @@ const validateDescription = (skill: SkillRecord, description: string): Finding[]
   return findings;
 };
 
-const validateBody = (skill: SkillRecord, body: string): Finding[] => {
+const validateBody = (
+  skill: SkillRecord,
+  body: string,
+  frontMatterLineCount: number,
+): Finding[] => {
   const findings: Finding[] = [];
 
   if (PLACEHOLDER_PATTERN.test(body)) {
@@ -110,7 +115,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
         message: "A skill body should contain complete reusable instructions, not placeholders.",
         suggestion:
           "Replace placeholders with concrete workflow steps, gotchas, examples, or validation guidance.",
-        line: findBodyLine(skill, body, PLACEHOLDER_PATTERN),
+        line: findBodyLine(frontMatterLineCount, body, PLACEHOLDER_PATTERN),
       }),
     );
   }
@@ -125,7 +130,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
         message: "The body uses generic advice that does not add skill-specific expertise.",
         suggestion:
           "Replace generic phrasing with concrete project or domain procedures the agent would not already know.",
-        line: findBodyLine(skill, body, GENERIC_BODY_PATTERN),
+        line: findBodyLine(frontMatterLineCount, body, GENERIC_BODY_PATTERN),
       }),
     );
   }
@@ -139,7 +144,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
         title: "Body lacks concrete workflow structure",
         message: "The body does not appear to include headings, ordered steps, or checklist items.",
         suggestion: "Add a concise workflow, gotchas section, examples, or validation loop.",
-        line: findFirstBodyLine(skill),
+        line: findFirstBodyLine(body, frontMatterLineCount),
       }),
     );
   }
@@ -153,7 +158,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
         title: "Body presents a tool menu without a default",
         message: "Skills should provide defaults rather than long menus of equal options.",
         suggestion: "Pick a default tool and explain when to use a fallback.",
-        line: findBodyLine(skill, body, TOOL_MENU_PATTERN),
+        line: findBodyLine(frontMatterLineCount, body, TOOL_MENU_PATTERN),
       }),
     );
   }
@@ -169,7 +174,7 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
           "Destructive, release, migration, or deploy guidance should include validation, preview, backup, or confirmation steps.",
         suggestion:
           "Add a dry-run, validation, backup, or explicit confirmation requirement before the destructive action.",
-        line: findBodyLine(skill, body, DESTRUCTIVE_PATTERN),
+        line: findBodyLine(frontMatterLineCount, body, DESTRUCTIVE_PATTERN),
       }),
     );
   }
@@ -177,7 +182,11 @@ const validateBody = (skill: SkillRecord, body: string): Finding[] => {
   return findings;
 };
 
-const validateProgressiveDisclosure = (skill: SkillRecord): Finding[] => {
+const validateProgressiveDisclosure = (
+  skill: SkillRecord,
+  body: string,
+  frontMatterLineCount: number,
+): Finding[] => {
   const findings: Finding[] = [];
   const lineCount = skill.content.split(/\r?\n/).length;
   const tokenEstimate = estimateTokens(skill.content);
@@ -222,7 +231,7 @@ const validateProgressiveDisclosure = (skill: SkillRecord): Finding[] => {
           "The skill references a resource directory generically instead of naming the file and when to load it.",
         suggestion:
           'Use specific guidance such as "Read references/api-errors.md if the API returns a non-200 status."',
-        line: findBodyLine(skill, skill.parseResult.frontmatter.body, GENERIC_REFERENCE_PATTERN),
+        line: findBodyLine(frontMatterLineCount, body, GENERIC_REFERENCE_PATTERN),
       }),
     );
   }
@@ -230,7 +239,11 @@ const validateProgressiveDisclosure = (skill: SkillRecord): Finding[] => {
   return findings;
 };
 
-const validateResources = async (skill: SkillRecord, body: string): Promise<Finding[]> => {
+const validateResources = async (
+  skill: SkillRecord,
+  body: string,
+  frontMatterLineCount: number,
+): Promise<Finding[]> => {
   const findings: Finding[] = [];
   const referencedPaths = [...new Set(skill.content.match(RESOURCE_REFERENCE_PATTERN) ?? [])];
 
@@ -295,7 +308,7 @@ const validateResources = async (skill: SkillRecord, body: string): Promise<Find
           "Agents need non-interactive scripts that accept flags, stdin, files, or environment variables.",
         suggestion:
           "Replace interactive prompts with command-line flags and clear errors for missing inputs.",
-        line: findBodyLine(skill, body, INTERACTIVE_SCRIPT_PATTERN),
+        line: findBodyLine(frontMatterLineCount, body, INTERACTIVE_SCRIPT_PATTERN),
       }),
     );
   }
@@ -310,7 +323,7 @@ const validateResources = async (skill: SkillRecord, body: string): Promise<Find
         message:
           "One-off package-runner commands should pin versions when reproducibility matters.",
         suggestion: "Use a versioned command such as npx eslint@9 or uvx ruff@0.8.0.",
-        line: findBodyLine(skill, body, UNPINNED_RUNNER_PATTERN),
+        line: findBodyLine(frontMatterLineCount, body, UNPINNED_RUNNER_PATTERN),
       }),
     );
   }
@@ -406,10 +419,7 @@ const createFinding = (
   agentRepairable: true,
 });
 
-const findContentLine = (
-  content: string,
-  pattern: string | RegExp,
-): number | undefined => {
+const findContentLine = (content: string, pattern: string | RegExp): number | undefined => {
   const linePattern =
     typeof pattern === "string"
       ? new RegExp(escapeRegExp(pattern))
@@ -425,28 +435,25 @@ const findContentLine = (
 };
 
 const findBodyLine = (
-  skill: SkillRecord,
+  frontMatterLineCount: number,
   body: string,
   pattern: string | RegExp,
 ): number | undefined => {
   const bodyLine = findContentLine(body, pattern);
   if (bodyLine === undefined) return undefined;
-  const frontMatterLineCount = skill.parseResult.frontmatter.raw.split(/\r?\n/).length;
   return frontMatterLineCount + 2 + bodyLine;
 };
 
 const findReferenceLine = (content: string, referencePath: string): number | undefined =>
   findContentLine(content, referencePath);
 
-const findFirstBodyLine = (skill: SkillRecord): number | undefined => {
-  const lines = skill.parseResult.frontmatter.body.split(/\r?\n/);
+const findFirstBodyLine = (body: string, frontMatterLineCount: number): number | undefined => {
+  const lines = body.split(/\r?\n/);
   if (lines.length === 0) return undefined;
-  const frontMatterLineCount = skill.parseResult.frontmatter.raw.split(/\r?\n/).length;
   return frontMatterLineCount + 2 + 1;
 };
 
-const escapeRegExp = (value: string): string =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const readString = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
