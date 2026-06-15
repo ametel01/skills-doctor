@@ -53,7 +53,8 @@ export const writeFindingsDirectory = async (
   await writeFile(findingsMarkdownPath, renderFindingsMarkdown(input.report, findings));
 
   for (const group of groupFindingsBySkill(findings)) {
-    const skillReportPath = path.join(skillDirectory, `${safeFileName(group.skillLabel)}.md`);
+    const uniqueLabel = `${group.skillLabel}-${safeFileName(path.relative(input.report.directory, group.skillPath))}`;
+    const skillReportPath = path.join(skillDirectory, `${uniqueLabel}.md`);
     await writeFile(skillReportPath, renderSkillFindingsMarkdown(group.skillLabel, group.findings));
     skillReportPaths.push(skillReportPath);
   }
