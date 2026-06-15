@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import packageJson from "../../package.json" with { type: "json" };
 import { scanAction } from "./commands/scan.js";
 import { handleCliError } from "./utils/handle-error.js";
 
@@ -6,7 +7,7 @@ export const buildProgram = (): Command => {
   const program = new Command()
     .name("skills-doctor")
     .description("Scan Agent Skills and report quality issues.")
-    .version("0.0.0", "-v, --version", "display the version number")
+    .version(packageJson.version, "-v, --version", "display the version number")
     .argument("[directory]", "directory to scan from", ".")
     .option("--json", "output one machine-readable JSON report")
     .option("--json-compact", "with --json, omit indentation")

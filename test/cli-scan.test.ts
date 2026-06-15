@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { scanAction } from "../src/cli/commands/scan.js";
+import { buildProgram } from "../src/cli/index.js";
 import { CliInputError } from "../src/cli/utils/handle-error.js";
 import type { PromptAdapter } from "../src/cli/utils/prompts.js";
+import packageJson from "../package.json" with { type: "json" };
 
 describe("scanAction", () => {
   let directory: string;
@@ -46,6 +48,10 @@ describe("scanAction", () => {
     expect(stdout.join("")).toContain("Skills: 1 scanned");
     expect(stdout.join("")).not.toContain("Top affected skills:");
     expect(process.exitCode).toBe(1);
+  });
+
+  it("reports the package version in --version output", () => {
+    expect(buildProgram().version()).toBe(packageJson.version);
   });
 
   it("lets the user select only Claude when both roots exist", async () => {
