@@ -20,7 +20,7 @@
 - [x] Step 5: Quality, Progressive Disclosure, Script, Eval, and Cross-Ecosystem Rules
 - [x] Step 6: Report Model, Human Summary, JSON Output, and Exit Codes
 - [x] Step 7: CLI Entrypoint, Prompts, Spinners, and Scan Target Selection
-- [ ] Step 8: Command Execution, Agent Detection, and Agent Selection
+- [x] Step 8: Command Execution, Agent Detection, and Agent Selection
 - [ ] Step 9: Findings Report Directory and Custom Handoff Prompt
 - [ ] Step 10: Agent Launch Flow and Post-Handoff Re-Scan
 - [ ] Step 11: Public API Facade and Fixture-Based Integration Coverage
@@ -28,7 +28,7 @@
 
 ## Current Status
 
-Step 7 complete. Next step: Step 8.
+Step 8 complete. Next step: Step 9.
 
 ## Update Rule
 
@@ -184,5 +184,27 @@ After each completed step:
   - `bun run test`
   - `bun run build`
   - `bun run verify`
-- Commit: pending
+- Commit: `0d7593a`
 - Next step: Step 8
+
+### Step 8: Command Execution, Agent Detection, and Agent Selection
+
+- Status: Complete
+- Changes:
+  - Added an `execFile`-based command runner that captures trimmed stdout/stderr and reports failures without shell strings.
+  - Added shared PATH command resolution with Windows `PATHEXT` handling and non-Windows executable-bit checks.
+  - Added Claude and Codex repair-agent detection in stable menu order.
+  - Added repair-agent selection behavior for two agents, one confirmed default agent, declined handoff, and no-agent expected user errors.
+  - Added launch invocation and preview construction for `claude --dangerously-skip-permissions <prompt>` and `codex --yolo <prompt>`.
+  - Added the Windows `.cmd` wrapper entry-script safeguard for multiline prompt launch arguments.
+  - Wired the interactive repair menu to preview the selected local agent handoff.
+  - Added command utility and agent selection tests.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+- Commit: pending
+- Next step: Step 9

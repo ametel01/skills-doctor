@@ -104,6 +104,7 @@ const writeSkill = async (skillDir: string, name: string): Promise<void> => {
 const fakePrompts = (answers: readonly string[]): PromptAdapter => {
   const queue = [...answers];
   return {
+    confirm: async () => true,
     input: async () => queue.shift() ?? "",
     select: async <Value extends string>() => (queue.shift() ?? "exit") as Value,
   };

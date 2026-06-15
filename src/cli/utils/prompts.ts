@@ -1,4 +1,4 @@
-import { input, select } from "@inquirer/prompts";
+import { confirm as confirmPrompt, input, select } from "@inquirer/prompts";
 
 export type Choice<Value extends string> = {
   readonly name: string;
@@ -7,6 +7,7 @@ export type Choice<Value extends string> = {
 };
 
 export type PromptAdapter = {
+  readonly confirm: (message: string, defaultValue?: boolean) => Promise<boolean>;
   readonly input: (message: string, defaultValue?: string) => Promise<string>;
   readonly select: <Value extends string>(
     message: string,
@@ -22,6 +23,8 @@ export class PromptCancelledError extends Error {
 }
 
 export const inquirerPromptAdapter: PromptAdapter = {
+  confirm: async (message, defaultValue = true) =>
+    runPrompt(() => confirmPrompt({ message, default: defaultValue })),
   input: async (message, defaultValue = "") =>
     runPrompt(() => input({ message, default: defaultValue })),
   select: async (message, choices) => runPrompt(() => select({ message, choices: [...choices] })),

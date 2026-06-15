@@ -7,6 +7,8 @@ import { renderHumanSummary, resolveScanExitCode } from "../../domain/summarize-
 import type { Finding, SkillRoot } from "../../domain/types.js";
 import { CliInputError } from "../utils/handle-error.js";
 import { enableJsonMode, writeJsonReport } from "../utils/json-mode.js";
+import type { AgentAvailabilityProbe } from "../utils/launch-agent.js";
+import { chooseRepairAgent, formatRepairAgentPreview } from "../utils/launch-agent.js";
 import { inquirerPromptAdapter, type PromptAdapter } from "../utils/prompts.js";
 import { shouldSkipPrompts } from "../utils/should-skip-prompts.js";
 import { createSpinner, type SpinnerFactory } from "../utils/spinner.js";
@@ -26,6 +28,7 @@ export type ScanActionOptions = {
   readonly writeStderr?: (message: string) => void;
   readonly spinner?: SpinnerFactory;
   readonly version?: string;
+  readonly isRepairAgentAvailable?: AgentAvailabilityProbe;
 };
 
 type RootSelection = "all" | "claude" | "codex" | "custom";
@@ -95,7 +98,11 @@ export const scanAction = async (
   } else {
     writeStdout(renderHumanSummary(report));
     if (!skipPrompts && report.findingCount > 0) {
-      await reviewFindings(report.findings, prompts, writeStdout);
+      await reviewFindings(report.findings, {
+        prompts,
+        write: writeStdout,
+        isRepairAgentAvailable: options.isRepairAgentAvailable,
+      });
     }
   }
 
@@ -121,11 +128,17 @@ const selectRoots = async (
   return roots.filter((root) => root.ecosystem === selection);
 };
 
+type ReviewFindingsInput = {
+  readonly prompts: PromptAdapter;
+  readonly write: (message: string) => void;
+  readonly isRepairAgentAvailable?: AgentAvailabilityProbe | undefined;
+};
+
 const reviewFindings = async (
   findings: readonly Finding[],
-  prompts: PromptAdapter,
-  write: (message: string) => void,
+  input: ReviewFindingsInput,
 ): Promise<void> => {
+  const { prompts, write } = input;
   const action = await prompts.select<ReviewAction>("Review findings", [
     { name: "View blocking errors", value: "errors" },
     { name: "View all findings", value: "all" },
@@ -136,7 +149,7 @@ const reviewFindings = async (
 
   if (action === "exit") return;
   if (action === "repair") {
-    write("Repair handoff will be available in the next implementation step.\n");
+    await previewRepairAgentSelection(input);
     return;
   }
 
@@ -147,6 +160,30 @@ const reviewFindings = async (
     return;
   }
   write(renderFindings(selectedFindings));
+};
+
+const previewRepairAgentSelection = async (input: ReviewFindingsInput): Promise<void> => {
+  try {
+    const agent = await chooseRepairAgent({
+      prompts: input.prompts,
+      isAvailable: input.isRepairAgentAvailable,
+    });
+    if (agent === undefined) {
+      input.write("Repair handoff cancelled.\n");
+      return;
+    }
+    input.write(`Selected ${agent.displayName}.\n`);
+    input.write(`Launch preview: ${formatRepairAgentPreview(agent.id)}\n`);
+    input.write(
+      "Custom repair prompt generation will be available in the next implementation step.\n",
+    );
+  } catch (error) {
+    if (error instanceof CliInputError) {
+      input.write(`${error.message}\n`);
+      return;
+    }
+    throw error;
+  }
 };
 
 const renderFindings = (findings: readonly Finding[]): string =>
