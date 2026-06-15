@@ -48,7 +48,9 @@ describe("quality rules", () => {
       ]),
     );
 
-    const weakDescription = findings.find((finding) => finding.ruleId === "weak-description-trigger");
+    const weakDescription = findings.find(
+      (finding) => finding.ruleId === "weak-description-trigger",
+    );
     expect(weakDescription?.line).toBe(3);
 
     const evalFinding = findings.find((finding) => finding.ruleId === "missing-skill-evals");
@@ -98,7 +100,9 @@ describe("quality rules", () => {
     const interactiveGuidance = findings.find(
       (finding) => finding.ruleId === "interactive-script-guidance",
     );
-    const weakDescription = findings.find((finding) => finding.ruleId === "weak-description-trigger");
+    const weakDescription = findings.find(
+      (finding) => finding.ruleId === "weak-description-trigger",
+    );
 
     expect(missingResource?.line).toBe(8);
     expect(interactiveGuidance?.line).toBe(9);
