@@ -16,7 +16,7 @@
 - [x] Step 1: Bun, TypeScript, Biome, Vitest, and Package Scaffold
 - [x] Step 2: CI, Release Workflow, Release Notes Script, and Changelog
 - [x] Step 3: Domain Types, Skill Root Discovery, and Skill Parsing
-- [ ] Step 4: Structural Rule Engine
+- [x] Step 4: Structural Rule Engine
 - [ ] Step 5: Quality, Progressive Disclosure, Script, Eval, and Cross-Ecosystem Rules
 - [ ] Step 6: Report Model, Human Summary, JSON Output, and Exit Codes
 - [ ] Step 7: CLI Entrypoint, Prompts, Spinners, and Scan Target Selection
@@ -28,7 +28,7 @@
 
 ## Current Status
 
-Step 3 complete. Next step: Step 4.
+Step 4 complete. Next step: Step 5.
 
 ## Update Rule
 
@@ -106,5 +106,24 @@ After each completed step:
   - `bun run build`
   - `bun run verify`
   - `bun install --frozen-lockfile`
-- Commit: pending
+- Commit: `e9594e7`
 - Next step: Step 4
+
+### Step 4: Structural Rule Engine
+
+- Status: Complete
+- Changes:
+  - Added stable structural findings with severity, category, path, explanation, suggestion, ecosystem, and agent-repair metadata.
+  - Added missing `SKILL.md` findings for child directories in selected skills roots.
+  - Added rules for invalid frontmatter, required name/description fields, name constraints, description length, optional field types/lengths, unknown fields, and experimental `allowed-tools`.
+  - Included structural findings in scan results.
+  - Added tests for missing skill files, name/description failures, optional fields, `allowed-tools`, and scan-integrated findings.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+- Commit: pending
+- Next step: Step 5
