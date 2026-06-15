@@ -14,6 +14,8 @@ describe("public API facade", () => {
     expect(api).toHaveProperty("discoverSkillRoots");
     expect(api).toHaveProperty("scanSkillRoots");
     expect(api).toHaveProperty("buildScanReport");
+    expect(api).toHaveProperty("calculateScore");
+    expect(api).toHaveProperty("getScoreLabel");
     expect(api).not.toHaveProperty("scanAction");
     expect(api).not.toHaveProperty("prepareRepairHandoff");
     expect(api).not.toHaveProperty("launchRepairAgent");
@@ -83,10 +85,16 @@ describe("fixture scanner coverage", () => {
       "errorCount",
       "warningCount",
       "adviceCount",
+      "score",
       "skills",
       "findings",
       "handoffRequested",
     ]);
+    expect(json.score).toMatchObject({
+      value: expect.any(Number),
+      label: expect.any(String),
+      penalty: expect.any(Number),
+    });
     expect(json.findings[0]).toMatchObject({
       ruleId: expect.any(String),
       severity: expect.any(String),

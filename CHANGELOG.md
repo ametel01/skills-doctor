@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Local score calculation for scan reports using distinct violated rules, with React Doctor-style labels in human, JSON, and repair-report output.
+
 ### Fixed
 
 - Avoid Node unsettled top-level-await warnings while the interactive CLI is waiting for prompts.

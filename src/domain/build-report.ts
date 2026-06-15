@@ -1,3 +1,4 @@
+import { calculateScore, type ScoreSummary } from "./calculate-score.js";
 import type { Finding, ScanResult, SkillRoot } from "./types.js";
 
 export type SkillSummary = {
@@ -23,6 +24,7 @@ export type ScanReport = {
   readonly errorCount: number;
   readonly warningCount: number;
   readonly adviceCount: number;
+  readonly score: ScoreSummary;
   readonly skills: readonly SkillSummary[];
   readonly findings: readonly Finding[];
   readonly handoffRequested: boolean;
@@ -53,6 +55,7 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
     errorCount,
     warningCount,
     adviceCount,
+    score: calculateScore(input.scan.findings),
     skills: input.scan.skills.map((skill) => {
       const skillFindings = input.scan.findings.filter(
         (finding) => finding.skillPath === skill.skillPath,

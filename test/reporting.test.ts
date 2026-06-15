@@ -51,8 +51,10 @@ describe("scan reports", () => {
     expect(report.ok).toBe(false);
     expect(report.skillCount).toBe(1);
     expect(report.errorCount).toBeGreaterThan(0);
+    expect(report.score.value).toBeLessThan(100);
     expect(resolveScanExitCode(report)).toBe(1);
     expect(renderHumanSummary(report)).toContain("Skills scanned: 1");
+    expect(renderHumanSummary(report)).toContain(`Score: ${report.score.value}`);
   });
 });
 

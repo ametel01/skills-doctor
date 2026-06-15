@@ -26,6 +26,7 @@ export const renderPostHandoffSummary = (
     `Remaining findings: ${comparison.remaining.length}`,
     `New findings: ${comparison.newFindings.length}`,
     `Current blocking errors: ${report.errorCount}`,
+    `Current score: ${report.score.value} (${report.score.label})`,
   ].join("\n")}\n`;
 
 const subtractFindings = (

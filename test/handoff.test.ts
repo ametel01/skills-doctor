@@ -7,7 +7,7 @@ import { prepareRepairHandoff } from "../src/cli/utils/handoff-to-agent.js";
 import type { PromptAdapter } from "../src/cli/utils/prompts.js";
 import type { ScanReport } from "../src/domain/build-report.js";
 import type { Finding } from "../src/index.js";
-import { buildHandoffPrompt, writeFindingsDirectory } from "../src/index.js";
+import { buildHandoffPrompt, calculateScore, writeFindingsDirectory } from "../src/index.js";
 
 describe("handoff prompt", () => {
   it("includes selected roots, exact paths, spec-grounded repair rules, and report path", () => {
@@ -72,9 +72,11 @@ describe("findings directory", () => {
 
     expect(result.directory).toBe(path.join(directory, "2026-06-15T01-02-03-004Z"));
     await expect(readFile(result.findingsJsonPath, "utf8")).resolves.toContain('"findingCount": 2');
+    await expect(readFile(result.findingsJsonPath, "utf8")).resolves.toContain('"score"');
     await expect(readFile(result.findingsMarkdownPath, "utf8")).resolves.toContain(
       "# Skills Doctor Findings",
     );
+    await expect(readFile(result.findingsMarkdownPath, "utf8")).resolves.toContain("Score:");
     expect(result.skillReportPaths).toHaveLength(1);
     const skillReportPath = result.skillReportPaths[0];
     if (skillReportPath === undefined) throw new Error("Expected one skill report path.");
@@ -199,6 +201,7 @@ const makeReport = (findings: readonly Finding[]): ScanReport => {
     errorCount: findings.filter((finding) => finding.severity === "error").length,
     warningCount: findings.filter((finding) => finding.severity === "warning").length,
     adviceCount: findings.filter((finding) => finding.severity === "advice").length,
+    score: calculateScore(findings),
     skills: uniqueSkills.map((skillPath) => {
       const skillFindings = findings.filter((finding) => finding.skillPath === skillPath);
       return {

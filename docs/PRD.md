@@ -396,10 +396,22 @@ Human output should show:
 
 - Roots scanned.
 - Skills scanned.
+- Score from 0 to 100 with label.
 - Count by severity.
 - Top affected skills.
 - Top rule categories.
 - Clear next action prompt.
+
+Score calculation:
+
+- Start from 100.
+- Count distinct violated rule keys, not finding count.
+- Error rules subtract 1.5 points each.
+- Warning rules subtract 0.75 points each.
+- Advisory findings are reported but do not affect score.
+- Round the final value and clamp it to 0 or higher.
+- Labels are `Great` for scores 75 and above, `Needs work` for scores from 50
+  through 74, and `Critical` for scores below 50.
 
 Detailed output should be available interactively:
 
@@ -421,7 +433,7 @@ JSON mode contract:
 - Human logs, warnings, prompts, and spinners do not write to stdout.
 - Error output is valid JSON.
 - Report includes schema version, CLI version, scanned roots, skill summaries,
-  findings, elapsed time, and whether repair handoff was requested.
+  score, findings, elapsed time, and whether repair handoff was requested.
 
 ### Agent CLI Detection
 

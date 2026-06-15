@@ -42,6 +42,7 @@ export const writeFindingsDirectory = async (
         directory: input.report.directory,
         scannedRoots: input.report.scannedRoots,
         skills: input.report.skills,
+        score: input.report.score,
         findingCount: findings.length,
         findings,
       },
@@ -73,6 +74,7 @@ const renderFindingsMarkdown = (report: ScanReport, findings: readonly Finding[]
     "",
     `Project root: ${report.directory}`,
     `Scanned roots: ${report.scannedRoots.map((root) => `${root.ecosystem}: ${root.rootPath}`).join("; ")}`,
+    `Score: ${report.score.value} (${report.score.label})`,
     `Findings: ${findings.length}`,
     "",
   ];

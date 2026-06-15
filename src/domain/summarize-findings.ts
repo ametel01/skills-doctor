@@ -35,6 +35,7 @@ export const renderHumanSummary = (report: ScanReport): string => {
   const lines = [
     `Scanned roots: ${report.scannedRoots.length}`,
     `Skills scanned: ${report.skillCount}`,
+    `Score: ${report.score.value} (${report.score.label})`,
     `Findings: ${report.findingCount} (${summary.errorCount} errors, ${summary.warningCount} warnings, ${summary.adviceCount} advice)`,
   ];
 

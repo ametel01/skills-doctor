@@ -13,6 +13,12 @@ export type {
 } from "./domain/build-report.js";
 export { buildScanReport } from "./domain/build-report.js";
 export {
+  calculateScore,
+  getScoreLabel,
+  type ScoreLabel,
+  type ScoreSummary,
+} from "./domain/calculate-score.js";
+export {
   compareFindings,
   type FindingsComparison,
   renderPostHandoffSummary,

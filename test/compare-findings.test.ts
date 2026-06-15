@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { compareFindings, renderPostHandoffSummary } from "../src/domain/compare-findings.js";
-import type { Finding, ScanReport } from "../src/index.js";
+import { calculateScore, type Finding, type ScanReport } from "../src/index.js";
 
 describe("post-handoff finding comparison", () => {
   it("compares findings by stable rule id and file path", () => {
@@ -29,25 +29,32 @@ describe("post-handoff finding comparison", () => {
     expect(summary).toContain("Fixed findings: 1");
     expect(summary).toContain("Remaining findings: 1");
     expect(summary).toContain("Current blocking errors: 1");
+    expect(summary).toContain("Current score: 99 (Great)");
   });
 });
 
-const makeReport = (errorCount: number): ScanReport => ({
-  schemaVersion: 1,
-  ok: errorCount === 0,
-  version: "0.0.0-test",
-  directory: "/repo",
-  elapsedMilliseconds: 0,
-  scannedRoots: [],
-  skillCount: 0,
-  findingCount: errorCount,
-  errorCount,
-  warningCount: 0,
-  adviceCount: 0,
-  skills: [],
-  findings: [],
-  handoffRequested: true,
-});
+const makeReport = (errorCount: number): ScanReport => {
+  const findings = Array.from({ length: errorCount }, (_value, index) =>
+    makeFinding(`error-${index}`, `/repo/${index}/SKILL.md`),
+  );
+  return {
+    schemaVersion: 1,
+    ok: errorCount === 0,
+    version: "0.0.0-test",
+    directory: "/repo",
+    elapsedMilliseconds: 0,
+    scannedRoots: [],
+    skillCount: 0,
+    findingCount: errorCount,
+    errorCount,
+    warningCount: 0,
+    adviceCount: 0,
+    score: calculateScore(findings),
+    skills: [],
+    findings,
+    handoffRequested: true,
+  };
+};
 
 const makeFinding = (ruleId: string, skillPath: string): Finding => ({
   ruleId,
