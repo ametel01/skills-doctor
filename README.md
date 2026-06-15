@@ -123,6 +123,26 @@ skills-doctor --yes --json
 JSON mode writes one machine-readable report to stdout and suppresses prompts
 and spinners. Human logs and expected errors stay out of stdout.
 
+## Programmatic API
+
+`skills-doctor` also exposes a programmatic API through `import { ... } from "skills-doctor"`.
+Use it for embedded integrations that need scan, validation, scoring, and report artifacts.
+
+```ts
+import { discoverSkillRoots, scanSkillRoots, buildScanReport } from "skills-doctor";
+
+const discovered = await discoverSkillRoots({ cwd: process.cwd(), homeDir: "/home/user" });
+const scan = await scanSkillRoots({ roots: discovered.roots });
+const report = buildScanReport({
+  version: "0.0.0",
+  directory: process.cwd(),
+  elapsedMilliseconds: 0,
+  scan,
+});
+```
+
+The CLI remains the primary interface for interactive repair workflows.
+
 ## Exit Codes
 
 - `0`: no blocking errors remain in the final scan.

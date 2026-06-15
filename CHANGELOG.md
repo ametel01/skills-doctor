@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Scoped divergence checks to same source roots and added `source` to scanned skill records.
 - Added a repo-local `skills/skills-doctor` companion skill wrapper that delegates to the CLI.
 - Added `docs/RULES.md` and coverage to keep emitted rule IDs documented.
+- Defined `skills-doctor` package exports (`dist/index.js` and `dist/index.d.ts`) for a stable public API and removed scaffold-only exports.
 
 ## [0.1.0] - 2026-06-15
 
