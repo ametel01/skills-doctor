@@ -2,8 +2,9 @@
 
 Skills Doctor is a local-first CLI for auditing Agent Skills in project and
 user-level skill roots. It scans `.claude/skills/`, `.agents/skills/`, or both,
-checks each `SKILL.md` against the local skill quality specification, and can
-hand a findings-specific repair prompt to `claude` or `codex`.
+checks each `SKILL.md` against the local skill quality specification derived
+from the Agent Skills standards at <https://agentskills.io/home>, and can hand a
+findings-specific repair prompt to `claude` or `codex`.
 
 ## Install And Run
 
@@ -50,7 +51,8 @@ user error when a required choice cannot be made.
 
 ## What It Checks
 
-The scanner validates skills against `docs/SKILLS_SPEC.md`, including:
+The scanner validates skills against `docs/SKILLS_SPEC.md`, which consolidates
+the Agent Skills standards from <https://agentskills.io/home>, including:
 
 - required YAML frontmatter and valid `name`/`description` fields
 - trigger-oriented descriptions
