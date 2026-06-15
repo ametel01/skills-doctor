@@ -107,6 +107,34 @@ describe("scanAction", () => {
     expect(report.scannedRoots.map((root) => root.ecosystem)).toEqual(["claude"]);
   });
 
+  it("shows grouped findings when by-skill is selected", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      ["---", "name: bad-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    const stdout: string[] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        env: {},
+        stdinIsTty: true,
+        prompts: fakePrompts(["by-skill"]),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(stdout.join("")).toContain("bad-name:");
+    expect(stdout.join("")).toContain("- [error] name-directory-mismatch");
+  });
+
   it("throws a user error when no roots exist and prompts are skipped", async () => {
     await expect(
       scanAction(

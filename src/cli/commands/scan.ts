@@ -208,6 +208,7 @@ const reviewFindings = async (
     { name: "Fix skills with Claude or Codex", value: "repair" },
     ...(report.errorCount > 0 ? [{ name: "View errors", value: "errors" as const }] : []),
     { name: "View all findings", value: "all" },
+    { name: "View findings by skill", value: "by-skill" },
     { name: "Exit", value: "exit" },
   ]);
 
