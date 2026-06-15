@@ -6,17 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+*No changes yet.*
+
+## [0.2.0] - 2026-06-16
+
+### Added
+
+- Added a repo-local `skills/skills-doctor` companion skill wrapper that delegates to the CLI.
+- Added a programmatic API package surface (`exports` in `package.json`) and documentation for package consumers.
+- Added `docs/RULES.md` and coverage to keep emitted rule IDs documented.
+- Added scan duration measurement to reports using an injectable clock, including post-handoff scans.
+- Added a grouped findings review action in the interactive review menu.
+
+### Fixed
+
 - Fixed CLI `--version` to report the package `version` from `package.json` instead of a hard-coded value.
 - Fixed scan reports to carry unreadable-root diagnostics into JSON output and to fail when diagnostics include blocking errors.
-- Prevented per-skill handoff report file collisions by making generated filenames include the skill path.
+- Prevented per-skill handoff report file collisions by including the skill path in generated report filenames.
 - Improved post-handoff finding comparison so identical rule/skill findings are distinguished by message and location.
 - Added boundary checks for resource references to prevent `scripts/`, `references/`, and `assets/` paths from escaping a skill directory.
-- Added scan duration measurement to reports using an injectable clock, including post-handoff scans.
-- Added a review-menu option to show findings grouped by skill.
 - Scoped divergence checks to same source roots and added `source` to scanned skill records.
-- Added a repo-local `skills/skills-doctor` companion skill wrapper that delegates to the CLI.
-- Added `docs/RULES.md` and coverage to keep emitted rule IDs documented.
-- Defined `skills-doctor` package exports (`dist/index.js` and `dist/index.d.ts`) for a stable public API and removed scaffold-only exports.
 
 ## [0.1.0] - 2026-06-15
 

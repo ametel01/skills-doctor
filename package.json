@@ -1,6 +1,6 @@
 {
   "name": "skills-doctor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Interactive CLI that scans and repairs Agent Skills quality issues.",
   "type": "module",
   "packageManager": "bun@1.3.13",
