@@ -110,6 +110,7 @@ const fakePrompts = (input: {
   readonly confirmed?: boolean;
   readonly selected?: "claude" | "codex";
 }): PromptAdapter => ({
+  checkbox: async () => [],
   confirm: async () => input.confirmed ?? true,
   input: async () => "",
   select: async <Value extends string>() => (input.selected ?? "claude") as Value,

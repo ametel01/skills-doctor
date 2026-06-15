@@ -6,6 +6,7 @@ import { scanSkillRoots } from "../../domain/scan-skills.js";
 import { renderHumanSummary, resolveScanExitCode } from "../../domain/summarize-findings.js";
 import type { Finding, SkillRoot } from "../../domain/types.js";
 import { CliInputError } from "../utils/handle-error.js";
+import { prepareRepairHandoff } from "../utils/handoff-to-agent.js";
 import { enableJsonMode, writeJsonReport } from "../utils/json-mode.js";
 import type { AgentAvailabilityProbe } from "../utils/launch-agent.js";
 import { chooseRepairAgent, formatRepairAgentPreview } from "../utils/launch-agent.js";
@@ -29,6 +30,8 @@ export type ScanActionOptions = {
   readonly spinner?: SpinnerFactory;
   readonly version?: string;
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe;
+  readonly repairReportOutputRoot?: string;
+  readonly repairReportTimestamp?: string;
 };
 
 type RootSelection = "all" | "claude" | "codex" | "custom";
@@ -98,10 +101,12 @@ export const scanAction = async (
   } else {
     writeStdout(renderHumanSummary(report));
     if (!skipPrompts && report.findingCount > 0) {
-      await reviewFindings(report.findings, {
+      await reviewFindings(report, {
         prompts,
         write: writeStdout,
         isRepairAgentAvailable: options.isRepairAgentAvailable,
+        repairReportOutputRoot: options.repairReportOutputRoot,
+        repairReportTimestamp: options.repairReportTimestamp,
       });
     }
   }
@@ -132,12 +137,11 @@ type ReviewFindingsInput = {
   readonly prompts: PromptAdapter;
   readonly write: (message: string) => void;
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe | undefined;
+  readonly repairReportOutputRoot?: string | undefined;
+  readonly repairReportTimestamp?: string | undefined;
 };
 
-const reviewFindings = async (
-  findings: readonly Finding[],
-  input: ReviewFindingsInput,
-): Promise<void> => {
+const reviewFindings = async (report: ScanReport, input: ReviewFindingsInput): Promise<void> => {
   const { prompts, write } = input;
   const action = await prompts.select<ReviewAction>("Review findings", [
     { name: "View blocking errors", value: "errors" },
@@ -149,12 +153,14 @@ const reviewFindings = async (
 
   if (action === "exit") return;
   if (action === "repair") {
-    await previewRepairAgentSelection(input);
+    await previewRepairAgentSelection(report, input);
     return;
   }
 
   const selectedFindings =
-    action === "errors" ? findings.filter((finding) => finding.severity === "error") : findings;
+    action === "errors"
+      ? report.findings.filter((finding) => finding.severity === "error")
+      : report.findings;
   if (action === "by-skill") {
     write(renderFindingsBySkill(selectedFindings));
     return;
@@ -162,7 +168,10 @@ const reviewFindings = async (
   write(renderFindings(selectedFindings));
 };
 
-const previewRepairAgentSelection = async (input: ReviewFindingsInput): Promise<void> => {
+const previewRepairAgentSelection = async (
+  report: ScanReport,
+  input: ReviewFindingsInput,
+): Promise<void> => {
   try {
     const agent = await chooseRepairAgent({
       prompts: input.prompts,
@@ -172,11 +181,26 @@ const previewRepairAgentSelection = async (input: ReviewFindingsInput): Promise<
       input.write("Repair handoff cancelled.\n");
       return;
     }
+    const handoff = await prepareRepairHandoff({
+      report,
+      prompts: input.prompts,
+      outputRoot: input.repairReportOutputRoot,
+      timestamp: input.repairReportTimestamp,
+    });
     input.write(`Selected ${agent.displayName}.\n`);
     input.write(`Launch preview: ${formatRepairAgentPreview(agent.id)}\n`);
-    input.write(
-      "Custom repair prompt generation will be available in the next implementation step.\n",
-    );
+    if (handoff.reportDirectory !== undefined) {
+      input.write(`Report directory: ${handoff.reportDirectory}\n`);
+    }
+    if (handoff.promptPath !== undefined) {
+      input.write(`Repair prompt: ${handoff.promptPath}\n`);
+    } else {
+      input.write(`Repair prompt:\n${handoff.prompt}\n`);
+    }
+    if (handoff.reportWriteError !== undefined) {
+      input.write(`Report write failed: ${handoff.reportWriteError.message}\n`);
+    }
+    input.write("Agent launch will be available in the next implementation step.\n");
   } catch (error) {
     if (error instanceof CliInputError) {
       input.write(`${error.message}\n`);

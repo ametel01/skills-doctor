@@ -4,6 +4,7 @@ export const getCliBanner = (): string => `${CLI_NAME}: scaffold ready`;
 
 export type { ScanActionOptions, ScanFlags } from "./cli/commands/scan.js";
 export { scanAction } from "./cli/commands/scan.js";
+export { type PreparedRepairHandoff, prepareRepairHandoff } from "./cli/utils/handoff-to-agent.js";
 export {
   type CommandAvailabilityOptions,
   isCommandAvailable,
@@ -24,6 +25,10 @@ export {
   type RepairAgentId,
 } from "./cli/utils/launch-agent.js";
 export { type CommandRunner, type RunCommandResult, runCommand } from "./cli/utils/run-command.js";
+export {
+  type BuildHandoffPromptInput,
+  buildHandoffPrompt,
+} from "./domain/build-handoff-prompt.js";
 export type {
   BuildScanReportInput,
   ScanReport,
@@ -53,3 +58,8 @@ export type {
   SkillRecord,
   SkillRoot,
 } from "./domain/types.js";
+export {
+  type FindingsDirectoryInput,
+  type FindingsDirectoryResult,
+  writeFindingsDirectory,
+} from "./domain/write-findings-directory.js";

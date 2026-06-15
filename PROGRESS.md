@@ -21,14 +21,14 @@
 - [x] Step 6: Report Model, Human Summary, JSON Output, and Exit Codes
 - [x] Step 7: CLI Entrypoint, Prompts, Spinners, and Scan Target Selection
 - [x] Step 8: Command Execution, Agent Detection, and Agent Selection
-- [ ] Step 9: Findings Report Directory and Custom Handoff Prompt
+- [x] Step 9: Findings Report Directory and Custom Handoff Prompt
 - [ ] Step 10: Agent Launch Flow and Post-Handoff Re-Scan
 - [ ] Step 11: Public API Facade and Fixture-Based Integration Coverage
 - [ ] Step 12: Documentation, README, Changelog Finalization, and Release Readiness
 
 ## Current Status
 
-Step 8 complete. Next step: Step 9.
+Step 9 complete. Next step: Step 10.
 
 ## Update Rule
 
@@ -206,5 +206,25 @@ After each completed step:
   - `bun run test`
   - `bun run build`
   - `bun run verify`
-- Commit: pending
+- Commit: `ef34b7b`
 - Next step: Step 9
+
+### Step 9: Findings Report Directory and Custom Handoff Prompt
+
+- Status: Complete
+- Changes:
+  - Added compact repair handoff prompt generation grounded in `docs/SKILLS_SPEC.md`.
+  - Added `.skills-doctor/reports/<timestamp>/` report writing with `findings.json`, `findings.md`, per-skill finding files, and `handoff-prompt.md`.
+  - Added repair subset selection for blocking errors, errors plus warnings, all findings, and selected skills.
+  - Added report-writing fallback behavior that preserves an inline prompt when report output fails.
+  - Wired the interactive repair flow to write report artifacts and print the selected agent launch preview.
+  - Added tests for prompt content, prompt compaction, report contents, subset selection, and fallback behavior.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+- Commit: pending
+- Next step: Step 10

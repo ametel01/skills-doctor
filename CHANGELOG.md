@@ -18,3 +18,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Scan report construction, human summary rendering, JSON-mode helpers, and blocking-finding exit-code decisions.
 - Interactive scan CLI with Commander, root selection prompts, non-interactive prompt skipping, spinner adapter, and findings review output.
 - Claude and Codex repair-agent detection, prompt-based agent selection, command execution helpers, and launch preview construction.
+- Findings-driven repair handoff prompts with local report directories, subset selection, and prompt/report file output.
