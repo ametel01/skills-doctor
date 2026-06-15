@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { scanAction } from "../src/cli/commands/scan.js";
 import { CliInputError } from "../src/cli/utils/handle-error.js";
 import type { PromptAdapter } from "../src/cli/utils/prompts.js";
-import { scanAction } from "../src/index.js";
 
 describe("scanAction", () => {
   let directory: string;

@@ -23,12 +23,12 @@
 - [x] Step 8: Command Execution, Agent Detection, and Agent Selection
 - [x] Step 9: Findings Report Directory and Custom Handoff Prompt
 - [x] Step 10: Agent Launch Flow and Post-Handoff Re-Scan
-- [ ] Step 11: Public API Facade and Fixture-Based Integration Coverage
+- [x] Step 11: Public API Facade and Fixture-Based Integration Coverage
 - [ ] Step 12: Documentation, README, Changelog Finalization, and Release Readiness
 
 ## Current Status
 
-Step 10 complete. Next step: Step 11.
+Step 11 complete. Next step: Step 12.
 
 ## Update Rule
 
@@ -249,5 +249,25 @@ After each completed step:
   - `bun run build`
   - `bun run verify`
   - `bun test test/cli-scan.test.ts -t "launches an injected repair agent"`
-- Commit: pending
+- Commit: `068d3dd`
 - Next step: Step 11
+
+### Step 11: Public API Facade and Fixture-Based Integration Coverage
+
+- Status: Complete
+- Changes:
+  - Narrowed `src/index.ts` to domain-focused scanner exports so programmatic imports avoid CLI prompt, Commander, spinner, and agent-launch modules.
+  - Updated CLI-specific tests to import CLI command modules directly.
+  - Added static fixtures for valid strong skills, malformed skills, weak descriptions, missing resources, script warnings, and duplicate cross-ecosystem skills.
+  - Added fixture integration tests that scan roots through the public domain API and assert report shape and key rule findings.
+  - Added JSON report shape stability coverage.
+  - Added prompt cancellation and non-interactive prompt-skipping tests.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+- Commit: pending
+- Next step: Step 12

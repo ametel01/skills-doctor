@@ -20,3 +20,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Claude and Codex repair-agent detection, prompt-based agent selection, command execution helpers, and launch preview construction.
 - Findings-driven repair handoff prompts with local report directories, subset selection, and prompt/report file output.
 - Local repair-agent launch flow with explicit confirmation, inherited-terminal launcher support, post-handoff re-scan, and fixed/remaining/new finding summaries.
+- Domain-focused public API facade plus fixture coverage for valid, malformed, weak, missing-resource, script, and cross-ecosystem skill scans.

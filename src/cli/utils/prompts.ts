@@ -1,4 +1,5 @@
 import { checkbox, confirm as confirmPrompt, input, select } from "@inquirer/prompts";
+import { CliInputError } from "./handle-error.js";
 
 export type Choice<Value extends string> = {
   readonly name: string;
@@ -19,7 +20,7 @@ export type PromptAdapter = {
   ) => Promise<Value>;
 };
 
-export class PromptCancelledError extends Error {
+export class PromptCancelledError extends CliInputError {
   constructor() {
     super("Cancelled.");
     this.name = "PromptCancelledError";

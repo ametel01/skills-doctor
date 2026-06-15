@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Review this pull request diff for correctness risks.",
+    "expected": "Findings are grouped by severity and cite exact files."
+  }
+]
