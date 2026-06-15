@@ -13,7 +13,7 @@
 ## Step Checklist
 
 - [x] Step 0: Progress Tracking Setup
-- [ ] Step 1: Bun, TypeScript, Biome, Vitest, and Package Scaffold
+- [x] Step 1: Bun, TypeScript, Biome, Vitest, and Package Scaffold
 - [ ] Step 2: CI, Release Workflow, Release Notes Script, and Changelog
 - [ ] Step 3: Domain Types, Skill Root Discovery, and Skill Parsing
 - [ ] Step 4: Structural Rule Engine
@@ -28,7 +28,7 @@
 
 ## Current Status
 
-Step 0 complete. Next step: Step 1.
+Step 1 complete. Next step: Step 2.
 
 ## Update Rule
 
@@ -47,5 +47,23 @@ After each completed step:
 - Validation:
   - Confirmed `PROGRESS.md` exists.
   - Confirmed this file contains the implementation step checklist.
-- Commit: pending
+- Commit: `2ab1cd9`
 - Next step: Step 1
+
+### Step 1: Bun, TypeScript, Biome, Vitest, and Package Scaffold
+
+- Status: Complete
+- Changes:
+  - Added Bun package metadata, lockfile, TypeScript configs, Biome config, Vitest config, bin shim, minimal source exports, and scaffold tests.
+  - Added `.gitignore` entries for generated dependencies, build output, coverage, local Skills Doctor reports, and package archives.
+- Validation:
+  - `bun install --frozen-lockfile`
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+  - `bun run pack:dry-run`
+- Commit: pending
+- Next step: Step 2
