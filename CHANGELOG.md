@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - Local score calculation for scan reports using distinct violated rules, with React Doctor-style labels in human, JSON, and repair-report output.
+- React Doctor-style score header in human CLI output with a face, proportional bar, terminal-width clamping, score-threshold colors, and TTY animation.
+- Concise human scan summary and streamlined review menu focused on fixing skills first.
 
 ### Fixed
 

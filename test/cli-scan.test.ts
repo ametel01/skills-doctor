@@ -43,7 +43,8 @@ describe("scanAction", () => {
 
     expect(report.skillCount).toBe(1);
     expect(report.errorCount).toBeGreaterThan(0);
-    expect(stdout.join("")).toContain("Skills scanned: 1");
+    expect(stdout.join("")).toContain("Skills: 1 scanned");
+    expect(stdout.join("")).not.toContain("Top affected skills:");
     expect(process.exitCode).toBe(1);
   });
 

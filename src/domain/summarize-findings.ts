@@ -14,6 +14,10 @@ export type SummaryGroup = {
   readonly count: number;
 };
 
+export type RenderHumanSummaryOptions = {
+  readonly includeScore?: boolean | undefined;
+};
+
 export const summarizeFindings = (findings: readonly Finding[]): FindingSummary => ({
   errorCount: countSeverity(findings, "error"),
   warningCount: countSeverity(findings, "warning"),
@@ -30,27 +34,19 @@ export const summarizeFindings = (findings: readonly Finding[]): FindingSummary 
 
 export const resolveScanExitCode = (report: ScanReport): 0 | 1 => (report.errorCount > 0 ? 1 : 0);
 
-export const renderHumanSummary = (report: ScanReport): string => {
+export const renderHumanSummary = (
+  report: ScanReport,
+  options: RenderHumanSummaryOptions = {},
+): string => {
   const summary = summarizeFindings(report.findings);
   const lines = [
-    `Scanned roots: ${report.scannedRoots.length}`,
-    `Skills scanned: ${report.skillCount}`,
-    `Score: ${report.score.value} (${report.score.label})`,
-    `Findings: ${report.findingCount} (${summary.errorCount} errors, ${summary.warningCount} warnings, ${summary.adviceCount} advice)`,
+    `Skills: ${report.skillCount} scanned`,
+    report.findingCount === 0
+      ? "Issues: none"
+      : `Issues: ${report.findingCount} (${summary.errorCount} errors, ${summary.warningCount} warnings, ${summary.adviceCount} tips)`,
   ];
-
-  if (summary.topSkills.length > 0) {
-    lines.push(
-      "Top affected skills:",
-      ...summary.topSkills.map((group) => `- ${group.key}: ${group.count}`),
-    );
-  }
-
-  if (summary.topCategories.length > 0) {
-    lines.push(
-      "Top rule categories:",
-      ...summary.topCategories.map((group) => `- ${group.key}: ${group.count}`),
-    );
+  if (options.includeScore ?? true) {
+    lines.splice(1, 0, `Score: ${report.score.value} (${report.score.label})`);
   }
 
   return `${lines.join("\n")}\n`;

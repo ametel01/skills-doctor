@@ -62,18 +62,19 @@ The scanner validates skills against `docs/SKILLS_SPEC.md`, including:
 - divergent same-name skills across Claude and Codex/agents roots
 
 Findings are grouped as blocking errors, warnings, and advisory improvements.
-The summary also includes a score from 0 to 100. The score starts at 100 and
-deducts 1.5 points for each distinct error rule and 0.75 points for each
-distinct warning rule; repeated findings from the same rule do not increase the
-penalty. Advisory findings are counted in the report but do not affect the
-score. Score labels are `Great` for 75 or higher, `Needs work` for 50 through
-74, and `Critical` below 50.
+The human summary opens with a score header showing a face, `0` to `100` score,
+label, and proportional terminal bar. The score starts at 100 and deducts 1.5
+points for each distinct error rule and 0.75 points for each distinct warning
+rule; repeated findings from the same rule do not increase the penalty. Advisory
+findings are counted in the report but do not affect the score. Score labels are
+`Great` for 75 or higher, `Needs work` for 50 through 74, and `Critical` below
+50.
 
 ## Interactive Repair Flow
 
 When findings exist, the CLI can:
 
-1. Show blocking errors, all findings, or findings grouped by skill.
+1. Show a concise score, skill count, and issue count.
 2. Let you choose a repair subset: errors, errors plus warnings, all findings,
    or selected skills.
 3. Detect local `claude` and `codex` executables.

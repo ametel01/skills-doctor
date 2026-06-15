@@ -16,6 +16,7 @@ import {
   launchRepairAgent,
 } from "../utils/launch-agent.js";
 import { inquirerPromptAdapter, type PromptAdapter } from "../utils/prompts.js";
+import { printScoreHeader } from "../utils/render-score-header.js";
 import { shouldSkipPrompts } from "../utils/should-skip-prompts.js";
 import { createSpinner, type SpinnerFactory } from "../utils/spinner.js";
 
@@ -33,6 +34,9 @@ export type ScanActionOptions = {
   readonly prompts?: PromptAdapter;
   readonly writeStdout?: (message: string) => void;
   readonly writeStderr?: (message: string) => void;
+  readonly stdoutIsTty?: boolean;
+  readonly terminalColumns?: number | undefined;
+  readonly animateScoreHeader?: boolean;
   readonly spinner?: SpinnerFactory;
   readonly version?: string;
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe;
@@ -54,6 +58,7 @@ export const scanAction = async (
   const prompts = options.prompts ?? inquirerPromptAdapter;
   const writeStdout = options.writeStdout ?? ((message) => process.stdout.write(message));
   const writeStderr = options.writeStderr ?? ((message) => process.stderr.write(message));
+  const stdoutIsTty = options.stdoutIsTty ?? process.stdout.isTTY === true;
   const skipPrompts = shouldSkipPrompts({
     yes: Boolean(flags.yes),
     json: Boolean(flags.json),
@@ -110,7 +115,14 @@ export const scanAction = async (
   if (flags.json) {
     writeJsonReport(report, writeStdout);
   } else {
-    writeStdout(renderHumanSummary(report));
+    await printScoreHeader({
+      score: report.score,
+      write: writeStdout,
+      color: stdoutIsTty,
+      columns: options.terminalColumns ?? process.stdout.columns,
+      animate: options.animateScoreHeader ?? (!skipPrompts && stdoutIsTty),
+    });
+    writeStdout(renderHumanSummary(report, { includeScore: false }));
     if (!skipPrompts && report.findingCount > 0) {
       finalReport =
         (await reviewFindings(report, {
@@ -186,12 +198,11 @@ const reviewFindings = async (
   input: ReviewFindingsInput,
 ): Promise<ScanReport | undefined> => {
   const { prompts, write } = input;
-  const action = await prompts.select<ReviewAction>("Review findings", [
-    { name: "View blocking errors", value: "errors" },
+  const action = await prompts.select<ReviewAction>("Next step", [
+    { name: "Fix skills with Claude or Codex", value: "repair" },
+    ...(report.errorCount > 0 ? [{ name: "View errors", value: "errors" as const }] : []),
     { name: "View all findings", value: "all" },
-    { name: "View findings by skill", value: "by-skill" },
-    { name: "Continue to repair handoff", value: "repair" },
-    { name: "Exit without repair", value: "exit" },
+    { name: "Exit", value: "exit" },
   ]);
 
   if (action === "exit") return;

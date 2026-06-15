@@ -396,10 +396,9 @@ Human output should show:
 
 - Roots scanned.
 - Skills scanned.
-- Score from 0 to 100 with label.
-- Count by severity.
-- Top affected skills.
-- Top rule categories.
+- Score header with face, 0 to 100 score, label, and proportional terminal bar.
+- Skills scanned.
+- Concise issue count by severity.
 - Clear next action prompt.
 
 Score calculation:
@@ -412,15 +411,15 @@ Score calculation:
 - Round the final value and clamp it to 0 or higher.
 - Labels are `Great` for scores 75 and above, `Needs work` for scores from 50
   through 74, and `Critical` for scores below 50.
+- In interactive TTY output, animate the score header by printing the initial
+  header and rewriting the score/bar lines in place.
 
 Detailed output should be available interactively:
 
+- Fix skills with Claude or Codex.
 - View all findings.
 - View only blocking errors.
-- View findings by skill.
-- View findings by rule category.
-- Continue to repair handoff.
-- Exit without repair.
+- Exit.
 
 ### JSON Report
 

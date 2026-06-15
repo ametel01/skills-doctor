@@ -33,7 +33,7 @@ export const main = async (argv: readonly string[] = process.argv): Promise<void
   try {
     await buildProgram().parseAsync([...argv]);
   } finally {
-    process.stdin.unref();
+    process.stdin.unref?.();
   }
 };
 
