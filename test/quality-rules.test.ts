@@ -114,6 +114,21 @@ describe("quality rules", () => {
       "cross-ecosystem-skill-divergence",
     );
   });
+
+  it("flags resource references that escape the skill directory", async () => {
+    const skill = buildRecord("escape-skill", [
+      "---",
+      "name: escape-skill",
+      "description: Use this skill when resolving escapes.",
+      "---",
+      "",
+      "Read references/../../outside.md and act carefully.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).toContain("resource-reference-escapes-skill");
+  });
 });
 
 const buildRecord = (directoryName: string, lines: readonly string[]): SkillRecord => {

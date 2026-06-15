@@ -225,6 +225,22 @@ const validateResources = async (skill: SkillRecord, body: string): Promise<Find
   const referencedPaths = [...new Set(skill.content.match(RESOURCE_REFERENCE_PATTERN) ?? [])];
 
   for (const referencePath of referencedPaths) {
+    if (hasParentTraversal(referencePath)) {
+      findings.push(
+        createFinding(skill, {
+          ruleId: "resource-reference-escapes-skill",
+          severity: "warning",
+          category: resourceCategory(referencePath),
+          title: "Resource reference escapes the skill directory",
+          message:
+            "The skill references a resource outside the skill directory. Resource references must remain inside scripts/, references/, or assets/ for this skill.",
+          suggestion:
+            "Use a path rooted inside the skill (for example references/file.md) without '..' segments.",
+        }),
+      );
+      continue;
+    }
+
     const absolutePath = path.join(skill.skillDir, referencePath);
     if (!(await exists(absolutePath))) {
       findings.push(
@@ -393,5 +409,8 @@ const resourceCategory = (
 
 const isNonTrivialSkill = (body: string): boolean =>
   body.length > 500 || WORKFLOW_STEP_PATTERN.test(body) || RESOURCE_REFERENCE_PATTERN.test(body);
+
+const hasParentTraversal = (referencePath: string): boolean =>
+  referencePath.split(/[\\/]+/).includes("..");
 
 const normalizeContent = (content: string): string => content.replace(/\s+/g, " ").trim();
