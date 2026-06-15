@@ -19,7 +19,7 @@ For local development in this repo:
 
 ```bash
 bun install --frozen-lockfile
-bun run build
+bun run verify
 bun run dev
 ```
 

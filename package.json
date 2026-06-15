@@ -21,7 +21,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "CI=true vitest run",
     "build": "tsc -p tsconfig.build.json",
     "verify": "bun run check && bun run typecheck && bun run test && bun run build",
     "pack:dry-run": "bun pm pack --dry-run",

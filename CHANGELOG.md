@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Avoid Node unsettled top-level-await warnings while the interactive CLI is waiting for prompts.
 - Discover global `~/.claude/skills` and `~/.agents/skills` roots and prompt for local, global/root, or both when both scopes exist.
+- Run tests under `CI=true` during local verification and isolate interactive CLI tests from ambient CI environment variables.
 
 ## [0.1.0] - 2026-06-15
 

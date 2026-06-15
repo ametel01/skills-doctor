@@ -59,6 +59,7 @@ describe("scanAction", () => {
       {
         cwd: directory,
         homeDir: path.join(directory, "home"),
+        env: {},
         stdinIsTty: true,
         prompts,
         writeStdout: () => {},
@@ -104,6 +105,7 @@ describe("scanAction", () => {
       {
         cwd: directory,
         homeDir: path.join(directory, "home"),
+        env: {},
         stdinIsTty: true,
         prompts: queuedPrompts({
           selects: ["repair", "errors"],
@@ -143,6 +145,7 @@ describe("scanAction", () => {
       {
         cwd: directory,
         homeDir: path.join(directory, "home"),
+        env: {},
         stdinIsTty: true,
         prompts: queuedPrompts({
           selects: ["repair", "errors"],
@@ -176,6 +179,7 @@ describe("scanAction", () => {
       {
         cwd: directory,
         homeDir: path.join(directory, "home"),
+        env: {},
         stdinIsTty: true,
         prompts: queuedPrompts({
           selects: ["repair", "errors"],
@@ -211,6 +215,7 @@ describe("scanAction", () => {
       {
         cwd: directory,
         homeDir: path.join(directory, "home"),
+        env: {},
         stdinIsTty: true,
         prompts: queuedPrompts({ selects: ["repair"] }),
         writeStdout: (message) => stdout.push(message),
@@ -234,6 +239,7 @@ describe("scanAction", () => {
       {
         cwd: directory,
         homeDir,
+        env: {},
         stdinIsTty: true,
         prompts: fakePrompts(["global", "exit"]),
         writeStdout: () => {},
