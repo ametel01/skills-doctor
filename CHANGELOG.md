@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+*No changes yet.*
+
+## [0.3.1] - 2026-06-16
+
 ### Added
 
 - Added line numbers to quality-rule findings where a specific source line can be resolved.
