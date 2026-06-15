@@ -22,6 +22,11 @@ export type RepairAgent = {
 };
 
 export type AgentAvailabilityProbe = (command: string) => boolean | Promise<boolean>;
+export type RepairAgentLauncher = (
+  agentId: RepairAgentId,
+  prompt: string,
+  cwd: string,
+) => Promise<number>;
 
 const REPAIR_AGENT_CONFIG: Record<RepairAgentId, RepairAgent> = {
   claude: {
@@ -126,11 +131,7 @@ export const buildRepairAgentSpawnInvocation = (
   };
 };
 
-export const launchRepairAgent = async (
-  agentId: RepairAgentId,
-  prompt: string,
-  cwd: string,
-): Promise<number> => {
+export const launchRepairAgent: RepairAgentLauncher = async (agentId, prompt, cwd) => {
   const invocation = buildRepairAgentSpawnInvocation(agentId, prompt);
   return new Promise<number>((resolve, reject) => {
     const child = spawn(invocation.command, [...invocation.args], { cwd, stdio: "inherit" });

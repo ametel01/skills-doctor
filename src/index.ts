@@ -35,6 +35,11 @@ export type {
   SkillSummary,
 } from "./domain/build-report.js";
 export { buildScanReport } from "./domain/build-report.js";
+export {
+  compareFindings,
+  type FindingsComparison,
+  renderPostHandoffSummary,
+} from "./domain/compare-findings.js";
 export { discoverSkillRoots } from "./domain/discover-skill-roots.js";
 export { parseSkillContent } from "./domain/parse-skill.js";
 export { validateQualityRules } from "./domain/rules/quality.js";

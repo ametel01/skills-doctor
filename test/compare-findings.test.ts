@@ -1,0 +1,65 @@
+import { describe, expect, it } from "vitest";
+import { compareFindings, renderPostHandoffSummary } from "../src/domain/compare-findings.js";
+import type { Finding, ScanReport } from "../src/index.js";
+
+describe("post-handoff finding comparison", () => {
+  it("compares findings by stable rule id and file path", () => {
+    const fixed = makeFinding("frontmatter-name", "/repo/a/SKILL.md");
+    const remaining = makeFinding("description-specific", "/repo/b/SKILL.md");
+    const newFinding = makeFinding("evals-missing", "/repo/c/SKILL.md");
+
+    const comparison = compareFindings([fixed, remaining], [remaining, newFinding]);
+
+    expect(comparison.fixed).toEqual([fixed]);
+    expect(comparison.remaining).toEqual([remaining]);
+    expect(comparison.newFindings).toEqual([newFinding]);
+  });
+
+  it("renders a concise re-scan summary", () => {
+    const report = makeReport(1);
+    const summary = renderPostHandoffSummary(
+      {
+        fixed: [makeFinding("a", "/repo/a/SKILL.md")],
+        remaining: [makeFinding("b", "/repo/b/SKILL.md")],
+        newFindings: [],
+      },
+      report,
+    );
+
+    expect(summary).toContain("Fixed findings: 1");
+    expect(summary).toContain("Remaining findings: 1");
+    expect(summary).toContain("Current blocking errors: 1");
+  });
+});
+
+const makeReport = (errorCount: number): ScanReport => ({
+  schemaVersion: 1,
+  ok: errorCount === 0,
+  version: "0.0.0-test",
+  directory: "/repo",
+  elapsedMilliseconds: 0,
+  scannedRoots: [],
+  skillCount: 0,
+  findingCount: errorCount,
+  errorCount,
+  warningCount: 0,
+  adviceCount: 0,
+  skills: [],
+  findings: [],
+  handoffRequested: true,
+});
+
+const makeFinding = (ruleId: string, skillPath: string): Finding => ({
+  ruleId,
+  severity: "error",
+  category: "frontmatter",
+  title: "Finding",
+  message: "Message",
+  suggestion: "Suggestion",
+  ecosystem: "codex",
+  rootPath: "/repo/.agents/skills",
+  skillDir: skillPath.replace(/\/SKILL\.md$/, ""),
+  skillPath,
+  skillName: "skill",
+  agentRepairable: true,
+});

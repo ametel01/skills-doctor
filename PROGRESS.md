@@ -22,13 +22,13 @@
 - [x] Step 7: CLI Entrypoint, Prompts, Spinners, and Scan Target Selection
 - [x] Step 8: Command Execution, Agent Detection, and Agent Selection
 - [x] Step 9: Findings Report Directory and Custom Handoff Prompt
-- [ ] Step 10: Agent Launch Flow and Post-Handoff Re-Scan
+- [x] Step 10: Agent Launch Flow and Post-Handoff Re-Scan
 - [ ] Step 11: Public API Facade and Fixture-Based Integration Coverage
 - [ ] Step 12: Documentation, README, Changelog Finalization, and Release Readiness
 
 ## Current Status
 
-Step 9 complete. Next step: Step 10.
+Step 10 complete. Next step: Step 11.
 
 ## Update Rule
 
@@ -226,5 +226,28 @@ After each completed step:
   - `bun run test`
   - `bun run build`
   - `bun run verify`
-- Commit: pending
+- Commit: `1b91e29`
 - Next step: Step 10
+
+### Step 10: Agent Launch Flow and Post-Handoff Re-Scan
+
+- Status: Complete
+- Changes:
+  - Added explicit confirmation before launching the selected local repair agent.
+  - Integrated inherited-terminal repair-agent launch via an injectable launcher.
+  - Passed the generated repair prompt as the final launch argument.
+  - Re-scanned the same selected roots after the launched agent exits.
+  - Added stable rule-id plus file-path comparison for fixed, remaining, and new findings.
+  - Set the final process exit code from the post-handoff scan when a re-scan runs.
+  - Offered another repair pass only after an interactive human re-scan with remaining findings.
+  - Added injected-launcher fixture tests for successful repair, remaining findings, launch failure, and no-agent fallback.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+  - `bun test test/cli-scan.test.ts -t "launches an injected repair agent"`
+- Commit: pending
+- Next step: Step 11

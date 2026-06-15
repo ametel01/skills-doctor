@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { ScanReport } from "../../domain/build-report.js";
 import { buildScanReport } from "../../domain/build-report.js";
+import { compareFindings, renderPostHandoffSummary } from "../../domain/compare-findings.js";
 import { discoverSkillRoots } from "../../domain/discover-skill-roots.js";
 import { scanSkillRoots } from "../../domain/scan-skills.js";
 import { renderHumanSummary, resolveScanExitCode } from "../../domain/summarize-findings.js";
@@ -8,8 +9,12 @@ import type { Finding, SkillRoot } from "../../domain/types.js";
 import { CliInputError } from "../utils/handle-error.js";
 import { prepareRepairHandoff } from "../utils/handoff-to-agent.js";
 import { enableJsonMode, writeJsonReport } from "../utils/json-mode.js";
-import type { AgentAvailabilityProbe } from "../utils/launch-agent.js";
-import { chooseRepairAgent, formatRepairAgentPreview } from "../utils/launch-agent.js";
+import type { AgentAvailabilityProbe, RepairAgentLauncher } from "../utils/launch-agent.js";
+import {
+  chooseRepairAgent,
+  formatRepairAgentPreview,
+  launchRepairAgent,
+} from "../utils/launch-agent.js";
 import { inquirerPromptAdapter, type PromptAdapter } from "../utils/prompts.js";
 import { shouldSkipPrompts } from "../utils/should-skip-prompts.js";
 import { createSpinner, type SpinnerFactory } from "../utils/spinner.js";
@@ -32,6 +37,7 @@ export type ScanActionOptions = {
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe;
   readonly repairReportOutputRoot?: string;
   readonly repairReportTimestamp?: string;
+  readonly launchAgent?: RepairAgentLauncher;
 };
 
 type RootSelection = "all" | "claude" | "codex" | "custom";
@@ -95,24 +101,31 @@ export const scanAction = async (
     elapsedMilliseconds: 0,
     scan,
   });
+  let finalReport = report;
 
   if (flags.json) {
     writeJsonReport(report, writeStdout);
   } else {
     writeStdout(renderHumanSummary(report));
     if (!skipPrompts && report.findingCount > 0) {
-      await reviewFindings(report, {
-        prompts,
-        write: writeStdout,
-        isRepairAgentAvailable: options.isRepairAgentAvailable,
-        repairReportOutputRoot: options.repairReportOutputRoot,
-        repairReportTimestamp: options.repairReportTimestamp,
-      });
+      finalReport =
+        (await reviewFindings(report, {
+          cwd,
+          roots,
+          version: options.version ?? "0.0.0",
+          spinner,
+          prompts,
+          write: writeStdout,
+          isRepairAgentAvailable: options.isRepairAgentAvailable,
+          repairReportOutputRoot: options.repairReportOutputRoot,
+          repairReportTimestamp: options.repairReportTimestamp,
+          launchAgent: options.launchAgent ?? launchRepairAgent,
+        })) ?? report;
     }
   }
 
-  process.exitCode = resolveScanExitCode(report);
-  return report;
+  process.exitCode = resolveScanExitCode(finalReport);
+  return finalReport;
 };
 
 const selectRoots = async (
@@ -134,14 +147,22 @@ const selectRoots = async (
 };
 
 type ReviewFindingsInput = {
+  readonly cwd: string;
+  readonly roots: readonly SkillRoot[];
+  readonly version: string;
+  readonly spinner: SpinnerFactory;
   readonly prompts: PromptAdapter;
   readonly write: (message: string) => void;
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe | undefined;
   readonly repairReportOutputRoot?: string | undefined;
   readonly repairReportTimestamp?: string | undefined;
+  readonly launchAgent: RepairAgentLauncher;
 };
 
-const reviewFindings = async (report: ScanReport, input: ReviewFindingsInput): Promise<void> => {
+const reviewFindings = async (
+  report: ScanReport,
+  input: ReviewFindingsInput,
+): Promise<ScanReport | undefined> => {
   const { prompts, write } = input;
   const action = await prompts.select<ReviewAction>("Review findings", [
     { name: "View blocking errors", value: "errors" },
@@ -153,8 +174,7 @@ const reviewFindings = async (report: ScanReport, input: ReviewFindingsInput): P
 
   if (action === "exit") return;
   if (action === "repair") {
-    await previewRepairAgentSelection(report, input);
-    return;
+    return runRepairAgentFlow(report, input);
   }
 
   const selectedFindings =
@@ -166,12 +186,13 @@ const reviewFindings = async (report: ScanReport, input: ReviewFindingsInput): P
     return;
   }
   write(renderFindings(selectedFindings));
+  return undefined;
 };
 
-const previewRepairAgentSelection = async (
+const runRepairAgentFlow = async (
   report: ScanReport,
   input: ReviewFindingsInput,
-): Promise<void> => {
+): Promise<ScanReport | undefined> => {
   try {
     const agent = await chooseRepairAgent({
       prompts: input.prompts,
@@ -179,7 +200,7 @@ const previewRepairAgentSelection = async (
     });
     if (agent === undefined) {
       input.write("Repair handoff cancelled.\n");
-      return;
+      return undefined;
     }
     const handoff = await prepareRepairHandoff({
       report,
@@ -200,11 +221,48 @@ const previewRepairAgentSelection = async (
     if (handoff.reportWriteError !== undefined) {
       input.write(`Report write failed: ${handoff.reportWriteError.message}\n`);
     }
-    input.write("Agent launch will be available in the next implementation step.\n");
+    const shouldLaunch = await input.prompts.confirm(`Launch ${agent.displayName} now?`, false);
+    if (!shouldLaunch) {
+      input.write("Agent launch cancelled.\n");
+      return undefined;
+    }
+
+    let exitCode: number;
+    try {
+      exitCode = await input.launchAgent(agent.id, handoff.prompt, input.cwd);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      input.write(`Agent launch failed: ${message}\n`);
+      return undefined;
+    }
+    if (exitCode !== 0) {
+      input.write(`Agent exited with code ${exitCode}.\n`);
+    }
+
+    const nextScan = await input.spinner.run("Re-scanning skills...", () =>
+      scanSkillRoots({ roots: input.roots }),
+    );
+    const nextReport = buildScanReport({
+      version: input.version,
+      directory: input.cwd,
+      elapsedMilliseconds: 0,
+      scan: nextScan,
+      handoffRequested: true,
+    });
+    const comparison = compareFindings(report.findings, nextReport.findings);
+    input.write(renderPostHandoffSummary(comparison, nextReport));
+
+    if (
+      nextReport.findingCount > 0 &&
+      (await input.prompts.confirm("Run another repair pass?", false))
+    ) {
+      return (await reviewFindings(nextReport, input)) ?? nextReport;
+    }
+    return nextReport;
   } catch (error) {
     if (error instanceof CliInputError) {
       input.write(`${error.message}\n`);
-      return;
+      return undefined;
     }
     throw error;
   }

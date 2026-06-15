@@ -82,6 +82,138 @@ describe("scanAction", () => {
       ),
     ).rejects.toBeInstanceOf(CliInputError);
   });
+
+  it("launches an injected repair agent and reports fixed findings after re-scan", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    const skillPath = path.join(skillDir, "SKILL.md");
+    await writeFile(
+      skillPath,
+      ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    const stdout: string[] = [];
+    const launches: string[] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["repair", "errors"],
+          confirms: [true, true, false],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async (command) => command === "codex",
+        launchAgent: async (_agentId, prompt) => {
+          launches.push(prompt);
+          await writeSkill(skillDir, "bad-skill");
+          return 0;
+        },
+      },
+    );
+
+    expect(launches).toHaveLength(1);
+    expect(stdout.join("")).toContain("Post-handoff re-scan:");
+    expect(stdout.join("")).toContain("Fixed findings:");
+    expect(report.errorCount).toBe(0);
+    expect(process.exitCode).toBe(0);
+  });
+
+  it("reports remaining findings when the injected repair agent makes no changes", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    const stdout: string[] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["repair", "errors"],
+          confirms: [true, true, false],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async (command) => command === "claude",
+        launchAgent: async () => 0,
+      },
+    );
+
+    expect(stdout.join("")).toContain("Remaining findings:");
+    expect(report.errorCount).toBeGreaterThan(0);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("prints launch failures without running a re-scan", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    const stdout: string[] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["repair", "errors"],
+          confirms: [true, true],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async (command) => command === "codex",
+        launchAgent: async () => {
+          throw new Error("spawn failed");
+        },
+      },
+    );
+
+    expect(stdout.join("")).toContain("Agent launch failed: spawn failed");
+    expect(stdout.join("")).not.toContain("Post-handoff re-scan:");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("prints a no-agent fallback during repair handoff", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    const stdout: string[] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        stdinIsTty: true,
+        prompts: queuedPrompts({ selects: ["repair"] }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async () => false,
+      },
+    );
+
+    expect(stdout.join("")).toContain("No local repair agent was found.");
+  });
 });
 
 const writeSkill = async (skillDir: string, name: string): Promise<void> => {
@@ -108,5 +240,20 @@ const fakePrompts = (answers: readonly string[]): PromptAdapter => {
     confirm: async () => true,
     input: async () => queue.shift() ?? "",
     select: async <Value extends string>() => (queue.shift() ?? "exit") as Value,
+  };
+};
+
+const queuedPrompts = (input: {
+  readonly selects: readonly string[];
+  readonly confirms?: readonly boolean[];
+  readonly checked?: readonly string[];
+}): PromptAdapter => {
+  const selects = [...input.selects];
+  const confirms = [...(input.confirms ?? [])];
+  return {
+    checkbox: async <Value extends string>() => [...(input.checked ?? [])] as Value[],
+    confirm: async () => confirms.shift() ?? true,
+    input: async () => "",
+    select: async <Value extends string>() => (selects.shift() ?? "exit") as Value,
   };
 };
