@@ -32,7 +32,10 @@ export const summarizeFindings = (findings: readonly Finding[]): FindingSummary 
   ),
 });
 
-export const resolveScanExitCode = (report: ScanReport): 0 | 1 => (report.errorCount > 0 ? 1 : 0);
+export const resolveScanExitCode = (report: ScanReport): 0 | 1 =>
+  report.errorCount > 0 || report.diagnostics.some((diagnostic) => diagnostic.severity === "error")
+    ? 1
+    : 0;
 
 export const renderHumanSummary = (
   report: ScanReport,

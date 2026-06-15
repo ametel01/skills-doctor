@@ -15,6 +15,7 @@ import {
   resolveScanExitCode,
   scanSkillRoots,
 } from "../src/index.js";
+import type { ScanResult } from "../src/index.js";
 
 describe("scan reports", () => {
   let directory: string;
@@ -58,6 +59,35 @@ describe("scan reports", () => {
     expect(renderHumanSummary(report)).toContain(`Score: ${report.score.value}`);
     expect(renderHumanSummary(report, { includeScore: false })).not.toContain("Score:");
     expect(renderHumanSummary(report)).not.toContain("Top affected skills:");
+  });
+
+  it("fails when diagnostics include blocking errors", async () => {
+    const scan = {
+      roots: [],
+      skills: [],
+      findings: [],
+      diagnostics: [
+        {
+          code: "skill-root-unreadable",
+          severity: "error",
+          message: "Unable to read root",
+        },
+      ],
+    } satisfies ScanResult;
+
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan,
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.findingCount).toBe(0);
+    expect(report.diagnostics).toEqual([
+      expect.objectContaining({ code: "skill-root-unreadable", severity: "error" }),
+    ]);
+    expect(resolveScanExitCode(report)).toBe(1);
   });
 });
 
