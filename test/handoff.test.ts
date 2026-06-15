@@ -247,6 +247,7 @@ const makeReport = (findings: readonly Finding[]): ScanReport => {
       };
     }),
     findings,
+    diagnostics: [],
     handoffRequested: true,
   };
 };

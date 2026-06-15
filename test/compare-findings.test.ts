@@ -66,6 +66,7 @@ const makeReport = (errorCount: number): ScanReport => {
     score: calculateScore(findings),
     skills: [],
     findings,
+    diagnostics: [],
     handoffRequested: true,
   };
 };

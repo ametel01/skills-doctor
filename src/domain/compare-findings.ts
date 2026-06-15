@@ -73,10 +73,6 @@ const countFindingKeys = (findings: readonly Finding[]): Map<string, number> => 
 };
 
 const findingKey = (finding: Finding): string =>
-  [
-    finding.ruleId,
-    finding.skillPath,
-    finding.line ?? "",
-    finding.message,
-    finding.suggestion,
-  ].join("\u0000");
+  [finding.ruleId, finding.skillPath, finding.line ?? "", finding.message, finding.suggestion].join(
+    "\u0000",
+  );

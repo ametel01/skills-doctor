@@ -80,6 +80,7 @@ describe("fixture scanner coverage", () => {
       "directory",
       "elapsedMilliseconds",
       "scannedRoots",
+      "diagnostics",
       "skillCount",
       "findingCount",
       "errorCount",

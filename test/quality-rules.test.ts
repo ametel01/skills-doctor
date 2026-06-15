@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { SkillRecord } from "../src/index.js";
 import {
@@ -119,6 +119,7 @@ describe("quality rules", () => {
   it("does not report divergence across local and global same-name skills", async () => {
     const homeDir = path.join(directory, "home");
     await mkdir(path.join(homeDir, ".agents", "skills", "global-shared"), { recursive: true });
+    await mkdir(path.join(directory, ".agents", "skills", "global-shared"), { recursive: true });
     await writeFile(
       path.join(homeDir, ".agents", "skills", "global-shared", "SKILL.md"),
       [
@@ -176,14 +177,17 @@ describe("quality rules", () => {
       fileURLToPath(new URL("../src/domain/rules/structural.ts", import.meta.url)),
       "utf8",
     );
-    const ruleCatalog = await readFile(fileURLToPath(new URL("../docs/RULES.md", import.meta.url)), "utf8");
+    const ruleCatalog = await readFile(
+      fileURLToPath(new URL("../docs/RULES.md", import.meta.url)),
+      "utf8",
+    );
 
-    const qualityRuleIds = Array.from(qualitySource.matchAll(/ruleId:\s*\"([^\"]+)\"/g)).map(
+    const qualityRuleIds = Array.from(qualitySource.matchAll(/ruleId:\s*"([^"]+)"/g)).map(
       (match) => match[1],
     );
-    const structuralRuleIds = Array.from(
-      structuralSource.matchAll(/ruleId:\s*\"([^\"]+)\"/g),
-    ).map((match) => match[1]);
+    const structuralRuleIds = Array.from(structuralSource.matchAll(/ruleId:\s*"([^"]+)"/g)).map(
+      (match) => match[1],
+    );
     const emittedRuleIds = [...new Set([...qualityRuleIds, ...structuralRuleIds])].sort();
 
     for (const ruleId of emittedRuleIds) {

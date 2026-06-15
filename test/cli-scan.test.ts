@@ -2,11 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import packageJson from "../package.json" with { type: "json" };
 import { scanAction } from "../src/cli/commands/scan.js";
 import { buildProgram } from "../src/cli/index.js";
 import { CliInputError } from "../src/cli/utils/handle-error.js";
 import type { PromptAdapter } from "../src/cli/utils/prompts.js";
-import packageJson from "../package.json" with { type: "json" };
 
 describe("scanAction", () => {
   let directory: string;
@@ -55,9 +55,7 @@ describe("scanAction", () => {
     await mkdir(skillDir, { recursive: true });
     await writeFile(
       path.join(skillDir, "SKILL.md"),
-      ["---", "name: bad-skill", "description: Helps with PDFs.", "---", "", "Body."].join(
-        "\n",
-      ),
+      ["---", "name: bad-skill", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
     );
     let now = 1000;
 

@@ -331,10 +331,10 @@ const validateCrossEcosystem = (skills: readonly SkillRecord[]): Finding[] => {
     if (!skill.parseResult.ok) continue;
     const name = readString(skill.parseResult.frontmatter.data.name);
     if (name === undefined) continue;
-    byNameAndSource.set(
-      `${name}\u0000${skill.source}`,
-      [...(byNameAndSource.get(`${name}\u0000${skill.source}`) ?? []), skill],
-    );
+    byNameAndSource.set(`${name}\u0000${skill.source}`, [
+      ...(byNameAndSource.get(`${name}\u0000${skill.source}`) ?? []),
+      skill,
+    ]);
   }
 
   for (const [nameAndSource, namedSkills] of byNameAndSource) {

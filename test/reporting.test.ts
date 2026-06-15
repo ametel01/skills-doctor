@@ -13,9 +13,9 @@ import {
   discoverSkillRoots,
   renderHumanSummary,
   resolveScanExitCode,
+  type ScanResult,
   scanSkillRoots,
 } from "../src/index.js";
-import type { ScanResult } from "../src/index.js";
 
 describe("scan reports", () => {
   let directory: string;
