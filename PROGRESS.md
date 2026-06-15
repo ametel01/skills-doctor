@@ -15,7 +15,7 @@
 - [x] Step 0: Progress Tracking Setup
 - [x] Step 1: Bun, TypeScript, Biome, Vitest, and Package Scaffold
 - [x] Step 2: CI, Release Workflow, Release Notes Script, and Changelog
-- [ ] Step 3: Domain Types, Skill Root Discovery, and Skill Parsing
+- [x] Step 3: Domain Types, Skill Root Discovery, and Skill Parsing
 - [ ] Step 4: Structural Rule Engine
 - [ ] Step 5: Quality, Progressive Disclosure, Script, Eval, and Cross-Ecosystem Rules
 - [ ] Step 6: Report Model, Human Summary, JSON Output, and Exit Codes
@@ -28,7 +28,7 @@
 
 ## Current Status
 
-Step 2 complete. Next step: Step 3.
+Step 3 complete. Next step: Step 4.
 
 ## Update Rule
 
@@ -86,5 +86,25 @@ After each completed step:
   - `bun run verify`
   - `bun run pack:dry-run`
   - Temporary changelog smoke test with `node scripts/extract-release-notes.mjs 0.1.0 <temp CHANGELOG.md>`
-- Commit: pending
+- Commit: `13beb5b`
 - Next step: Step 3
+
+### Step 3: Domain Types, Skill Root Discovery, and Skill Parsing
+
+- Status: Complete
+- Changes:
+  - Added domain types for skill roots, diagnostics, parse results, skill records, and scan results.
+  - Added project-local `.claude/skills` and `.agents/skills` discovery with custom-root diagnostics.
+  - Added direct child skill scanning and YAML frontmatter/body parsing.
+  - Exported scanner helpers from the public API facade.
+  - Added unit tests for discovery, custom root diagnostics, scanning, parse failures, and YAML frontmatter parsing.
+- Validation:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run build`
+  - `bun run verify`
+  - `bun install --frozen-lockfile`
+- Commit: pending
+- Next step: Step 4

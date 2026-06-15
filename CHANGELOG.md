@@ -12,3 +12,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Bun-managed TypeScript CLI scaffold with Biome, Vitest, typecheck, build, verify, and package dry-run quality gates.
 - GitHub Actions CI and tag-driven Bun release workflow.
 - Release-note extraction from `CHANGELOG.md` for GitHub Releases created by CI.
+- Project-local Claude and Codex/agents skill root discovery, `SKILL.md` scanning, and YAML frontmatter parsing.
