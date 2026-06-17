@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -197,6 +197,31 @@ describe("repair handoff preparation", () => {
     expect(handoff.promptPath).toBeUndefined();
     expect(handoff.reportWriteError?.message).toBe("disk full");
     expect(handoff.prompt).toContain("Full findings report: unavailable");
+  });
+
+  it("keeps an inline fallback prompt when prompt file writing fails", async () => {
+    const report = makeReport([makeFinding({})]);
+    const reportDirectory = path.join(directory, "report");
+
+    const handoff = await prepareRepairHandoff({
+      report,
+      prompts: fakePrompts({ selected: "errors" }),
+      writeDirectory: async () => {
+        await mkdir(path.join(reportDirectory, "handoff-prompt.md"), { recursive: true });
+        return {
+          directory: reportDirectory,
+          findingsJsonPath: path.join(reportDirectory, "findings.json"),
+          findingsMarkdownPath: path.join(reportDirectory, "findings.md"),
+          skillReportPaths: [],
+        };
+      },
+    });
+
+    expect(handoff.reportDirectory).toBe(reportDirectory);
+    expect(handoff.promptPath).toBeUndefined();
+    expect(handoff.reportWriteError).toBeDefined();
+    expect(handoff.prompt).toContain("Fix the selected Agent Skills findings");
+    expect(handoff.prompt).toContain(`Full findings report: ${reportDirectory}`);
   });
 
   it("omits the errors subset for warning-only reports", async () => {

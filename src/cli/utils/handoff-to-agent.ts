@@ -51,9 +51,15 @@ export const prepareRepairHandoff = async (
   });
 
   let promptPath: string | undefined;
+  let promptWriteError: Error | undefined;
   if (reportResult.result !== undefined) {
-    promptPath = path.join(reportResult.result.directory, "handoff-prompt.md");
-    await writeFile(promptPath, `${prompt}\n`);
+    const targetPromptPath = path.join(reportResult.result.directory, "handoff-prompt.md");
+    try {
+      await writeFile(targetPromptPath, `${prompt}\n`);
+      promptPath = targetPromptPath;
+    } catch (error) {
+      promptWriteError = normalizeError(error);
+    }
   }
 
   return {
@@ -61,7 +67,7 @@ export const prepareRepairHandoff = async (
     prompt,
     reportDirectory: reportResult.result?.directory,
     promptPath,
-    reportWriteError: reportResult.error,
+    reportWriteError: reportResult.error ?? promptWriteError,
   };
 };
 
@@ -126,6 +132,9 @@ const tryWriteFindingsDirectory = async (input: {
       }),
     };
   } catch (error) {
-    return { error: error instanceof Error ? error : new Error(String(error)) };
+    return { error: normalizeError(error) };
   }
 };
+
+const normalizeError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
