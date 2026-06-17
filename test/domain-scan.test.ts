@@ -109,6 +109,41 @@ describe("skill discovery and parsing", () => {
     expect(scan.findings.map((finding) => finding.ruleId)).not.toContain("missing-skill");
   });
 
+  it("reports unreadable SKILL.md entries while scanning other skills", async () => {
+    const skillsRoot = path.join(directory, ".agents", "skills");
+    const validSkillDir = path.join(skillsRoot, "valid-skill");
+    const unreadableSkillPath = path.join(skillsRoot, "unreadable-skill", "SKILL.md");
+    await mkdir(validSkillDir, { recursive: true });
+    await mkdir(unreadableSkillPath, { recursive: true });
+    await writeFile(
+      path.join(validSkillDir, "SKILL.md"),
+      [
+        "---",
+        "name: valid-skill",
+        "description: Use this skill when validating scanner fixtures.",
+        "---",
+        "",
+        "Follow the fixture workflow.",
+        "",
+      ].join("\n"),
+    );
+
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
+    const scan = await scanSkillRoots({ roots: discovered.roots });
+
+    expect(scan.skills.map((skill) => skill.directoryName)).toEqual(["valid-skill"]);
+    expect(scan.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "skill-file-unreadable",
+        severity: "error",
+        path: unreadableSkillPath,
+      }),
+    ]);
+  });
+
   it("records parse failures on malformed skill frontmatter", async () => {
     const skillsRoot = path.join(directory, ".claude", "skills", "broken-skill");
     await mkdir(skillsRoot, { recursive: true });

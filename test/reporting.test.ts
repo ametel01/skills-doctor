@@ -118,6 +118,33 @@ describe("scan reports", () => {
     expect(report.score).toMatchObject({ value: 100, penalty: 0 });
     expect(resolveScanExitCode(report)).toBe(0);
   });
+
+  it("fails reports when skill files are unreadable", async () => {
+    const scan = {
+      roots: [],
+      skills: [],
+      findings: [],
+      diagnostics: [
+        {
+          code: "skill-file-unreadable",
+          severity: "error",
+          message: "Unable to read SKILL.md",
+          path: "/repo/.agents/skills/example/SKILL.md",
+        },
+      ],
+    } satisfies ScanResult;
+
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan,
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.score.value).toBeLessThan(100);
+    expect(resolveScanExitCode(report)).toBe(1);
+  });
 });
 
 describe("json mode", () => {

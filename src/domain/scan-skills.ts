@@ -33,8 +33,19 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
 
       const skillDir = path.join(root.rootPath, entry.name);
       const skillPath = path.join(skillDir, "SKILL.md");
-      const content = await readFile(skillPath, "utf8").catch(() => null);
-      if (content === null) {
+      let content: string;
+      try {
+        content = await readFile(skillPath, "utf8");
+      } catch (error) {
+        if (getErrorCode(error) === "ENOENT") {
+          continue;
+        }
+        diagnostics.push({
+          code: "skill-file-unreadable",
+          severity: "error",
+          message: error instanceof Error ? error.message : `Unable to read ${skillPath}`,
+          path: skillPath,
+        });
         continue;
       }
 
@@ -61,3 +72,6 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
     findings,
   };
 };
+
+const getErrorCode = (error: unknown): string | undefined =>
+  typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
