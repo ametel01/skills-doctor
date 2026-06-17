@@ -174,4 +174,5 @@ Then:
 2. Move changelog entries from `Unreleased` into `## [x.y.z] - YYYY-MM-DD`.
 3. Commit the release prep.
 4. Tag `v<x.y.z>`.
-5. Push the tag to trigger the release workflow.
+5. Ensure npm trusted publishing is configured for this repository's release workflow.
+6. Push the tag to trigger the release workflow.
