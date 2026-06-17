@@ -84,10 +84,39 @@ describe("scan reports", () => {
 
     expect(report.ok).toBe(false);
     expect(report.findingCount).toBe(0);
+    expect(report.score.value).toBeLessThan(100);
+    expect(report.score.penalty).toBeGreaterThan(0);
     expect(report.diagnostics).toEqual([
       expect.objectContaining({ code: "skill-root-unreadable", severity: "error" }),
     ]);
     expect(resolveScanExitCode(report)).toBe(1);
+  });
+
+  it("does not fail or reduce score for warning diagnostics alone", async () => {
+    const scan = {
+      roots: [],
+      skills: [],
+      findings: [],
+      diagnostics: [
+        {
+          code: "skill-root-not-found",
+          severity: "warning",
+          message: "Custom skills root does not exist",
+        },
+      ],
+    } satisfies ScanResult;
+
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan,
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.findingCount).toBe(0);
+    expect(report.score).toMatchObject({ value: 100, penalty: 0 });
+    expect(resolveScanExitCode(report)).toBe(0);
   });
 });
 

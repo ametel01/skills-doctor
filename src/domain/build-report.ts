@@ -59,7 +59,11 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
     errorCount,
     warningCount,
     adviceCount,
-    score: calculateScore(input.scan.findings),
+    score: calculateScore(input.scan.findings, {
+      diagnosticErrorCodes: input.scan.diagnostics
+        .filter((diagnostic) => diagnostic.severity === "error")
+        .map((diagnostic) => diagnostic.code),
+    }),
     skills: input.scan.skills.map((skill) => {
       const skillFindings = input.scan.findings.filter(
         (finding) => finding.skillPath === skill.skillPath,

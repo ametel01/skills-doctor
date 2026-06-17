@@ -82,10 +82,11 @@ Findings are grouped as blocking errors, warnings, and advisory improvements.
 The human summary opens with a score header showing a face, `0` to `100` score,
 label, and proportional terminal bar. The score starts at 100 and deducts 1.5
 points for each distinct error rule and 0.75 points for each distinct warning
-rule; repeated findings from the same rule do not increase the penalty. Advisory
-findings are counted in the report but do not affect the score. Score labels are
-`Great` for 75 or higher, `Needs work` for 50 through 74, and `Critical` below
-50.
+rule; each distinct blocking diagnostic code is scored like an error rule.
+Repeated findings from the same rule do not increase the penalty. Advisory
+findings and warning diagnostics are counted in the report but do not affect the
+score. Score labels are `Great` for 75 or higher, `Needs work` for 50 through
+74, and `Critical` below 50.
 
 ## Interactive Repair Flow
 

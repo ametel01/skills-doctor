@@ -11,11 +11,18 @@ export type ScoreSummary = {
   readonly distinctAdviceRuleCount: number;
 };
 
+export type CalculateScoreOptions = {
+  readonly diagnosticErrorCodes?: readonly string[] | undefined;
+};
+
 const ERROR_RULE_PENALTY = 1.5;
 const WARNING_RULE_PENALTY = 0.75;
 const RULE_PLUGIN = "skills-doctor";
 
-export const calculateScore = (findings: readonly Finding[]): ScoreSummary => {
+export const calculateScore = (
+  findings: readonly Finding[],
+  options: CalculateScoreOptions = {},
+): ScoreSummary => {
   const errorRules = new Set<string>();
   const warningRules = new Set<string>();
   const adviceRules = new Set<string>();
@@ -29,6 +36,9 @@ export const calculateScore = (findings: readonly Finding[]): ScoreSummary => {
     } else {
       adviceRules.add(ruleKey);
     }
+  }
+  for (const code of options.diagnosticErrorCodes ?? []) {
+    errorRules.add(scoreDiagnosticKey(code));
   }
 
   const penalty = errorRules.size * ERROR_RULE_PENALTY + warningRules.size * WARNING_RULE_PENALTY;
@@ -51,3 +61,4 @@ export const getScoreLabel = (value: number): ScoreLabel => {
 };
 
 const scoreRuleKey = (finding: Finding): string => `${RULE_PLUGIN}/${finding.ruleId}`;
+const scoreDiagnosticKey = (code: string): string => `${RULE_PLUGIN}/diagnostic/${code}`;
