@@ -416,6 +416,38 @@ describe("scanAction", () => {
       }),
     ]);
   });
+
+  it("preserves missing custom root diagnostics when standard roots still scan", async () => {
+    await writeSkill(path.join(directory, ".agents", "skills", "local-skill"), "local-skill");
+    const missingRoot = path.join(directory, "missing-skills");
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        env: {},
+        stdinIsTty: true,
+        prompts: fakePrompts(["custom", missingRoot]),
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(report.skillCount).toBe(1);
+    expect(report.errorCount).toBe(0);
+    expect(report.warningCount).toBe(0);
+    expect(report.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "skill-root-not-found",
+        severity: "warning",
+        path: missingRoot,
+      }),
+    ]);
+    expect(process.exitCode).toBe(0);
+  });
 });
 
 const writeSkill = async (skillDir: string, name: string): Promise<void> => {

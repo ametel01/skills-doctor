@@ -7,11 +7,12 @@ import type { Diagnostic, Finding, ScanResult, SkillRecord, SkillRoot } from "./
 
 export type ScanSkillRootsInput = {
   readonly roots: readonly SkillRoot[];
+  readonly diagnostics?: readonly Diagnostic[] | undefined;
 };
 
 export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanResult> => {
   const skills: SkillRecord[] = [];
-  const diagnostics: Diagnostic[] = [];
+  const diagnostics: Diagnostic[] = [...(input.diagnostics ?? [])];
   const findings: Finding[] = [];
 
   for (const root of input.roots) {
