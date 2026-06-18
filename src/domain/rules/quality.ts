@@ -266,7 +266,9 @@ const validateResources = async (
   options: QualityRuleOptions,
 ): Promise<Finding[]> => {
   const findings: Finding[] = [];
-  const referencedPaths = [...new Set(skill.content.match(RESOURCE_REFERENCE_PATTERN) ?? [])];
+  const referencedPaths = [
+    ...new Set((skill.content.match(RESOURCE_REFERENCE_PATTERN) ?? []).map(normalizeReferencePath)),
+  ].filter((referencePath) => referencePath.length > 0);
 
   for (const referencePath of referencedPaths) {
     if (hasParentTraversal(referencePath)) {
@@ -550,6 +552,9 @@ const resourceCategory = (referencePath: string): "references" | "scripts" | "as
   if (referencePath.startsWith("scripts/")) return "scripts";
   return "assets";
 };
+
+const normalizeReferencePath = (referencePath: string): string =>
+  referencePath.replace(/[.,;:!?)}\]]+$/g, "");
 
 const isNonTrivialSkill = (body: string): boolean =>
   body.length > 500 || WORKFLOW_STEP_PATTERN.test(body) || RESOURCE_REFERENCE_PATTERN.test(body);

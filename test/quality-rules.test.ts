@@ -370,6 +370,43 @@ describe("quality rules", () => {
     expect(ruleIds).not.toContain("missing-referenced-resource");
   });
 
+  it("ignores sentence punctuation after resource references", async () => {
+    const skillDir = path.join(directory, "punctuated-resource-skill");
+    await mkdir(path.join(skillDir, "references"), { recursive: true });
+    await mkdir(path.join(skillDir, "scripts"), { recursive: true });
+    await mkdir(path.join(skillDir, "assets"), { recursive: true });
+    await writeFile(path.join(skillDir, "references", "spec.md"), "Spec reference.");
+    await writeFile(path.join(skillDir, "references", "api-errors.v1.md"), "API errors.");
+    await writeFile(path.join(skillDir, "scripts", "tool.py"), "print('ok')\n");
+    await writeFile(path.join(skillDir, "assets", "template.md"), "Template.");
+    const skill = buildRecordAt(skillDir, "punctuated-resource-skill", [
+      "---",
+      "name: punctuated-resource-skill",
+      "description: Use this skill when checking punctuated resources.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Read references/spec.md.",
+      "- Read references/api-errors.v1.md.",
+      "- Run scripts/tool.py, using --help before normal execution.",
+      "- Copy assets/template.md) when creating the response.",
+      "- Read references/missing.md.",
+    ]);
+
+    const findings = await validateQualityRules([skill]);
+    const missingResourceMessages = findings
+      .filter((finding) => finding.ruleId === "missing-referenced-resource")
+      .map((finding) => finding.message);
+
+    expect(missingResourceMessages).toEqual([
+      "The skill references references/missing.md, but that path does not exist inside the skill directory.",
+    ]);
+    expect(missingResourceMessages.join("\n")).not.toContain("references/spec.md.");
+    expect(missingResourceMessages.join("\n")).not.toContain("scripts/tool.py,");
+    expect(missingResourceMessages.join("\n")).not.toContain("assets/template.md)");
+  });
+
   it("keeps emitted rule IDs, structured catalog, and docs synchronized", async () => {
     const parseSource = await readFile(
       fileURLToPath(new URL("../src/domain/parse-skill.ts", import.meta.url)),
