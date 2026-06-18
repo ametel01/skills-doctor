@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { Finding, FindingCategory, SkillRecord } from "../types.js";
 
@@ -265,8 +265,25 @@ const validateResources = async (
       continue;
     }
 
-    const absolutePath = path.join(skill.skillDir, referencePath);
-    if (!(await exists(absolutePath))) {
+    const resourceStatus = await resolveResourceStatus(skill.skillDir, referencePath);
+    if (resourceStatus === "escapes") {
+      findings.push(
+        createFinding(skill, {
+          ruleId: "resource-reference-escapes-skill",
+          severity: "warning",
+          category: resourceCategory(referencePath),
+          title: "Resource reference escapes the skill directory",
+          message:
+            "The skill references a resource outside the skill directory. Resource references must remain inside scripts/, references/, or assets/ for this skill.",
+          suggestion:
+            "Use a path rooted inside the skill (for example references/file.md) without '..' segments.",
+          line: findReferenceLine(skill.content, referencePath),
+        }),
+      );
+      continue;
+    }
+
+    if (resourceStatus === "missing") {
       findings.push(
         createFinding(skill, {
           ruleId: "missing-referenced-resource",
@@ -468,6 +485,29 @@ const exists = async (targetPath: string): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+type ResourceStatus = "inside" | "missing" | "escapes";
+
+const resolveResourceStatus = async (
+  skillDir: string,
+  referencePath: string,
+): Promise<ResourceStatus> => {
+  const targetPath = path.resolve(skillDir, referencePath);
+  let resolvedTarget: string;
+  try {
+    resolvedTarget = await realpath(targetPath);
+  } catch {
+    return "missing";
+  }
+
+  const resolvedSkillDir = await realpath(skillDir);
+  return isPathInside(resolvedSkillDir, resolvedTarget) ? "inside" : "escapes";
+};
+
+const isPathInside = (parentPath: string, targetPath: string): boolean => {
+  const relative = path.relative(parentPath, targetPath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 };
 
 const resourceCategory = (referencePath: string): "references" | "scripts" | "assets" => {

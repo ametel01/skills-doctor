@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -226,6 +226,54 @@ describe("quality rules", () => {
     expect(ruleIds).toContain("resource-reference-escapes-skill");
   });
 
+  it("flags symlinked resource references that resolve outside the skill directory", async () => {
+    const skillDir = path.join(directory, "symlink-skill");
+    await mkdir(path.join(skillDir, "references"), { recursive: true });
+    const externalFile = path.join(directory, "outside.md");
+    await writeFile(externalFile, "External reference.");
+    await symlink(externalFile, path.join(skillDir, "references", "local.md"));
+    const skill = buildRecordAt(skillDir, "symlink-skill", [
+      "---",
+      "name: symlink-skill",
+      "description: Use this skill when resolving symlink resources.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Read references/local.md before responding.",
+    ]);
+
+    const findings = await validateQualityRules([skill]);
+    const escapeFinding = findings.find(
+      (finding) => finding.ruleId === "resource-reference-escapes-skill",
+    );
+
+    expect(escapeFinding).toBeDefined();
+    expect(escapeFinding?.message).toContain("outside the skill directory");
+  });
+
+  it("accepts regular resource references that resolve inside the skill directory", async () => {
+    const skillDir = path.join(directory, "local-resource-skill");
+    await mkdir(path.join(skillDir, "references"), { recursive: true });
+    await writeFile(path.join(skillDir, "references", "local.md"), "Local reference.");
+    const skill = buildRecordAt(skillDir, "local-resource-skill", [
+      "---",
+      "name: local-resource-skill",
+      "description: Use this skill when resolving local resources.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Read references/local.md before responding.",
+    ]);
+
+    const findings = await validateQualityRules([skill]);
+    const ruleIds = findings.map((finding) => finding.ruleId);
+
+    expect(ruleIds).not.toContain("resource-reference-escapes-skill");
+    expect(ruleIds).not.toContain("missing-referenced-resource");
+  });
+
   it("documents all emitted rule IDs", async () => {
     const qualitySource = await readFile(
       fileURLToPath(new URL("../src/domain/rules/quality.ts", import.meta.url)),
@@ -255,9 +303,16 @@ describe("quality rules", () => {
 });
 
 const buildRecord = (directoryName: string, lines: readonly string[]): SkillRecord => {
+  return buildRecordAt(path.join("/tmp/skills", directoryName), directoryName, lines);
+};
+
+const buildRecordAt = (
+  skillDir: string,
+  directoryName: string,
+  lines: readonly string[],
+): SkillRecord => {
   const content = lines.join("\n");
-  const rootPath = "/tmp/skills";
-  const skillDir = path.join(rootPath, directoryName);
+  const rootPath = path.dirname(skillDir);
   const skillPath = path.join(skillDir, "SKILL.md");
 
   return {
