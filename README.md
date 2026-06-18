@@ -144,6 +144,7 @@ const report = buildScanReport({
 ```
 
 The CLI remains the primary interface for interactive repair workflows.
+See `docs/API.md` for supported exports and the `schemaVersion: 1` report schema.
 
 ## Exit Codes
 
