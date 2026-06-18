@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Tested the declared Node runtime floor in CI and aligned the package engine range to Node 22.13+.
+
 ### Fixed
 
 - Recognized normal `--help` mentions when checking script help guidance.
