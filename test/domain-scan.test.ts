@@ -80,10 +80,10 @@ describe("skill discovery and parsing", () => {
     });
   });
 
-  it("scans direct child skill directories that contain SKILL.md", async () => {
+  it("reports direct child skill directories that are missing SKILL.md", async () => {
     const skillsRoot = path.join(directory, ".agents", "skills");
     await mkdir(path.join(skillsRoot, "valid-skill"), { recursive: true });
-    await mkdir(path.join(skillsRoot, "not-a-skill"), { recursive: true });
+    await mkdir(path.join(skillsRoot, "missing-file-skill"), { recursive: true });
     await writeFile(
       path.join(skillsRoot, "valid-skill", "SKILL.md"),
       [
@@ -106,7 +106,13 @@ describe("skill discovery and parsing", () => {
     expect(scan.skills).toHaveLength(1);
     expect(scan.skills[0]?.directoryName).toBe("valid-skill");
     expect(scan.skills[0]?.parseResult.ok).toBe(true);
-    expect(scan.findings.map((finding) => finding.ruleId)).not.toContain("missing-skill");
+    expect(scan.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "missing-skill",
+        severity: "error",
+        skillName: "missing-file-skill",
+      }),
+    );
   });
 
   it("keeps skill order deterministic across roots and child directories", async () => {
@@ -203,6 +209,30 @@ describe("skill discovery and parsing", () => {
       ok: false,
       error: { code: "missing-frontmatter" },
     });
+  });
+
+  it("records unreadable frontmatter when a closing delimiter is missing", async () => {
+    const skillsRoot = path.join(directory, ".claude", "skills", "unclosed-skill");
+    await mkdir(skillsRoot, { recursive: true });
+    await writeFile(path.join(skillsRoot, "SKILL.md"), "---\nname: unclosed-skill\n");
+
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
+    const scan = await scanSkillRoots({ roots: discovered.roots });
+
+    expect(scan.skills).toHaveLength(1);
+    expect(scan.skills[0]?.parseResult).toMatchObject({
+      ok: false,
+      error: { code: "invalid-frontmatter" },
+    });
+    expect(scan.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "invalid-frontmatter",
+        severity: "error",
+      }),
+    );
   });
 
   it("parses YAML frontmatter and body content", () => {

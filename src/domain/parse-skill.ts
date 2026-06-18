@@ -1,11 +1,12 @@
 import { parseDocument } from "yaml";
 import type { ParseResult } from "./types.js";
 
-const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+const FRONTMATTER_OPEN_PATTERN = /^---[ \t]*(?:\r?\n|$)/;
+const FRONTMATTER_CLOSE_PATTERN = /^---[ \t]*(?:\r?\n|$)/gm;
 
 export const parseSkillContent = (content: string): ParseResult => {
-  const match = FRONTMATTER_PATTERN.exec(content);
-  if (match === null) {
+  const openingMatch = FRONTMATTER_OPEN_PATTERN.exec(content);
+  if (openingMatch === null) {
     return {
       ok: false,
       error: {
@@ -15,8 +16,9 @@ export const parseSkillContent = (content: string): ParseResult => {
     };
   }
 
-  const raw = match[1];
-  if (raw === undefined) {
+  FRONTMATTER_CLOSE_PATTERN.lastIndex = openingMatch[0].length;
+  const closingMatch = FRONTMATTER_CLOSE_PATTERN.exec(content);
+  if (closingMatch === null) {
     return {
       ok: false,
       error: {
@@ -25,6 +27,8 @@ export const parseSkillContent = (content: string): ParseResult => {
       },
     };
   }
+
+  const raw = content.slice(openingMatch[0].length, closingMatch.index).replace(/\r?\n$/, "");
 
   const document = parseDocument(raw);
   if (document.errors.length > 0) {
@@ -53,7 +57,7 @@ export const parseSkillContent = (content: string): ParseResult => {
     frontmatter: {
       data: parsed,
       raw,
-      body: content.slice(match[0].length),
+      body: content.slice(closingMatch.index + closingMatch[0].length),
     },
   };
 };

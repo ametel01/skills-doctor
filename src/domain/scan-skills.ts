@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseSkillContent } from "./parse-skill.js";
 import { validateQualityRules } from "./rules/quality.js";
-import { validateStructuralRules } from "./rules/structural.js";
+import { buildMissingSkillFinding, validateStructuralRules } from "./rules/structural.js";
 import type { Diagnostic, Finding, ScanResult, SkillRecord, SkillRoot } from "./types.js";
 
 const SKILL_FILE_READ_CONCURRENCY = 16;
@@ -69,6 +69,7 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
     for (const task of plan.tasks) {
       const result = readResultsByTask.get(taskKey(task.rootIndex, task.entryIndex));
       if (result?.diagnostic !== undefined) diagnostics.push(result.diagnostic);
+      if (result?.finding !== undefined) findings.push(result.finding);
       if (result?.skill !== undefined) skills.push(result.skill);
     }
   }
@@ -104,6 +105,7 @@ type SkillReadResult = {
   readonly entryIndex: number;
   readonly skill?: SkillRecord | undefined;
   readonly diagnostic?: Diagnostic | undefined;
+  readonly finding?: Finding | undefined;
 };
 
 const readSkillTask = async (task: SkillReadTask): Promise<SkillReadResult> => {
@@ -112,7 +114,11 @@ const readSkillTask = async (task: SkillReadTask): Promise<SkillReadResult> => {
     content = await readFile(task.skillPath, "utf8");
   } catch (error) {
     if (getErrorCode(error) === "ENOENT") {
-      return { rootIndex: task.rootIndex, entryIndex: task.entryIndex };
+      return {
+        rootIndex: task.rootIndex,
+        entryIndex: task.entryIndex,
+        finding: buildMissingSkillFinding({ root: task.root, skillDir: task.skillDir }),
+      };
     }
     return {
       rootIndex: task.rootIndex,

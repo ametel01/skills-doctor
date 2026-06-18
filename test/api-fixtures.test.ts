@@ -17,6 +17,7 @@ describe("public API facade", () => {
     expect(api).toHaveProperty("calculateScore");
     expect(api).toHaveProperty("getScoreLabel");
     expect(api).toHaveProperty("ruleCatalog");
+    expect(api).toHaveProperty("buildMissingSkillFinding");
     expect(api).not.toHaveProperty("scanAction");
     expect(api).not.toHaveProperty("prepareRepairHandoff");
     expect(api).not.toHaveProperty("launchRepairAgent");

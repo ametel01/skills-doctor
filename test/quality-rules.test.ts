@@ -442,9 +442,9 @@ describe("quality rules", () => {
     );
     const docsByRuleId = parseRuleCatalogMarkdown(ruleCatalogMarkdown);
 
-    for (const ruleId of emittedRuleIds) {
-      expect(catalogByRuleId.has(ruleId)).toBe(true);
-    }
+    expect([...catalogByRuleId.keys()].sort()).toEqual(emittedRuleIds);
+    expect([...docsByRuleId.keys()].sort()).toEqual(emittedRuleIds);
+
     for (const entry of ruleCatalog) {
       const docsEntry = docsByRuleId.get(entry.ruleId);
       expect(docsEntry).toEqual({
