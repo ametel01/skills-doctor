@@ -77,6 +77,56 @@ describe("CLI bin", () => {
     expect(report.findings?.map((finding) => finding.ruleId)).toContain("name-directory-mismatch");
   });
 
+  it("keeps warning-only packaged scans successful by default and fails with a warning gate", async () => {
+    await writeSkill({
+      directoryName: "warning-skill",
+      name: "warning-skill",
+      description: "Helps with PDFs.",
+      body: ["## Workflow", "", "- Inspect the fixture."].join("\n"),
+      evals: true,
+    });
+
+    const defaultResult = await runPackagedCli(["--json", "--json-compact", "--yes", directory]);
+    const defaultReport = parseSingleJsonReport(defaultResult.stdout);
+    const gatedResult = await runPackagedCli([
+      "--json",
+      "--json-compact",
+      "--yes",
+      "--fail-on",
+      "warning",
+      directory,
+    ]);
+    const gatedReport = parseSingleJsonReport(gatedResult.stdout);
+
+    expect(defaultResult.exitCode).toBe(0);
+    expect(defaultReport.warningCount).toBeGreaterThan(0);
+    expect(gatedResult.exitCode).toBe(1);
+    expect(gatedReport.warningCount).toBeGreaterThan(0);
+  });
+
+  it("fails packaged scans below the requested minimum score", async () => {
+    await writeSkill({
+      directoryName: "warning-skill",
+      name: "warning-skill",
+      description: "Helps with PDFs.",
+      body: ["## Workflow", "", "- Inspect the fixture."].join("\n"),
+      evals: true,
+    });
+
+    const result = await runPackagedCli([
+      "--json",
+      "--json-compact",
+      "--yes",
+      "--min-score",
+      "100",
+      directory,
+    ]);
+    const report = parseSingleJsonReport(result.stdout);
+
+    expect(result.exitCode).toBe(1);
+    expect(report.score?.value).toBeLessThan(100);
+  });
+
   it("prints a JSON error report for JSON-mode parse errors", async () => {
     const result = await runPackagedCli(["--json", "--json-compact", "--bad-flag", directory]);
     const report = parseSingleJsonReport(result.stdout);
@@ -109,6 +159,7 @@ describe("CLI bin", () => {
   const writeSkill = async (input: {
     readonly directoryName: string;
     readonly name: string;
+    readonly description?: string | undefined;
     readonly body: string;
     readonly evals: boolean;
   }): Promise<void> => {
@@ -123,7 +174,7 @@ describe("CLI bin", () => {
       [
         "---",
         `name: ${input.name}`,
-        "description: Use this skill when testing packaged CLI scans.",
+        `description: ${input.description ?? "Use this skill when testing packaged CLI scans."}`,
         "---",
         "",
         input.body,
@@ -170,6 +221,8 @@ describe("CLI bin", () => {
     readonly skillCount?: number;
     readonly findingCount?: number;
     readonly errorCount?: number;
+    readonly warningCount?: number;
+    readonly score?: { readonly value: number };
     readonly findings?: readonly { readonly ruleId: string }[];
     readonly error?: { readonly message: string };
   } => {
@@ -181,6 +234,8 @@ describe("CLI bin", () => {
       readonly skillCount?: number;
       readonly findingCount?: number;
       readonly errorCount?: number;
+      readonly warningCount?: number;
+      readonly score?: { readonly value: number };
       readonly findings?: readonly { readonly ruleId: string }[];
       readonly error?: { readonly message: string };
     };

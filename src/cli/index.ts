@@ -17,11 +17,19 @@ export const buildProgram = (options: BuildProgramOptions = {}): Command => {
     .argument("[directory]", "directory to scan from", ".")
     .option("--json", "output one machine-readable JSON report")
     .option("--json-compact", "with --json, omit indentation")
+    .option("--fail-on <severity>", "fail on findings at or above severity: error, warning, advice")
+    .option("--min-score <number>", "fail when the scan score is below this threshold")
     .option("-y, --yes", "skip prompts and use conservative defaults")
     .action(
       async (
         directory: string,
-        flags: { json?: boolean; jsonCompact?: boolean; yes?: boolean },
+        flags: {
+          json?: boolean;
+          jsonCompact?: boolean;
+          yes?: boolean;
+          failOn?: string;
+          minScore?: string;
+        },
       ) => {
         await scanAction(directory, flags);
       },
@@ -73,4 +81,13 @@ const resolvePreParseJsonMode = (
 };
 
 const findDirectoryArg = (args: readonly string[]): string | undefined =>
-  args.find((arg) => arg !== "--" && !arg.startsWith("-"));
+  args.find((arg, index) => isDirectoryArg(args, arg, index));
+
+const VALUE_FLAGS = new Set(["--fail-on", "--min-score"]);
+
+const isDirectoryArg = (args: readonly string[], arg: string, index: number): boolean => {
+  if (arg === "--") return false;
+  if (arg.startsWith("-")) return false;
+  const previous = args[index - 1];
+  return previous === undefined || !VALUE_FLAGS.has(previous);
+};

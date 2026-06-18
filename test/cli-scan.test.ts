@@ -77,6 +77,110 @@ describe("scanAction", () => {
     expect(report.elapsedMilliseconds).toBe(34);
   });
 
+  it("keeps warning-only scans successful by default and fails with a warning gate", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "warning-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      [
+        "---",
+        "name: warning-skill",
+        "description: Helps with PDFs.",
+        "---",
+        "",
+        "## Workflow",
+        "",
+        "- Inspect the fixture.",
+      ].join("\n"),
+    );
+    const options = {
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+      stdinIsTty: false,
+      writeStdout: () => {},
+      writeStderr: () => {},
+      spinner: {
+        run: async <Value>(_message: string, operation: () => Promise<Value>) => operation(),
+      },
+    };
+
+    const defaultReport = await scanAction(".", { yes: true }, options);
+    expect(defaultReport.errorCount).toBe(0);
+    expect(defaultReport.warningCount).toBeGreaterThan(0);
+    expect(process.exitCode).toBe(0);
+
+    process.exitCode = undefined;
+    await scanAction(".", { yes: true, failOn: "warning" }, options);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("fails advice-only scans only when the advice gate is requested", async () => {
+    await writeSkill(path.join(directory, ".agents", "skills", "advice-skill"), "advice-skill");
+    const options = {
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+      stdinIsTty: false,
+      writeStdout: () => {},
+      writeStderr: () => {},
+      spinner: {
+        run: async <Value>(_message: string, operation: () => Promise<Value>) => operation(),
+      },
+    };
+
+    const defaultReport = await scanAction(".", { yes: true }, options);
+    expect(defaultReport.errorCount).toBe(0);
+    expect(defaultReport.warningCount).toBe(0);
+    expect(defaultReport.adviceCount).toBeGreaterThan(0);
+    expect(process.exitCode).toBe(0);
+
+    process.exitCode = undefined;
+    await scanAction(".", { yes: true, failOn: "advice" }, options);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("fails scans below the requested minimum score", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "warning-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      [
+        "---",
+        "name: warning-skill",
+        "description: Helps with PDFs.",
+        "---",
+        "",
+        "## Workflow",
+        "",
+        "- Inspect the fixture.",
+      ].join("\n"),
+    );
+
+    const report = await scanAction(
+      ".",
+      { yes: true, minScore: "100" },
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        stdinIsTty: false,
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(report.score.value).toBeLessThan(100);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("throws user errors for invalid quality gate flags", async () => {
+    await expect(scanAction(".", { yes: true, failOn: "bad" })).rejects.toBeInstanceOf(
+      CliInputError,
+    );
+    await expect(scanAction(".", { yes: true, minScore: "101" })).rejects.toBeInstanceOf(
+      CliInputError,
+    );
+  });
+
   it("imports the CLI module without running main", async () => {
     process.exitCode = 123;
     const cliModule = await import("../src/cli/index.js");

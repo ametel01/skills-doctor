@@ -31,6 +31,8 @@ export { scanSkillRoots } from "./domain/scan-skills.js";
 export {
   renderHumanSummary,
   resolveScanExitCode,
+  type ScanExitCodeOptions,
+  type ScanGateSeverity,
   summarizeFindings,
 } from "./domain/summarize-findings.js";
 export type {

@@ -5,7 +5,12 @@ import { compareFindings, renderPostHandoffSummary } from "../../domain/compare-
 import { discoverSkillRoots } from "../../domain/discover-skill-roots.js";
 import { groupFindingsByKey } from "../../domain/group-findings.js";
 import { scanSkillRoots } from "../../domain/scan-skills.js";
-import { renderHumanSummary, resolveScanExitCode } from "../../domain/summarize-findings.js";
+import {
+  renderHumanSummary,
+  resolveScanExitCode,
+  type ScanExitCodeOptions,
+  type ScanGateSeverity,
+} from "../../domain/summarize-findings.js";
 import type { Diagnostic, Finding, SkillRoot } from "../../domain/types.js";
 import { CliInputError } from "../utils/handle-error.js";
 import { prepareRepairHandoff } from "../utils/handoff-to-agent.js";
@@ -25,6 +30,8 @@ export type ScanFlags = {
   readonly json?: boolean;
   readonly jsonCompact?: boolean;
   readonly yes?: boolean;
+  readonly failOn?: string | undefined;
+  readonly minScore?: string | undefined;
 };
 
 export type ScanActionOptions = {
@@ -61,6 +68,7 @@ export const scanAction = async (
   options: ScanActionOptions = {},
 ): Promise<ScanReport> => {
   const cwd = path.resolve(options.cwd ?? process.cwd(), directory);
+  const gateOptions = resolveGateOptions(flags);
   const prompts = options.prompts ?? inquirerPromptAdapter;
   const writeStdout = options.writeStdout ?? ((message) => process.stdout.write(message));
   const writeStderr = options.writeStderr ?? ((message) => process.stderr.write(message));
@@ -168,8 +176,28 @@ export const scanAction = async (
     }
   }
 
-  process.exitCode = resolveScanExitCode(finalReport);
+  process.exitCode = resolveScanExitCode(finalReport, gateOptions);
   return finalReport;
+};
+
+const resolveGateOptions = (flags: ScanFlags): ScanExitCodeOptions => ({
+  failOn: parseFailOnSeverity(flags.failOn),
+  minScore: parseMinScore(flags.minScore),
+});
+
+const parseFailOnSeverity = (value: string | undefined): ScanGateSeverity | undefined => {
+  if (value === undefined) return undefined;
+  if (value === "error" || value === "warning" || value === "advice") return value;
+  throw new CliInputError("Invalid --fail-on value. Use one of: error, warning, advice.");
+};
+
+const parseMinScore = (value: string | undefined): number | undefined => {
+  if (value === undefined) return undefined;
+  const score = Number(value);
+  if (!Number.isFinite(score) || score < 0 || score > 100) {
+    throw new CliInputError("Invalid --min-score value. Use a number from 0 to 100.");
+  }
+  return score;
 };
 
 const selectRoots = async (input: {

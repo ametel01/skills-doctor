@@ -11,6 +11,7 @@ import {
 import {
   buildScanReport,
   discoverSkillRoots,
+  type Finding,
   renderHumanSummary,
   resolveScanExitCode,
   type ScanResult,
@@ -119,6 +120,38 @@ describe("scan reports", () => {
     expect(resolveScanExitCode(report)).toBe(0);
   });
 
+  it("resolves opt-in warning, advice, and score gates", () => {
+    const warningReport = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan: {
+        roots: [],
+        skills: [],
+        diagnostics: [],
+        findings: [makeFinding({ severity: "warning", ruleId: "warning-rule" })],
+      },
+    });
+    const adviceReport = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan: {
+        roots: [],
+        skills: [],
+        diagnostics: [],
+        findings: [makeFinding({ severity: "advice", ruleId: "advice-rule" })],
+      },
+    });
+
+    expect(resolveScanExitCode(warningReport)).toBe(0);
+    expect(resolveScanExitCode(warningReport, { failOn: "warning" })).toBe(1);
+    expect(resolveScanExitCode(adviceReport, { failOn: "warning" })).toBe(0);
+    expect(resolveScanExitCode(adviceReport, { failOn: "advice" })).toBe(1);
+    expect(resolveScanExitCode(warningReport, { minScore: 100 })).toBe(1);
+    expect(resolveScanExitCode(warningReport, { minScore: warningReport.score.value })).toBe(0);
+  });
+
   it("fails reports when skill files are unreadable", async () => {
     const scan = {
       roots: [],
@@ -145,6 +178,22 @@ describe("scan reports", () => {
     expect(report.score.value).toBeLessThan(100);
     expect(resolveScanExitCode(report)).toBe(1);
   });
+});
+
+const makeFinding = (overrides: Partial<Finding>): Finding => ({
+  ruleId: "finding-rule",
+  severity: "error",
+  category: "frontmatter",
+  title: "Finding",
+  message: "Message",
+  suggestion: "Suggestion",
+  ecosystem: "codex",
+  rootPath: "/repo/.agents/skills",
+  skillDir: "/repo/.agents/skills/example",
+  skillPath: "/repo/.agents/skills/example/SKILL.md",
+  skillName: "example",
+  agentRepairable: true,
+  ...overrides,
 });
 
 describe("json mode", () => {

@@ -1,6 +1,13 @@
 import type { ScanReport } from "./build-report.js";
 import type { Finding } from "./types.js";
 
+export type ScanGateSeverity = Finding["severity"];
+
+export type ScanExitCodeOptions = {
+  readonly failOn?: ScanGateSeverity | undefined;
+  readonly minScore?: number | undefined;
+};
+
 export type FindingSummary = {
   readonly errorCount: number;
   readonly warningCount: number;
@@ -32,10 +39,18 @@ export const summarizeFindings = (findings: readonly Finding[]): FindingSummary 
   ),
 });
 
-export const resolveScanExitCode = (report: ScanReport): 0 | 1 =>
-  report.errorCount > 0 || report.diagnostics.some((diagnostic) => diagnostic.severity === "error")
-    ? 1
-    : 0;
+export const resolveScanExitCode = (
+  report: ScanReport,
+  options: ScanExitCodeOptions = {},
+): 0 | 1 => {
+  if (report.diagnostics.some((diagnostic) => diagnostic.severity === "error")) return 1;
+  const failOn = options.failOn ?? "error";
+  if (report.findings.some((finding) => severityRank(finding.severity) >= severityRank(failOn))) {
+    return 1;
+  }
+  if (options.minScore !== undefined && report.score.value < options.minScore) return 1;
+  return 0;
+};
 
 export const renderHumanSummary = (
   report: ScanReport,
@@ -57,6 +72,12 @@ export const renderHumanSummary = (
 
 const countSeverity = (findings: readonly Finding[], severity: Finding["severity"]): number =>
   findings.filter((finding) => finding.severity === severity).length;
+
+const severityRank = (severity: ScanGateSeverity): number => {
+  if (severity === "error") return 3;
+  if (severity === "warning") return 2;
+  return 1;
+};
 
 const topGroups = (values: readonly string[], limit: number): SummaryGroup[] => {
   const counts = new Map<string, number>();

@@ -122,10 +122,14 @@ Use JSON output for automation:
 skills-doctor --json
 skills-doctor --json --json-compact
 skills-doctor --yes --json
+skills-doctor --yes --json --fail-on warning
+skills-doctor --yes --json --min-score 95
 ```
 
 JSON mode writes one machine-readable report to stdout and suppresses prompts
 and spinners. Human logs and expected errors stay out of stdout.
+By default, the exit code fails only for blocking errors and error diagnostics.
+Use `--fail-on warning`, `--fail-on advice`, or `--min-score <number>` for stricter CI gates.
 
 ## Programmatic API
 

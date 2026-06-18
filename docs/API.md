@@ -77,7 +77,8 @@ Reports and rendering:
 - `summarizeFindings(findings)`: groups counts by severity, skill, and category.
 - `renderHumanSummary(report, options?)`: renders a short text summary.
 - `resolveScanExitCode(report)`: returns `1` when blocking findings or error
-  diagnostics remain, otherwise `0`.
+  diagnostics remain, otherwise `0`. Pass `ScanExitCodeOptions` for stricter
+  warning, advice, or minimum-score gates.
 - `writeFindingsDirectory(input)`: writes `findings.json`, `findings.md`, and
   per-skill report files.
 
@@ -107,6 +108,8 @@ Exported types include:
 - `ScanResult`
 - `ScoreLabel`
 - `ScoreSummary`
+- `ScanExitCodeOptions`
+- `ScanGateSeverity`
 - `SkillEcosystem`
 - `SkillRecord`
 - `SkillRoot`
@@ -279,13 +282,16 @@ type SkillSummary = {
 
 ## Exit Codes
 
-`resolveScanExitCode(report)` mirrors the CLI blocking behavior:
+`resolveScanExitCode(report, options?)` mirrors the CLI blocking behavior:
 
 - returns `0` when there are no error findings and no error diagnostics.
 - returns `1` when `report.errorCount > 0` or any diagnostic has
   `severity: "error"`.
 
 Warnings and advice appear in the report but do not make the exit code fail.
+Pass `{ failOn: "warning" }`, `{ failOn: "advice" }`, or `{ minScore: 95 }`
+to opt into stricter automation gates. These options match the CLI
+`--fail-on` and `--min-score` flags.
 
 ## Compatibility
 
