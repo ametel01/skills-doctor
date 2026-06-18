@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-18
+
 ### Added
 
 - Exposed the rule catalog as structured public API metadata.
@@ -25,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Restored the documented `missing-skill` and `invalid-frontmatter` rule behavior so the structured rule catalog matches scanner findings.
 - Stopped trailing sentence punctuation from creating false missing-resource warnings for valid skill resource references.
 - Wrote repair handoff reports and prompts before stopping when no local `claude` or `codex` agent is available.
 - Recognized normal `--help` mentions when checking script help guidance.
@@ -40,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Tests
 
+- Tightened rule-catalog synchronization coverage so docs-only, catalog-only, and emitted-rule drift fail together.
 - Covered script help guidance warnings for existing script references.
 - Added packaged CLI smoke coverage for JSON stdout and blocking-scan exit behavior.
 
