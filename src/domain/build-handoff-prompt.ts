@@ -1,4 +1,5 @@
 import type { ScanReport } from "./build-report.js";
+import { groupFindingsByKey } from "./group-findings.js";
 import type { Finding, SkillRoot } from "./types.js";
 
 const MAX_INLINE_GROUPS = 5;
@@ -89,15 +90,11 @@ type FindingGroup = {
 };
 
 const groupFindingsBySkill = (findings: readonly Finding[]): readonly FindingGroup[] => {
-  const groups = new Map<string, Finding[]>();
-  for (const finding of findings) {
-    groups.set(finding.skillPath, [...(groups.get(finding.skillPath) ?? []), finding]);
-  }
-  return [...groups.entries()]
-    .map(([skillPath, skillFindings]) => ({
-      skillPath,
-      skillLabel: skillFindings[0]?.skillName ?? skillPath,
-      findings: sortFindings(skillFindings),
+  return groupFindingsByKey(findings, (finding) => finding.skillPath)
+    .map((group) => ({
+      skillPath: group.key,
+      skillLabel: group.findings[0]?.skillName ?? group.key,
+      findings: sortFindings(group.findings),
     }))
     .sort(
       (left, right) =>

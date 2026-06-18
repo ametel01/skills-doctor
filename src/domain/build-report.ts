@@ -1,4 +1,5 @@
 import { calculateScore, type ScoreSummary } from "./calculate-score.js";
+import { indexFindingsBySkillPath } from "./group-findings.js";
 import type { Diagnostic, Finding, ScanResult, SkillRoot } from "./types.js";
 
 export type SkillSummary = {
@@ -45,6 +46,7 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
   const adviceCount = countSeverity(input.scan.findings, "advice");
   const diagnosticErrorCount = countDiagnosticSeverity(input.scan.diagnostics, "error");
   const hasErrorDiagnostics = diagnosticErrorCount > 0;
+  const findingsBySkillPath = indexFindingsBySkillPath(input.scan.findings);
 
   return {
     schemaVersion: 1,
@@ -65,9 +67,7 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
         .map((diagnostic) => diagnostic.code),
     }),
     skills: input.scan.skills.map((skill) => {
-      const skillFindings = input.scan.findings.filter(
-        (finding) => finding.skillPath === skill.skillPath,
-      );
+      const skillFindings = findingsBySkillPath.get(skill.skillPath) ?? [];
       return {
         ecosystem: skill.ecosystem,
         name: skill.parseResult.ok

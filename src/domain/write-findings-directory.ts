@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ScanReport } from "./build-report.js";
+import { groupFindingsByKey } from "./group-findings.js";
 import type { Finding } from "./types.js";
 
 export type FindingsDirectoryInput = {
@@ -125,15 +126,11 @@ type SkillFindingGroup = {
 };
 
 const groupFindingsBySkill = (findings: readonly Finding[]): readonly SkillFindingGroup[] => {
-  const groups = new Map<string, Finding[]>();
-  for (const finding of findings) {
-    groups.set(finding.skillPath, [...(groups.get(finding.skillPath) ?? []), finding]);
-  }
-  return [...groups.entries()]
-    .map(([skillPath, skillFindings]) => ({
-      skillPath,
-      skillLabel: skillFindings[0]?.skillName ?? path.basename(path.dirname(skillPath)),
-      findings: skillFindings,
+  return groupFindingsByKey(findings, (finding) => finding.skillPath)
+    .map((group) => ({
+      skillPath: group.key,
+      skillLabel: group.findings[0]?.skillName ?? path.basename(path.dirname(group.key)),
+      findings: group.findings,
     }))
     .sort((left, right) => left.skillLabel.localeCompare(right.skillLabel));
 };

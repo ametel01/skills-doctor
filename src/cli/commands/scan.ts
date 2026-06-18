@@ -3,6 +3,7 @@ import type { ScanReport } from "../../domain/build-report.js";
 import { buildScanReport } from "../../domain/build-report.js";
 import { compareFindings, renderPostHandoffSummary } from "../../domain/compare-findings.js";
 import { discoverSkillRoots } from "../../domain/discover-skill-roots.js";
+import { groupFindingsByKey } from "../../domain/group-findings.js";
 import { scanSkillRoots } from "../../domain/scan-skills.js";
 import { renderHumanSummary, resolveScanExitCode } from "../../domain/summarize-findings.js";
 import type { Diagnostic, Finding, SkillRoot } from "../../domain/types.js";
@@ -437,15 +438,10 @@ const renderFindings = (findings: readonly Finding[]): string =>
     .join("\n\n")}\n`;
 
 const renderFindingsBySkill = (findings: readonly Finding[]): string => {
-  const groups = new Map<string, Finding[]>();
-  for (const finding of findings) {
-    const key = finding.skillName ?? finding.skillPath;
-    groups.set(key, [...(groups.get(key) ?? []), finding]);
-  }
-  return [...groups.entries()]
-    .map(([skillName, skillFindings]) => {
-      const lines = [`${skillName}:`];
-      lines.push(...skillFindings.map((finding) => `- [${finding.severity}] ${finding.ruleId}`));
+  return groupFindingsByKey(findings, (finding) => finding.skillName ?? finding.skillPath)
+    .map((group) => {
+      const lines = [`${group.key}:`];
+      lines.push(...group.findings.map((finding) => `- [${finding.severity}] ${finding.ruleId}`));
       return lines.join("\n");
     })
     .join("\n\n")

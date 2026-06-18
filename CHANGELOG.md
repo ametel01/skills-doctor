@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Reused shared grouped-finding indexes for report summaries and grouped output.
 - Made the manual release checklist version-aware and aligned with tag-derived release notes.
 - Replaced the stale reusable CLI spec with a Skills Doctor-specific architecture map.
 
