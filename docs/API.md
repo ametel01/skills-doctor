@@ -64,9 +64,10 @@ Rules and scoring:
 - `validateStructuralRules(skills)`: validates required skill shape.
 - `buildMissingSkillFinding(input)`: builds the structural missing-skill
   finding used for unreadable or missing skill files.
-- `validateQualityRules(skills)`: validates descriptions, body quality,
+- `validateQualityRules(skills, options?)`: validates descriptions, body quality,
   progressive disclosure, resources, scripts, eval guidance, and
-  cross-ecosystem divergence.
+  cross-ecosystem divergence. `options` can inject resource and eval existence
+  checks for in-memory or alternate filesystem integrations.
 - `calculateScore(findings, options?)`: calculates a score summary.
 - `getScoreLabel(value)`: maps a numeric score to a score label.
 
@@ -100,6 +101,8 @@ Exported types include:
 - `ParseFailure`
 - `ParsedFrontmatter`
 - `ParseResult`
+- `QualityRuleOptions`
+- `ResourceStatus`
 - `ScanReport`
 - `ScanResult`
 - `ScoreLabel`
@@ -114,10 +117,27 @@ Exported types include:
 The scanner reads local skill files. It does not upload file contents or call a
 hosted model.
 
-`validateQualityRules()` currently performs filesystem checks for referenced
+By default, `validateQualityRules()` performs filesystem checks for referenced
 resources and eval files. A `SkillRecord` passed to this function should have a
 real `skillDir` when you expect resource, script, asset, or eval checks to be
 accurate.
+
+For in-memory or alternate filesystem integrations, pass `QualityRuleOptions`:
+
+```ts
+const findings = await validateQualityRules(skills, {
+  resourceExists: async (_skill, referencePath) => referencePath === "references/spec.md",
+  evalsExist: async () => true,
+});
+```
+
+Use `resourceStatus` instead of `resourceExists` when the adapter needs to
+distinguish an existing in-skill resource from a reference that escapes the
+skill directory:
+
+```ts
+type ResourceStatus = "inside" | "missing" | "escapes";
+```
 
 ## ScanReport
 

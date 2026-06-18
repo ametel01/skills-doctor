@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added injectable resource and eval existence checks for `validateQualityRules`.
 - Added a public API and `schemaVersion: 1` report schema reference.
 - Tested the declared Node runtime floor in CI and aligned the package engine range to Node 22.13+.
 

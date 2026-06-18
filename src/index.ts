@@ -21,7 +21,11 @@ export {
 } from "./domain/compare-findings.js";
 export { discoverSkillRoots } from "./domain/discover-skill-roots.js";
 export { parseSkillContent } from "./domain/parse-skill.js";
-export { validateQualityRules } from "./domain/rules/quality.js";
+export {
+  type QualityRuleOptions,
+  type ResourceStatus,
+  validateQualityRules,
+} from "./domain/rules/quality.js";
 export { buildMissingSkillFinding, validateStructuralRules } from "./domain/rules/structural.js";
 export { scanSkillRoots } from "./domain/scan-skills.js";
 export {

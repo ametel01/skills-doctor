@@ -195,6 +195,59 @@ describe("quality rules", () => {
     expect(ruleIds).not.toContain("missing-referenced-resource");
   });
 
+  it("uses injected resource checks without reading the filesystem", async () => {
+    const skill = buildRecord("memory-resource-skill", [
+      "---",
+      "name: memory-resource-skill",
+      "description: Use this skill when checking in-memory resource references.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Read references/spec.md when the API returns an unexpected response.",
+    ]);
+
+    const missingRuleIds = (
+      await validateQualityRules([skill], {
+        resourceExists: async () => false,
+        evalsExist: async () => true,
+      })
+    ).map((finding) => finding.ruleId);
+    const existingRuleIds = (
+      await validateQualityRules([skill], {
+        resourceExists: async () => true,
+        evalsExist: async () => true,
+      })
+    ).map((finding) => finding.ruleId);
+
+    expect(missingRuleIds).toContain("missing-referenced-resource");
+    expect(existingRuleIds).not.toContain("missing-referenced-resource");
+    expect(existingRuleIds).not.toContain("resource-reference-escapes-skill");
+  });
+
+  it("uses injected eval checks without reading the filesystem", async () => {
+    const skill = buildRecord("memory-evals-skill", [
+      "---",
+      "name: memory-evals-skill",
+      "description: Use this skill when checking in-memory eval state.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Follow a concrete workflow step.",
+    ]);
+
+    const missingRuleIds = (
+      await validateQualityRules([skill], { evalsExist: async () => false })
+    ).map((finding) => finding.ruleId);
+    const existingRuleIds = (
+      await validateQualityRules([skill], { evalsExist: async () => true })
+    ).map((finding) => finding.ruleId);
+
+    expect(missingRuleIds).toContain("missing-skill-evals");
+    expect(existingRuleIds).not.toContain("missing-skill-evals");
+  });
+
   it("reports divergent same-name skills across Claude and Codex roots", async () => {
     await writeSkill({
       root: path.join(directory, ".claude", "skills", "shared-skill"),

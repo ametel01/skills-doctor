@@ -19,12 +19,32 @@ const GENERIC_REFERENCE_PATTERN =
   /\b(see|read|check)\s+(the\s+)?(references\/?|scripts\/?|assets\/?)\b/i;
 const RESOURCE_REFERENCE_PATTERN = /\b(scripts|references|assets)\/[A-Za-z0-9._/-]+/g;
 
-export const validateQualityRules = async (skills: readonly SkillRecord[]): Promise<Finding[]> => {
-  const perSkillFindings = await Promise.all(skills.map(validateSkillQuality));
+export type ResourceStatus = "inside" | "missing" | "escapes";
+
+export type QualityRuleOptions = {
+  readonly resourceExists?:
+    | ((skill: SkillRecord, referencePath: string) => Promise<boolean>)
+    | undefined;
+  readonly resourceStatus?:
+    | ((skill: SkillRecord, referencePath: string) => Promise<ResourceStatus>)
+    | undefined;
+  readonly evalsExist?: ((skill: SkillRecord) => Promise<boolean>) | undefined;
+};
+
+export const validateQualityRules = async (
+  skills: readonly SkillRecord[],
+  options: QualityRuleOptions = {},
+): Promise<Finding[]> => {
+  const perSkillFindings = await Promise.all(
+    skills.map((skill) => validateSkillQuality(skill, options)),
+  );
   return [...perSkillFindings.flat(), ...validateCrossEcosystem(skills)];
 };
 
-const validateSkillQuality = async (skill: SkillRecord): Promise<Finding[]> => {
+const validateSkillQuality = async (
+  skill: SkillRecord,
+  options: QualityRuleOptions,
+): Promise<Finding[]> => {
   if (!skill.parseResult.ok) return [];
 
   const findings: Finding[] = [];
@@ -36,8 +56,8 @@ const validateSkillQuality = async (skill: SkillRecord): Promise<Finding[]> => {
   findings.push(...validateDescription(skill, description));
   findings.push(...validateBody(skill, body, frontMatterLineCount));
   findings.push(...validateProgressiveDisclosure(skill, body, frontMatterLineCount));
-  findings.push(...(await validateResources(skill, body, frontMatterLineCount)));
-  findings.push(...(await validateEvals(skill, body)));
+  findings.push(...(await validateResources(skill, body, frontMatterLineCount, options)));
+  findings.push(...(await validateEvals(skill, body, options)));
 
   return findings;
 };
@@ -243,6 +263,7 @@ const validateResources = async (
   skill: SkillRecord,
   body: string,
   frontMatterLineCount: number,
+  options: QualityRuleOptions,
 ): Promise<Finding[]> => {
   const findings: Finding[] = [];
   const referencedPaths = [...new Set(skill.content.match(RESOURCE_REFERENCE_PATTERN) ?? [])];
@@ -265,7 +286,7 @@ const validateResources = async (
       continue;
     }
 
-    const resourceStatus = await resolveResourceStatus(skill.skillDir, referencePath);
+    const resourceStatus = await resolveResourceStatus(skill, referencePath, options);
     if (resourceStatus === "escapes") {
       findings.push(
         createFinding(skill, {
@@ -348,11 +369,14 @@ const validateResources = async (
   return findings;
 };
 
-const validateEvals = async (skill: SkillRecord, body: string): Promise<Finding[]> => {
+const validateEvals = async (
+  skill: SkillRecord,
+  body: string,
+  options: QualityRuleOptions,
+): Promise<Finding[]> => {
   if (!isNonTrivialSkill(body)) return [];
 
-  const evalsPath = path.join(skill.skillDir, "evals", "evals.json");
-  if (await exists(evalsPath)) return [];
+  if (await evalsExist(skill, options)) return [];
 
   return [
     createFinding(skill, {
@@ -487,13 +511,19 @@ const exists = async (targetPath: string): Promise<boolean> => {
   }
 };
 
-type ResourceStatus = "inside" | "missing" | "escapes";
-
 const resolveResourceStatus = async (
-  skillDir: string,
+  skill: SkillRecord,
   referencePath: string,
+  options: QualityRuleOptions,
 ): Promise<ResourceStatus> => {
-  const targetPath = path.resolve(skillDir, referencePath);
+  if (options.resourceStatus !== undefined) {
+    return options.resourceStatus(skill, referencePath);
+  }
+  if (options.resourceExists !== undefined) {
+    return (await options.resourceExists(skill, referencePath)) ? "inside" : "missing";
+  }
+
+  const targetPath = path.resolve(skill.skillDir, referencePath);
   let resolvedTarget: string;
   try {
     resolvedTarget = await realpath(targetPath);
@@ -501,8 +531,13 @@ const resolveResourceStatus = async (
     return "missing";
   }
 
-  const resolvedSkillDir = await realpath(skillDir);
+  const resolvedSkillDir = await realpath(skill.skillDir);
   return isPathInside(resolvedSkillDir, resolvedTarget) ? "inside" : "escapes";
+};
+
+const evalsExist = async (skill: SkillRecord, options: QualityRuleOptions): Promise<boolean> => {
+  if (options.evalsExist !== undefined) return options.evalsExist(skill);
+  return exists(path.join(skill.skillDir, "evals", "evals.json"));
 };
 
 const isPathInside = (parentPath: string, targetPath: string): boolean => {
