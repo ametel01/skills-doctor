@@ -153,6 +153,48 @@ describe("quality rules", () => {
     expect(missingAsset?.category).toBe("assets");
   });
 
+  it("reports help guidance issues for existing script references", async () => {
+    const skillDir = path.join(directory, "existing-script-skill");
+    await mkdir(path.join(skillDir, "scripts"), { recursive: true });
+    await writeFile(path.join(skillDir, "scripts", "tool.py"), "print('ok')\n");
+    const skill = buildRecordAt(skillDir, "existing-script-skill", [
+      "---",
+      "name: existing-script-skill",
+      "description: Use this skill when checking existing script guidance.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Run scripts/tool.py against the input file.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).toContain("script-without-help-guidance");
+    expect(ruleIds).not.toContain("missing-referenced-resource");
+  });
+
+  it("accepts existing script references that document --help", async () => {
+    const skillDir = path.join(directory, "script-help-skill");
+    await mkdir(path.join(skillDir, "scripts"), { recursive: true });
+    await writeFile(path.join(skillDir, "scripts", "tool.py"), "print('ok')\n");
+    const skill = buildRecordAt(skillDir, "script-help-skill", [
+      "---",
+      "name: script-help-skill",
+      "description: Use this skill when checking script help guidance.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Run scripts/tool.py --help to inspect options before using it.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).not.toContain("script-without-help-guidance");
+    expect(ruleIds).not.toContain("missing-referenced-resource");
+  });
+
   it("reports divergent same-name skills across Claude and Codex roots", async () => {
     await writeSkill({
       root: path.join(directory, ".claude", "skills", "shared-skill"),

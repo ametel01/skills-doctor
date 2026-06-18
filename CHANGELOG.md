@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Recognized normal `--help` mentions when checking script help guidance.
 - Prevented long per-skill handoff report filenames from colliding after truncation.
 - Returned JSON error reports for parse-level CLI failures when `--json` is set.
 - Made the local `bun run dev` script execute the same CLI bin path used by packaged runs.
@@ -20,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Tests
 
+- Covered script help guidance warnings for existing script references.
 - Added packaged CLI smoke coverage for JSON stdout and blocking-scan exit behavior.
 
 ## [0.3.1] - 2026-06-16

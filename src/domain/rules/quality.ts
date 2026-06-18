@@ -298,7 +298,7 @@ const validateResources = async (
       continue;
     }
 
-    if (referencePath.startsWith("scripts/") && !/\b--help\b/.test(body)) {
+    if (referencePath.startsWith("scripts/") && !body.includes("--help")) {
       findings.push(
         createFinding(skill, {
           ruleId: "script-without-help-guidance",
