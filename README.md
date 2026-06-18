@@ -164,16 +164,21 @@ agent then follows its own configuration.
 Before tagging a release:
 
 ```bash
+VERSION=<x.y.z>
 bun run verify
 bun run pack:dry-run
-node scripts/extract-release-notes.mjs 0.1.0
+node scripts/extract-release-notes.mjs "$VERSION"
 ```
 
 Then:
 
 1. Update `package.json` version.
 2. Move changelog entries from `Unreleased` into `## [x.y.z] - YYYY-MM-DD`.
-3. Commit the release prep.
-4. Tag `v<x.y.z>`.
-5. Ensure npm trusted publishing is configured for this repository's release workflow.
-6. Push the tag to trigger the release workflow.
+3. Confirm `node scripts/extract-release-notes.mjs "$VERSION"` prints the intended notes.
+4. Commit the release prep.
+5. Tag `v<x.y.z>`.
+6. Ensure npm trusted publishing is configured for this repository's release workflow.
+7. Push the tag to trigger the release workflow.
+
+The release workflow derives the same version from the pushed tag with
+`node scripts/extract-release-notes.mjs "${GITHUB_REF_NAME#v}"`.
