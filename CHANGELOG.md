@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Wrote repair handoff reports and prompts before stopping when no local `claude` or `codex` agent is available.
 - Recognized normal `--help` mentions when checking script help guidance.
 - Prevented long per-skill handoff report filenames from colliding after truncation.
 - Returned JSON error reports for parse-level CLI failures when `--json` is set.

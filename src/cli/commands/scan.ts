@@ -378,33 +378,34 @@ const runRepairAgentFlow = async (
   input: ReviewFindingsInput,
 ): Promise<ScanReport | undefined> => {
   try {
-    const agent = await chooseRepairAgent({
-      prompts: input.prompts,
-      isAvailable: input.isRepairAgentAvailable,
-    });
-    if (agent === undefined) {
-      input.write("Repair handoff cancelled.\n");
-      return undefined;
-    }
     const handoff = await prepareRepairHandoff({
       report,
       prompts: input.prompts,
       outputRoot: input.repairReportOutputRoot,
       timestamp: input.repairReportTimestamp,
     });
+    let agent: Awaited<ReturnType<typeof chooseRepairAgent>>;
+    try {
+      agent = await chooseRepairAgent({
+        prompts: input.prompts,
+        isAvailable: input.isRepairAgentAvailable,
+      });
+    } catch (error) {
+      if (error instanceof CliInputError) {
+        writeRepairHandoffSummary(handoff, input.write);
+        input.write(`${error.message}\n`);
+        return undefined;
+      }
+      throw error;
+    }
+    if (agent === undefined) {
+      writeRepairHandoffSummary(handoff, input.write);
+      input.write("Repair handoff cancelled.\n");
+      return undefined;
+    }
     input.write(`Selected ${agent.displayName}.\n`);
     input.write(`Launch preview: ${formatRepairAgentPreview(agent.id)}\n`);
-    if (handoff.reportDirectory !== undefined) {
-      input.write(`Report directory: ${handoff.reportDirectory}\n`);
-    }
-    if (handoff.promptPath !== undefined) {
-      input.write(`Repair prompt: ${handoff.promptPath}\n`);
-    } else {
-      input.write(`Repair prompt:\n${handoff.prompt}\n`);
-    }
-    if (handoff.reportWriteError !== undefined) {
-      input.write(`Report write failed: ${handoff.reportWriteError.message}\n`);
-    }
+    writeRepairHandoffSummary(handoff, input.write);
     const shouldLaunch = await input.prompts.confirm(`Launch ${agent.displayName} now?`, false);
     if (!shouldLaunch) {
       input.write("Agent launch cancelled.\n");
@@ -454,6 +455,23 @@ const runRepairAgentFlow = async (
       return undefined;
     }
     throw error;
+  }
+};
+
+const writeRepairHandoffSummary = (
+  handoff: Awaited<ReturnType<typeof prepareRepairHandoff>>,
+  write: (message: string) => void,
+): void => {
+  if (handoff.reportDirectory !== undefined) {
+    write(`Report directory: ${handoff.reportDirectory}\n`);
+  }
+  if (handoff.promptPath !== undefined) {
+    write(`Repair prompt: ${handoff.promptPath}\n`);
+  } else {
+    write(`Repair prompt:\n${handoff.prompt}\n`);
+  }
+  if (handoff.reportWriteError !== undefined) {
+    write(`Report write failed: ${handoff.reportWriteError.message}\n`);
   }
 };
 

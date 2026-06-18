@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -438,6 +438,9 @@ describe("scanAction", () => {
       ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
     );
     const stdout: string[] = [];
+    const launches: string[] = [];
+    const reportOutputRoot = path.join(directory, "reports");
+    const reportDirectory = path.join(reportOutputRoot, "2026-06-18T01-02-03-004Z");
 
     await scanAction(
       ".",
@@ -447,15 +450,34 @@ describe("scanAction", () => {
         homeDir: path.join(directory, "home"),
         env: {},
         stdinIsTty: true,
-        prompts: queuedPrompts({ selects: ["all", "repair"] }),
+        prompts: queuedPrompts({ selects: ["all", "repair", "errors"] }),
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
         isRepairAgentAvailable: async () => false,
+        repairReportOutputRoot: reportOutputRoot,
+        repairReportTimestamp: "2026-06-18T01:02:03.004Z",
+        launchAgent: async (_agentId, prompt) => {
+          launches.push(prompt);
+          return 0;
+        },
       },
     );
 
     expect(stdout.join("")).toContain("No local repair agent was found.");
+    expect(stdout.join("")).toContain(`Report directory: ${reportDirectory}`);
+    expect(stdout.join("")).toContain(
+      `Repair prompt: ${path.join(reportDirectory, "handoff-prompt.md")}`,
+    );
+    await expect(readFile(path.join(reportDirectory, "findings.json"), "utf8")).resolves.toContain(
+      '"findingCount": 1',
+    );
+    await expect(
+      readFile(path.join(reportDirectory, "handoff-prompt.md"), "utf8"),
+    ).resolves.toContain("name-directory-mismatch");
+    expect(launches).toEqual([]);
+    expect(stdout.join("")).not.toContain("Post-handoff re-scan:");
+    expect(process.exitCode).toBe(1);
   });
 
   it("lets the user choose global/root skills when local and global roots exist", async () => {
