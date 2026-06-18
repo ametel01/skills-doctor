@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Tested the declared Node runtime floor in CI and aligned the package engine range to Node 22.13+.
 
+### Changed
+
+- Replaced the stale reusable CLI spec with a Skills Doctor-specific architecture map.
+
 ### Fixed
 
 - Recognized normal `--help` mentions when checking script help guidance.
