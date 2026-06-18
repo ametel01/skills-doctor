@@ -21,21 +21,24 @@ const SKILL_NAME_PATTERN = /^[a-z0-9-]+$/;
 export const buildMissingSkillFinding = (input: {
   readonly root: SkillRoot;
   readonly skillDir: string;
-}): Finding => ({
-  ruleId: "missing-skill",
-  severity: "error",
-  category: "frontmatter",
-  title: "Missing SKILL.md",
-  message: "A skill directory must contain a SKILL.md file.",
-  suggestion:
-    "Create SKILL.md with YAML frontmatter and Markdown instructions, or remove the directory from the skills root.",
-  ecosystem: input.root.ecosystem,
-  rootPath: input.root.rootPath,
-  skillDir: input.skillDir,
-  skillPath: path.join(input.skillDir, "SKILL.md"),
-  skillName: path.basename(input.skillDir),
-  agentRepairable: true,
-});
+}): Finding => {
+  const skillPath = path.join(input.skillDir, "SKILL.md");
+  return {
+    ruleId: "missing-skill",
+    severity: "error",
+    category: "frontmatter",
+    title: "Missing SKILL.md",
+    message: `Skill candidate ${input.skillDir} is missing ${skillPath}.`,
+    suggestion:
+      "Create SKILL.md with YAML frontmatter and Markdown instructions, or remove this directory from the skills root.",
+    ecosystem: input.root.ecosystem,
+    rootPath: input.root.rootPath,
+    skillDir: input.skillDir,
+    skillPath,
+    skillName: path.basename(input.skillDir),
+    agentRepairable: true,
+  };
+};
 
 export const validateStructuralRules = (skill: SkillRecord): Finding[] => {
   if (!skill.parseResult.ok) {

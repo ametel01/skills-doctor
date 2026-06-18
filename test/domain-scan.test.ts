@@ -84,6 +84,7 @@ describe("skill discovery and parsing", () => {
     const skillsRoot = path.join(directory, ".agents", "skills");
     await mkdir(path.join(skillsRoot, "valid-skill"), { recursive: true });
     await mkdir(path.join(skillsRoot, "missing-file-skill"), { recursive: true });
+    await mkdir(path.join(skillsRoot, ".git"), { recursive: true });
     await writeFile(
       path.join(skillsRoot, "valid-skill", "SKILL.md"),
       [
@@ -111,6 +112,15 @@ describe("skill discovery and parsing", () => {
         ruleId: "missing-skill",
         severity: "error",
         skillName: "missing-file-skill",
+        skillDir: path.join(skillsRoot, "missing-file-skill"),
+        skillPath: path.join(skillsRoot, "missing-file-skill", "SKILL.md"),
+        message: `Skill candidate ${path.join(skillsRoot, "missing-file-skill")} is missing ${path.join(skillsRoot, "missing-file-skill", "SKILL.md")}.`,
+      }),
+    );
+    expect(scan.findings).not.toContainEqual(
+      expect.objectContaining({
+        ruleId: "missing-skill",
+        skillName: ".git",
       }),
     );
   });

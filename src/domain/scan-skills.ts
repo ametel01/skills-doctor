@@ -39,7 +39,7 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
     if (entries.length === 0) continue;
 
     const tasks = entries
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((entry, entryIndex) => {
         const skillDir = path.join(root.rootPath, entry.name);

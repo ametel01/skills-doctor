@@ -38,6 +38,7 @@ describe("structural rules", () => {
       severity: "error",
       category: "frontmatter",
       skillName: "empty-skill",
+      message: `Skill candidate ${path.join(directory, ".agents", "skills", "empty-skill")} is missing ${path.join(directory, ".agents", "skills", "empty-skill", "SKILL.md")}.`,
     });
   });
 
