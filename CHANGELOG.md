@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Returned JSON error reports for parse-level CLI failures when `--json` is set.
 - Made the local `bun run dev` script execute the same CLI bin path used by packaged runs.
 - Rejected symlinked skill resource references that resolve outside the skill directory.
 - Preserved custom-root discovery diagnostics in scan reports when interactive scans add a missing custom skills path.

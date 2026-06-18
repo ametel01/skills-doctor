@@ -74,7 +74,36 @@ describe("CLI bin", () => {
       skillCount: 1,
     });
     expect(report.errorCount).toBeGreaterThan(0);
-    expect(report.findings.map((finding) => finding.ruleId)).toContain("name-directory-mismatch");
+    expect(report.findings?.map((finding) => finding.ruleId)).toContain("name-directory-mismatch");
+  });
+
+  it("prints a JSON error report for JSON-mode parse errors", async () => {
+    const result = await runPackagedCli(["--json", "--json-compact", "--bad-flag", directory]);
+    const report = parseSingleJsonReport(result.stdout);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(report).toMatchObject({
+      ok: false,
+      error: {
+        message: expect.stringContaining("unknown option"),
+      },
+    });
+  });
+
+  it("keeps parse errors human-readable outside JSON mode", async () => {
+    const result = await runPackagedCli(["--bad-flag", directory]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("unknown option");
+  });
+
+  it("keeps packaged help output available", async () => {
+    const result = await runPackagedCli(["--help"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Usage: skills-doctor");
   });
 
   const writeSkill = async (input: {
@@ -138,20 +167,22 @@ describe("CLI bin", () => {
     stdout: string,
   ): {
     readonly ok: boolean;
-    readonly skillCount: number;
-    readonly findingCount: number;
-    readonly errorCount: number;
-    readonly findings: readonly { readonly ruleId: string }[];
+    readonly skillCount?: number;
+    readonly findingCount?: number;
+    readonly errorCount?: number;
+    readonly findings?: readonly { readonly ruleId: string }[];
+    readonly error?: { readonly message: string };
   } => {
     const trimmed = stdout.trim();
     expect(trimmed).not.toBe("");
     expect(trimmed.split(/\r?\n/)).toHaveLength(1);
     return JSON.parse(trimmed) as {
       readonly ok: boolean;
-      readonly skillCount: number;
-      readonly findingCount: number;
-      readonly errorCount: number;
-      readonly findings: readonly { readonly ruleId: string }[];
+      readonly skillCount?: number;
+      readonly findingCount?: number;
+      readonly errorCount?: number;
+      readonly findings?: readonly { readonly ruleId: string }[];
+      readonly error?: { readonly message: string };
     };
   };
 });

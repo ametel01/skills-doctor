@@ -1,9 +1,15 @@
+import path from "node:path";
 import { Command } from "commander";
 import packageJson from "../../package.json" with { type: "json" };
 import { scanAction } from "./commands/scan.js";
 import { handleCliError } from "./utils/handle-error.js";
+import { enableJsonMode } from "./utils/json-mode.js";
 
-export const buildProgram = (): Command => {
+export type BuildProgramOptions = {
+  readonly jsonMode?: boolean;
+};
+
+export const buildProgram = (options: BuildProgramOptions = {}): Command => {
   const program = new Command()
     .name("skills-doctor")
     .description("Scan Agent Skills and report quality issues.")
@@ -21,10 +27,22 @@ export const buildProgram = (): Command => {
       },
     );
 
+  if (options.jsonMode) {
+    program.exitOverride();
+    program.configureOutput({
+      writeErr: () => {},
+    });
+  }
+
   return program;
 };
 
 export const main = async (argv: readonly string[] = process.argv): Promise<void> => {
+  const preParseJsonMode = resolvePreParseJsonMode(argv);
+  if (preParseJsonMode !== undefined) {
+    enableJsonMode(preParseJsonMode);
+  }
+
   process.on("SIGINT", () => process.exit(130));
   process.on("SIGTERM", () => process.exit(143));
   process.stdout.on("error", (error: NodeJS.ErrnoException) => {
@@ -32,7 +50,7 @@ export const main = async (argv: readonly string[] = process.argv): Promise<void
   });
 
   try {
-    await buildProgram().parseAsync([...argv]);
+    await buildProgram({ jsonMode: preParseJsonMode !== undefined }).parseAsync([...argv]);
   } finally {
     process.stdin.unref?.();
   }
@@ -41,3 +59,18 @@ export const main = async (argv: readonly string[] = process.argv): Promise<void
 export const runCli = async (argv: readonly string[] = process.argv): Promise<void> => {
   await main(argv).catch(handleCliError);
 };
+
+const resolvePreParseJsonMode = (
+  argv: readonly string[],
+): { readonly compact: boolean; readonly directory: string } | undefined => {
+  const userArgs = argv.slice(2);
+  if (!userArgs.includes("--json")) return undefined;
+
+  return {
+    compact: userArgs.includes("--json-compact"),
+    directory: path.resolve(process.cwd(), findDirectoryArg(userArgs) ?? "."),
+  };
+};
+
+const findDirectoryArg = (args: readonly string[]): string | undefined =>
+  args.find((arg) => arg !== "--" && !arg.startsWith("-"));
