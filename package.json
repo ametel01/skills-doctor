@@ -17,6 +17,7 @@
     "bin/**",
     "dist/**",
     "scripts/**",
+    "skills/**",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"

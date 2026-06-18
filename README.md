@@ -40,6 +40,8 @@ Use the `skills-doctor` skill when people ask for an agent workflow to:
 
 The CLI is the primary source of rule logic and output shape.
 The skill wrapper is a convenience entrypoint so agents can discover and invoke the same scanner from within skill workflows.
+When installed from npm, the wrapper is shipped at `node_modules/skills-doctor/skills/skills-doctor/SKILL.md`.
+Copy or reference that file from an agent skill directory when you want an agent to discover the workflow, but keep scans delegated to `bunx skills-doctor@latest` or the installed `skills-doctor` binary.
 
 ## What It Scans
 
