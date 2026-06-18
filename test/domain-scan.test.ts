@@ -109,6 +109,49 @@ describe("skill discovery and parsing", () => {
     expect(scan.findings.map((finding) => finding.ruleId)).not.toContain("missing-skill");
   });
 
+  it("keeps skill order deterministic across roots and child directories", async () => {
+    const firstRoot = path.join(directory, "first-root");
+    const secondRoot = path.join(directory, "second-root");
+    for (const [root, skillNames] of [
+      [firstRoot, ["zeta-skill", "alpha-skill"]],
+      [secondRoot, ["delta-skill", "beta-skill"]],
+    ] as const) {
+      for (const skillName of skillNames) {
+        const skillDir = path.join(root, skillName);
+        await mkdir(skillDir, { recursive: true });
+        await writeFile(
+          path.join(skillDir, "SKILL.md"),
+          [
+            "---",
+            `name: ${skillName}`,
+            "description: Use this skill when validating deterministic scan order.",
+            "---",
+            "",
+            "Follow the fixture workflow.",
+            "",
+          ].join("\n"),
+        );
+      }
+    }
+
+    const roots = [
+      { ecosystem: "custom" as const, rootPath: firstRoot, source: "custom" as const },
+      { ecosystem: "custom" as const, rootPath: secondRoot, source: "custom" as const },
+    ];
+    const expected = [
+      path.join(firstRoot, "alpha-skill", "SKILL.md"),
+      path.join(firstRoot, "zeta-skill", "SKILL.md"),
+      path.join(secondRoot, "beta-skill", "SKILL.md"),
+      path.join(secondRoot, "delta-skill", "SKILL.md"),
+    ];
+
+    const firstScan = await scanSkillRoots({ roots });
+    const secondScan = await scanSkillRoots({ roots });
+
+    expect(firstScan.skills.map((skill) => skill.skillPath)).toEqual(expected);
+    expect(secondScan.skills.map((skill) => skill.skillPath)).toEqual(expected);
+  });
+
   it("reports unreadable SKILL.md entries while scanning other skills", async () => {
     const skillsRoot = path.join(directory, ".agents", "skills");
     const validSkillDir = path.join(skillsRoot, "valid-skill");
