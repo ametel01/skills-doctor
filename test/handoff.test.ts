@@ -116,6 +116,38 @@ describe("findings directory", () => {
       "missing-description",
     );
   });
+
+  it("keeps per-skill files distinct when long paths share a truncated prefix", async () => {
+    const sharedPrefix = "shared-prefix-".repeat(10);
+    const findings = [
+      makeFinding({
+        ruleId: "first-long-path-rule",
+        skillName: "long-prefix-skill",
+        skillPath: `/repo/.agents/skills/${sharedPrefix}first/SKILL.md`,
+      }),
+      makeFinding({
+        ruleId: "second-long-path-rule",
+        skillName: "long-prefix-skill",
+        skillPath: `/repo/.agents/skills/${sharedPrefix}second/SKILL.md`,
+      }),
+    ];
+    const report = makeReport(findings);
+
+    const result = await writeFindingsDirectory({
+      report,
+      outputRoot: directory,
+      timestamp: "2026-06-17T01:02:03.004Z",
+    });
+
+    expect(result.skillReportPaths).toHaveLength(2);
+    expect(result.skillReportPaths[0]).not.toBe(result.skillReportPaths[1]);
+    await expect(readFile(result.skillReportPaths[0] ?? "", "utf8")).resolves.toContain(
+      "first-long-path-rule",
+    );
+    await expect(readFile(result.skillReportPaths[1] ?? "", "utf8")).resolves.toContain(
+      "second-long-path-rule",
+    );
+  });
 });
 
 describe("repair handoff preparation", () => {

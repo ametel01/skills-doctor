@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ScanReport } from "./build-report.js";
@@ -53,8 +54,10 @@ export const writeFindingsDirectory = async (
   await writeFile(findingsMarkdownPath, renderFindingsMarkdown(input.report, findings));
 
   for (const group of groupFindingsBySkill(findings)) {
-    const uniqueLabel = `${group.skillLabel}-${safeFileName(path.relative(input.report.directory, group.skillPath))}`;
-    const skillReportPath = path.join(skillDirectory, `${uniqueLabel}.md`);
+    const skillReportPath = path.join(
+      skillDirectory,
+      skillReportFileName(group.skillLabel, path.relative(input.report.directory, group.skillPath)),
+    );
     await writeFile(skillReportPath, renderSkillFindingsMarkdown(group.skillLabel, group.findings));
     skillReportPaths.push(skillReportPath);
   }
@@ -141,3 +144,9 @@ const safeFileName = (value: string): string =>
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "skill";
+
+const skillReportFileName = (skillLabel: string, relativeSkillPath: string): string => {
+  const readableName = safeFileName(`${skillLabel}-${relativeSkillPath}`);
+  const pathHash = createHash("sha256").update(relativeSkillPath).digest("hex").slice(0, 8);
+  return `${readableName}-${pathHash}.md`;
+};
