@@ -185,7 +185,7 @@ Then:
 3. Confirm `node scripts/extract-release-notes.mjs "$VERSION"` prints the intended notes.
 4. Commit the release prep.
 5. Tag `v<x.y.z>`.
-6. Ensure npm trusted publishing is configured for this repository's release workflow.
+6. Ensure the `NPM_TOKEN` repository secret can publish the npm package.
 7. Push the tag to trigger the release workflow.
 
 The release workflow derives the same version from the pushed tag with

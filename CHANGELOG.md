@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Reflected blocking diagnostic failures in scan scores so diagnostic-only failures no longer report a perfect score.
 - Reported unreadable direct-child `SKILL.md` entries as blocking diagnostics while continuing to scan other skills.
 - Kept repair handoff prompts available inline when writing `handoff-prompt.md` fails after report-directory creation.
-- Migrated the release workflow from an `NPM_TOKEN` secret to npm trusted publishing with provenance.
+- Kept the release workflow on token-backed `bun publish` until npm trusted publishing is configured for the package.
 
 ### Tests
 
