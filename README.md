@@ -12,7 +12,7 @@ From a repository that contains project-local skills, or from anywhere when you
 want to scan global user-level skills:
 
 ```bash
-bunx skills-doctor@latest
+npx skills-doctor@latest
 ```
 
 For local development in this repo:
@@ -35,13 +35,13 @@ Skills Doctor is also available as an agent-facing skill wrapper at `skills/skil
 
 Use the `skills-doctor` skill when people ask for an agent workflow to:
 
-- audit skills with `bunx skills-doctor@latest --json` for deterministic, machine-readable output.
-- launch interactive repair handoff through `bunx skills-doctor@latest` after explicit consent.
+- audit skills with `npx skills-doctor@latest --json` for deterministic, machine-readable output.
+- launch interactive repair handoff through `npx skills-doctor@latest` after explicit consent.
 
 The CLI is the primary source of rule logic and output shape.
 The skill wrapper is a convenience entrypoint so agents can discover and invoke the same scanner from within skill workflows.
 When installed from npm, the wrapper is shipped at `node_modules/skills-doctor/skills/skills-doctor/SKILL.md`.
-Copy or reference that file from an agent skill directory when you want an agent to discover the workflow, but keep scans delegated to `bunx skills-doctor@latest` or the installed `skills-doctor` binary.
+Copy or reference that file from an agent skill directory when you want an agent to discover the workflow, but keep scans delegated to `npx skills-doctor@latest` or the installed `skills-doctor` binary.
 
 ## What It Scans
 

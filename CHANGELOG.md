@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-18
+
+### Changed
+
+- Documented `npx skills-doctor@latest` as the package-runner command in README examples.
+
+### Fixed
+
+- Ignored hidden metadata directories such as `.git` when scanning skills roots, and made `missing-skill` findings include the full candidate directory and expected `SKILL.md` path.
+
 ## [0.4.0] - 2026-06-18
 
 ### Added
