@@ -21,6 +21,7 @@ export {
 } from "./domain/compare-findings.js";
 export { discoverSkillRoots } from "./domain/discover-skill-roots.js";
 export { parseSkillContent } from "./domain/parse-skill.js";
+export { type RuleCatalogEntry, ruleCatalog } from "./domain/rule-catalog.js";
 export {
   type QualityRuleOptions,
   type ResourceStatus,

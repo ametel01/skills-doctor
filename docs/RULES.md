@@ -7,7 +7,10 @@ Rules are grouped by the scanner category. Severity and intent can be refined he
 | Rule ID | Severity | Category | What it checks |
 | --- | --- | --- | --- |
 | `missing-skill` | error | frontmatter | A manually validated skill directory is missing `SKILL.md`. |
-| `invalid-frontmatter` | error | frontmatter | `SKILL.md` frontmatter is not parseable or incomplete. |
+| `missing-frontmatter` | error | frontmatter | `SKILL.md` does not start with YAML frontmatter delimited by `---`. |
+| `invalid-frontmatter` | error | frontmatter | `SKILL.md` frontmatter could not be read. |
+| `invalid-yaml` | error | frontmatter | `SKILL.md` frontmatter YAML is invalid. |
+| `frontmatter-not-map` | error | frontmatter | `SKILL.md` frontmatter is not a mapping. |
 | `unknown-frontmatter-field` | warning | frontmatter | Frontmatter contains unsupported fields. |
 | `missing-name` | error | frontmatter | Required `name` field is missing or empty. |
 | `missing-description` | error | description | Required `description` field is missing or empty. |

@@ -74,6 +74,8 @@ Rules and scoring:
 Reports and rendering:
 
 - `buildScanReport(input)`: builds the machine-readable `ScanReport`.
+- `ruleCatalog`: structured metadata for emitted rule IDs, severities,
+  categories, and descriptions.
 - `summarizeFindings(findings)`: groups counts by severity, skill, and category.
 - `renderHumanSummary(report, options?)`: renders a short text summary.
 - `resolveScanExitCode(report)`: returns `1` when blocking findings or error
@@ -104,6 +106,7 @@ Exported types include:
 - `ParseResult`
 - `QualityRuleOptions`
 - `ResourceStatus`
+- `RuleCatalogEntry`
 - `ScanReport`
 - `ScanResult`
 - `ScoreLabel`
@@ -221,6 +224,15 @@ type Finding = {
 
 `ruleId` values are documented in `docs/RULES.md`. `line` is present only when
 the scanner can resolve a specific source line.
+
+Use `ruleCatalog` when integrations need structured rule metadata without
+scraping Markdown:
+
+```ts
+import { ruleCatalog } from "skills-doctor";
+
+const metadata = ruleCatalog.find((entry) => entry.ruleId === finding.ruleId);
+```
 
 ## Diagnostic
 

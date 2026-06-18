@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Exposed the rule catalog as structured public API metadata.
 - Added opt-in `--fail-on` and `--min-score` scan quality gates for automation.
 - Included the agent-facing `skills/skills-doctor` wrapper in the npm package.
 - Added injectable resource and eval existence checks for `validateQualityRules`.

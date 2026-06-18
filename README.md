@@ -79,6 +79,7 @@ the Agent Skills standards from <https://agentskills.io/home>, including:
 - divergent same-name skills across Claude and Codex/agents roots
 
 See `docs/RULES.md` for a full rule catalog, severity, and intended rationale.
+Programmatic consumers can import `ruleCatalog` for the same metadata as structured data.
 
 Findings are grouped as blocking errors, warnings, and advisory improvements.
 The human summary opens with a score header showing a face, `0` to `100` score,

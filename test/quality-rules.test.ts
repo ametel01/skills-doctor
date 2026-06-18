@@ -7,6 +7,7 @@ import type { SkillRecord } from "../src/index.js";
 import {
   discoverSkillRoots,
   parseSkillContent,
+  ruleCatalog,
   scanSkillRoots,
   validateQualityRules,
 } from "../src/index.js";
@@ -369,7 +370,11 @@ describe("quality rules", () => {
     expect(ruleIds).not.toContain("missing-referenced-resource");
   });
 
-  it("documents all emitted rule IDs", async () => {
+  it("keeps emitted rule IDs, structured catalog, and docs synchronized", async () => {
+    const parseSource = await readFile(
+      fileURLToPath(new URL("../src/domain/parse-skill.ts", import.meta.url)),
+      "utf8",
+    );
     const qualitySource = await readFile(
       fileURLToPath(new URL("../src/domain/rules/quality.ts", import.meta.url)),
       "utf8",
@@ -378,24 +383,53 @@ describe("quality rules", () => {
       fileURLToPath(new URL("../src/domain/rules/structural.ts", import.meta.url)),
       "utf8",
     );
-    const ruleCatalog = await readFile(
+    const ruleCatalogMarkdown = await readFile(
       fileURLToPath(new URL("../docs/RULES.md", import.meta.url)),
       "utf8",
     );
 
+    const parseRuleIds = Array.from(parseSource.matchAll(/code:\s*"([^"]+)"/g)).map(
+      (match) => match[1],
+    );
     const qualityRuleIds = Array.from(qualitySource.matchAll(/ruleId:\s*"([^"]+)"/g)).map(
       (match) => match[1],
     );
     const structuralRuleIds = Array.from(structuralSource.matchAll(/ruleId:\s*"([^"]+)"/g)).map(
       (match) => match[1],
     );
-    const emittedRuleIds = [...new Set([...qualityRuleIds, ...structuralRuleIds])].sort();
+    const emittedRuleIds = [...new Set([...parseRuleIds, ...qualityRuleIds, ...structuralRuleIds])]
+      .filter((ruleId) => ruleId !== undefined)
+      .sort();
+    const catalogByRuleId = new Map<string, (typeof ruleCatalog)[number]>(
+      ruleCatalog.map((entry) => [entry.ruleId, entry]),
+    );
+    const docsByRuleId = parseRuleCatalogMarkdown(ruleCatalogMarkdown);
 
     for (const ruleId of emittedRuleIds) {
-      expect(ruleCatalog).toContain(`\`${ruleId}\``);
+      expect(catalogByRuleId.has(ruleId)).toBe(true);
+    }
+    for (const entry of ruleCatalog) {
+      const docsEntry = docsByRuleId.get(entry.ruleId);
+      expect(docsEntry).toEqual({
+        severity: entry.severity,
+        categories: entry.categories.join("/"),
+      });
     }
   });
 });
+
+const parseRuleCatalogMarkdown = (
+  markdown: string,
+): Map<string, { readonly severity: string; readonly categories: string }> => {
+  const rows = new Map<string, { readonly severity: string; readonly categories: string }>();
+  for (const match of markdown.matchAll(/^\| `([^`]+)` \| ([^|]+) \| ([^|]+) \| .* \|$/gm)) {
+    const [, ruleId, severity, categories] = match;
+    if (ruleId !== undefined && severity !== undefined && categories !== undefined) {
+      rows.set(ruleId, { severity: severity.trim(), categories: categories.trim() });
+    }
+  }
+  return rows;
+};
 
 const buildRecord = (directoryName: string, lines: readonly string[]): SkillRecord => {
   return buildRecordAt(path.join("/tmp/skills", directoryName), directoryName, lines);
