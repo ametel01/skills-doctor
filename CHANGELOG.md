@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Kept repair handoff prompts available inline when writing `handoff-prompt.md` fails after report-directory creation.
 - Migrated the release workflow from an `NPM_TOKEN` secret to npm trusted publishing with provenance.
 
+### Tests
+
+- Added packaged CLI smoke coverage for JSON stdout and blocking-scan exit behavior.
+
 ## [0.3.1] - 2026-06-16
 
 ### Added
