@@ -252,8 +252,9 @@ Prompts are skipped when:
 - stdin is not interactive
 
 When prompts are skipped, the CLI should choose conservative defaults only when
-that is unambiguous. Otherwise it should throw a `CliInputError` with clear next
-steps.
+that is unambiguous. A single detected standard root is unambiguous. Multiple
+local/global scopes or multiple Claude/Codex ecosystems are ambiguous and should
+throw a `CliInputError` with clear next steps instead of scanning all roots.
 
 ## Terminal Output
 

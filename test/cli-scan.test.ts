@@ -318,6 +318,47 @@ describe("scanAction", () => {
     ).rejects.toBeInstanceOf(CliInputError);
   });
 
+  it("throws a user error when local and global scopes are ambiguous and prompts are skipped", async () => {
+    const homeDir = path.join(directory, "home");
+    await writeSkill(path.join(directory, ".agents", "skills", "local-skill"), "local-skill");
+    await writeSkill(path.join(homeDir, ".agents", "skills", "global-skill"), "global-skill");
+
+    await expect(
+      scanAction(
+        ".",
+        { yes: true },
+        {
+          cwd: directory,
+          homeDir,
+          stdinIsTty: false,
+          writeStdout: () => {},
+          writeStderr: () => {},
+          spinner: { run: async (_message, operation) => await operation() },
+        },
+      ),
+    ).rejects.toThrow("Multiple local and global skills roots were found");
+  });
+
+  it("throws a user error when ecosystems are ambiguous and prompts are skipped", async () => {
+    await writeSkill(path.join(directory, ".claude", "skills", "claude-skill"), "claude-skill");
+    await writeSkill(path.join(directory, ".agents", "skills", "codex-skill"), "codex-skill");
+
+    await expect(
+      scanAction(
+        ".",
+        { yes: true },
+        {
+          cwd: directory,
+          homeDir: path.join(directory, "home"),
+          stdinIsTty: false,
+          writeStdout: () => {},
+          writeStderr: () => {},
+          spinner: { run: async (_message, operation) => await operation() },
+        },
+      ),
+    ).rejects.toThrow("Multiple Claude and Codex/agents skills roots were found");
+  });
+
   it("launches an injected repair agent and reports fixed findings after re-scan", async () => {
     const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
     await mkdir(skillDir, { recursive: true });

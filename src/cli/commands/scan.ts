@@ -111,6 +111,8 @@ export const scanAction = async (
     });
     roots = selection.roots;
     diagnostics.push(...selection.diagnostics);
+  } else if (skipPrompts) {
+    assertNonInteractiveRootSelectionIsUnambiguous(roots);
   } else if (!skipPrompts) {
     const scopeSelection = await selectRootScopes({
       roots,
@@ -198,6 +200,23 @@ const parseMinScore = (value: string | undefined): number | undefined => {
     throw new CliInputError("Invalid --min-score value. Use a number from 0 to 100.");
   }
   return score;
+};
+
+const assertNonInteractiveRootSelectionIsUnambiguous = (roots: readonly SkillRoot[]): void => {
+  const standardRoots = roots.filter((root) => root.source !== "custom");
+  const standardSources = new Set(standardRoots.map((root) => root.source));
+  if (standardSources.has("local") && standardSources.has("global")) {
+    throw new CliInputError(
+      "Multiple local and global skills roots were found. Re-run interactively to choose which scope to scan.",
+    );
+  }
+
+  const standardEcosystems = new Set(standardRoots.map((root) => root.ecosystem));
+  if (standardEcosystems.has("claude") && standardEcosystems.has("codex")) {
+    throw new CliInputError(
+      "Multiple Claude and Codex/agents skills roots were found. Re-run interactively to choose which ecosystem to scan.",
+    );
+  }
 };
 
 const selectRoots = async (input: {

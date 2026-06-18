@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Made non-interactive scans fail on ambiguous local/global or Claude/Codex root choices instead of scanning all detected roots.
 - Added bounded concurrent `SKILL.md` reads while preserving deterministic scan order.
 - Reused shared grouped-finding indexes for report summaries and grouped output.
 - Made the manual release checklist version-aware and aligned with tag-derived release notes.

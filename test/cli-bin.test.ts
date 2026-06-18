@@ -141,6 +141,33 @@ describe("CLI bin", () => {
     });
   });
 
+  it("prints one JSON error report for ambiguous non-interactive root selection", async () => {
+    await writeSkill({
+      directoryName: "local-skill",
+      name: "local-skill",
+      body: ["## Workflow", "", "- Inspect the local fixture."].join("\n"),
+      evals: true,
+    });
+    await writeSkillAt({
+      skillDir: path.join(homeDirectory, ".agents", "skills", "global-skill"),
+      name: "global-skill",
+      body: ["## Workflow", "", "- Inspect the global fixture."].join("\n"),
+      evals: true,
+    });
+
+    const result = await runPackagedCli(["--json", "--json-compact", "--yes", directory]);
+    const report = parseSingleJsonReport(result.stdout);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(report).toMatchObject({
+      ok: false,
+      error: {
+        message: expect.stringContaining("Multiple local and global skills roots were found"),
+      },
+    });
+  });
+
   it("keeps parse errors human-readable outside JSON mode", async () => {
     const result = await runPackagedCli(["--bad-flag", directory]);
 
@@ -163,7 +190,23 @@ describe("CLI bin", () => {
     readonly body: string;
     readonly evals: boolean;
   }): Promise<void> => {
-    const skillDir = path.join(directory, ".agents", "skills", input.directoryName);
+    await writeSkillAt({
+      skillDir: path.join(directory, ".agents", "skills", input.directoryName),
+      name: input.name,
+      description: input.description,
+      body: input.body,
+      evals: input.evals,
+    });
+  };
+
+  const writeSkillAt = async (input: {
+    readonly skillDir: string;
+    readonly name: string;
+    readonly description?: string | undefined;
+    readonly body: string;
+    readonly evals: boolean;
+  }): Promise<void> => {
+    const skillDir = input.skillDir;
     await mkdir(skillDir, { recursive: true });
     if (input.evals) {
       await mkdir(path.join(skillDir, "evals"), { recursive: true });
