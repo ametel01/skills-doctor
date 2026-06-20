@@ -263,20 +263,22 @@ Cleanup handoff is an explicit post-scan workflow available when usage analysis
 has cleanup recommendations. The CLI:
 
 1. Lets users view usage ranking or cleanup recommendations before launch.
-2. Writes `usage.json` and `usage.md`.
-3. Writes `cleanup-prompt.md`.
-4. Detects available local `claude` and `codex` executables.
-5. Previews the command.
-6. Asks for confirmation before launching the selected agent.
-7. Re-scans and re-analyzes usage after the agent exits.
+2. Lets users choose which unused `disable-candidate` skills to disable.
+3. Writes `usage.json` and `usage.md` with the full usage context.
+4. Writes `cleanup-prompt.md` with only the selected disable candidates.
+5. Detects available local `claude` and `codex` executables.
+6. Previews the command.
+7. Asks for confirmation before launching the selected agent.
+8. Re-scans and re-analyzes usage after the agent exits.
 
 If no findings exist but usage cleanup is available, the same next-step prompt
 still appears. If report writing fails, the CLI keeps an inline cleanup prompt.
 Cleanup prompts must forbid deletion and limit unused global/plugin cleanup to
 reversible Codex skills-config disable operations in `~/.codex/config.toml`.
-Cleanup handoff must act only on `disable-candidate` recommendations and leave
-keep, review, shorten-description, and merge-candidate recommendations as
-read-only report context.
+Cleanup handoff must act only on the user's selected `disable-candidate`
+recommendations and leave unselected candidates, keep, review,
+shorten-description, and merge-candidate recommendations as read-only report
+context.
 Skills disabled through Codex `[[skills.config]]` entries are excluded from
 scan, finding, usage-ranking, and cleanup-candidate results.
 

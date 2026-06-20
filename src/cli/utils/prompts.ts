@@ -5,6 +5,7 @@ export type Choice<Value extends string> = {
   readonly name: string;
   readonly value: Value;
   readonly description?: string;
+  readonly checked?: boolean;
 };
 
 export type PromptAdapter = {

@@ -230,8 +230,9 @@ the scan. `logs_2.sqlite` is optional; integrations can provide
 a hard dependency.
 
 `ScanReportUsage` contains source paths, source diagnostics, context pressure,
-aggregate counts, `skillsByUsage`, recommendations, and top recommendations.
-It does not include raw user prompts or assistant transcript text.
+aggregate counts, `skillsByUsage`, recommendations, and all disable-candidate
+recommendations. It does not include raw user prompts or assistant transcript
+text.
 
 ## Finding
 

@@ -1,12 +1,15 @@
+import type { SkillCleanupRecommendation } from "./analyze-skill-usage.js";
 import type { ScanReport, ScanReportUsage } from "./build-report.js";
 
 export type BuildCleanupHandoffPromptInput = {
   readonly report: ScanReport;
+  readonly recommendations?: readonly SkillCleanupRecommendation[] | undefined;
   readonly reportDirectory?: string | undefined;
 };
 
 export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput): string => {
   const usage = requireUsage(input.report);
+  const recommendations = input.recommendations ?? usage.topRecommendations;
   const lines = [
     "Clean up Agent Skills context pressure using the Skills Doctor usage report.",
     "",
@@ -31,6 +34,7 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
     "- Preserve project-local skills unless there is strong evidence and clear user intent.",
     "- Do not delete skills.",
     "- Only disable skills with a `disable-candidate` recommendation.",
+    "- Disable only the selected skills listed below; leave other cleanup candidates unchanged.",
     "- Do not modify skills recommended as keep, review, shorten-description, or merge-candidate.",
     "- Do not move skill directories.",
     "- For unused global/plugin skills, disable them the same way Codex `/skills` does: add or update `[[skills.config]]` entries in `~/.codex/config.toml` with the skill `path` and `enabled = false`.",
@@ -40,18 +44,18 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
     "- Do not expose raw Codex logs or transcript text.",
     "- Verify by rerunning `npx skills-doctor@latest` after changes.",
     "",
-    "Unused skills to disable:",
+    "Selected unused skills to disable:",
   );
 
-  for (const recommendation of usage.topRecommendations.slice(0, 20)) {
+  for (const recommendation of recommendations) {
     lines.push(
       `- ${recommendation.action} ${recommendation.skillName}`,
       `  Path: ${recommendation.skillPath}`,
       `  Reason: ${recommendation.reason}`,
     );
   }
-  if (usage.topRecommendations.length === 0) {
-    lines.push("- No unused disable candidates were produced.");
+  if (recommendations.length === 0) {
+    lines.push("- No unused disable candidates were selected.");
   }
 
   lines.push(

@@ -211,7 +211,6 @@ describe("scan reports", () => {
           truncatedDescriptionCount: 12,
           budgetLimit: "2%",
         },
-        topRecommendationLimit: 1,
       },
     });
 
@@ -264,7 +263,7 @@ describe("scan reports", () => {
     expect(rendered).toContain("Cleanup candidates: 1 enabled unused skills");
   });
 
-  it("renders the total cleanup candidate count when the handoff batch is capped", () => {
+  it("renders all cleanup candidates without a capped handoff batch", () => {
     const analysis = makeUsageAnalysis();
     const extraRecommendation = {
       action: "disable-candidate" as const,
@@ -292,14 +291,12 @@ describe("scan reports", () => {
           level: "high",
           recentWarningCount: 0,
         },
-        topRecommendationLimit: 1,
       },
     });
 
-    expect(report.usage?.topRecommendations).toHaveLength(1);
-    expect(renderHumanSummary(report)).toContain(
-      "Cleanup candidates: 2 enabled unused skills (1 shown in next cleanup batch)",
-    );
+    expect(report.usage?.topRecommendations).toHaveLength(2);
+    expect(renderHumanSummary(report)).toContain("Cleanup candidates: 2 enabled unused skills");
+    expect(renderHumanSummary(report)).not.toContain("shown in next cleanup batch");
   });
 
   it("colorizes human usage summaries when requested", () => {

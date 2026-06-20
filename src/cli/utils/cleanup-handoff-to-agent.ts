@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { SkillCleanupRecommendation } from "../../domain/analyze-skill-usage.js";
 import { buildCleanupHandoffPrompt } from "../../domain/build-cleanup-handoff-prompt.js";
 import type { ScanReport } from "../../domain/build-report.js";
 import type {
@@ -20,6 +21,7 @@ export type PreparedCleanupHandoff = {
 
 export type PrepareCleanupHandoffInput = {
   readonly report: ScanReport;
+  readonly recommendations?: readonly SkillCleanupRecommendation[] | undefined;
   readonly outputRoot?: string | undefined;
   readonly timestamp?: string | undefined;
   readonly writeDirectory?: typeof writeCleanupDirectory | undefined;
@@ -34,6 +36,14 @@ export const prepareCleanupHandoff = async (
   if (input.report.usage.topRecommendations.length === 0) {
     throw new CliInputError("No cleanup recommendations are available.");
   }
+  if (input.recommendations !== undefined && input.recommendations.length === 0) {
+    throw new CliInputError("No cleanup recommendations were selected.");
+  }
+  if (
+    input.recommendations?.some((recommendation) => recommendation.action !== "disable-candidate")
+  ) {
+    throw new CliInputError("Cleanup handoff can only disable selected unused skills.");
+  }
 
   const reportResult = await tryWriteCleanupDirectory({
     report: input.report,
@@ -43,6 +53,7 @@ export const prepareCleanupHandoff = async (
   });
   const prompt = buildCleanupHandoffPrompt({
     report: input.report,
+    recommendations: input.recommendations,
     reportDirectory: reportResult.result?.directory,
   });
 

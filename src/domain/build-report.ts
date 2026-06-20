@@ -67,7 +67,6 @@ export type BuildScanReportInput = {
 export type BuildScanReportUsageInput = {
   readonly analysis: SkillUsageAnalysis;
   readonly contextPressure: ContextBudgetPressure;
-  readonly topRecommendationLimit?: number | undefined;
 };
 
 export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
@@ -130,9 +129,9 @@ const buildReportUsage = (input: BuildScanReportUsageInput): ScanReportUsage => 
   pluginContributedSkillCount: input.analysis.pluginContributedSkillCount,
   skillsByUsage: input.analysis.skillsByUsage,
   recommendations: input.analysis.recommendations,
-  topRecommendations: input.analysis.recommendations
-    .filter((recommendation) => recommendation.action === "disable-candidate")
-    .slice(0, input.topRecommendationLimit ?? 10),
+  topRecommendations: input.analysis.recommendations.filter(
+    (recommendation) => recommendation.action === "disable-candidate",
+  ),
 });
 
 const countSeverity = (findings: readonly Finding[], severity: Finding["severity"]): number =>

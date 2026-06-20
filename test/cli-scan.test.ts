@@ -332,7 +332,7 @@ describe("scanAction", () => {
     );
 
     expect(report.findingCount).toBe(0);
-    expect(nextStepChoices[0]).toContain("Disable unused skills to reduce context pressure");
+    expect(nextStepChoices[0]).toContain("Choose unused skills to disable");
     expect(nextStepChoices[0]).toContain("View usage ranking");
     expect(nextStepChoices[0]).toContain("View usage recommendations");
     expect(nextStepChoices[0]).not.toContain("Fix skills with Claude or Codex");
@@ -400,7 +400,7 @@ describe("scanAction", () => {
       }),
     ]);
     expect(JSON.stringify(report.usage)).not.toContain("disabled-unused");
-    expect(nextStepChoices[0]).toContain("Disable unused skills to reduce context pressure");
+    expect(nextStepChoices[0]).toContain("Choose unused skills to disable");
   });
 
   it("does not offer cleanup handoff when only used skills are present", async () => {
@@ -524,6 +524,62 @@ describe("scanAction", () => {
     expect(stdout.join("")).toContain("Selected Codex.");
     expect(stdout.join("")).toContain("Cleanup agent launch cancelled.");
     expect(launches).toEqual([]);
+  });
+
+  it("passes only selected unused skills to the cleanup handoff prompt", async () => {
+    const homeDir = path.join(directory, "home");
+    const selectedSkillPath = path.join(
+      homeDir,
+      ".agents",
+      "skills",
+      "selected-unused",
+      "SKILL.md",
+    );
+    const skippedSkillPath = path.join(homeDir, ".agents", "skills", "skipped-unused", "SKILL.md");
+    await writeStrongSkill(path.dirname(selectedSkillPath), "selected-unused");
+    await writeStrongSkill(path.dirname(skippedSkillPath), "skipped-unused");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "No skill announcement here.",
+      },
+    ]);
+    const stdout: string[] = [];
+    const reportOutputRoot = path.join(directory, "cleanup-reports");
+    const reportDirectory = path.join(reportOutputRoot, "2026-06-20T02-03-04-005Z");
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "cleanup"],
+          checked: [selectedSkillPath],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async () => false,
+        cleanupReportOutputRoot: reportOutputRoot,
+        cleanupReportTimestamp: "2026-06-20T02:03:04.005Z",
+      },
+    );
+
+    expect(stdout.join("")).toContain("No local repair agent was found.");
+    const cleanupPrompt = await readFile(path.join(reportDirectory, "cleanup-prompt.md"), "utf8");
+    expect(cleanupPrompt).toContain("selected-unused");
+    expect(cleanupPrompt).not.toContain("skipped-unused");
+    await expect(readFile(path.join(reportDirectory, "usage.json"), "utf8")).resolves.toContain(
+      "selected-unused",
+    );
+    await expect(readFile(path.join(reportDirectory, "usage.json"), "utf8")).resolves.toContain(
+      "skipped-unused",
+    );
   });
 
   it("shows grouped findings when by-skill is selected", async () => {
@@ -1021,7 +1077,8 @@ const writeJsonl = async (filePath: string, records: readonly unknown[]): Promis
 const fakePrompts = (answers: readonly string[]): PromptAdapter => {
   const queue = [...answers];
   return {
-    checkbox: async () => [],
+    checkbox: async <Value extends string>(_message: string, choices: readonly Choice<Value>[]) =>
+      choices.filter((choice) => choice.checked).map((choice) => choice.value),
     confirm: async () => true,
     input: async () => queue.shift() ?? "",
     select: async <Value extends string>() => (queue.shift() ?? "exit") as Value,
@@ -1036,7 +1093,12 @@ const queuedPrompts = (input: {
   const selects = [...input.selects];
   const confirms = [...(input.confirms ?? [])];
   return {
-    checkbox: async <Value extends string>() => [...(input.checked ?? [])] as Value[],
+    checkbox: async <Value extends string>(_message: string, choices: readonly Choice<Value>[]) => {
+      const defaultValues = choices
+        .filter((choice) => choice.checked)
+        .map((choice) => choice.value);
+      return (input.checked ?? defaultValues) as Value[];
+    },
     confirm: async () => confirms.shift() ?? true,
     input: async () => "",
     select: async <Value extends string>() => (selects.shift() ?? "exit") as Value,
@@ -1049,7 +1111,8 @@ const recordingPrompts = (input: {
 }): PromptAdapter => {
   const selects = [...input.selects];
   return {
-    checkbox: async () => [],
+    checkbox: async <Value extends string>(_message: string, choices: readonly Choice<Value>[]) =>
+      choices.filter((choice) => choice.checked).map((choice) => choice.value),
     confirm: async () => true,
     input: async () => "",
     select: async <Value extends string>(message: string, choices: readonly Choice<Value>[]) => {

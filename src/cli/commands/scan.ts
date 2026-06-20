@@ -469,7 +469,7 @@ const reviewScan = async (
       ...(report.usage !== undefined && report.usage.topRecommendations.length > 0
         ? [
             {
-              name: "Disable unused skills to reduce context pressure",
+              name: "Choose unused skills to disable",
               value: "cleanup" as const,
             },
             { name: "View usage ranking", value: "usage-ranking" as const },
@@ -525,8 +525,14 @@ const runCleanupAgentFlow = async (
   input: ReviewFindingsInput,
 ): Promise<ScanReport | undefined> => {
   try {
+    const selectedRecommendations = await selectCleanupRecommendations(report, input);
+    if (selectedRecommendations.length === 0) {
+      input.write("Cleanup handoff cancelled.\n");
+      return undefined;
+    }
     const handoff = await prepareCleanupHandoff({
       report,
+      recommendations: selectedRecommendations,
       outputRoot: input.cleanupReportOutputRoot,
       timestamp: input.cleanupReportTimestamp,
     });
@@ -609,6 +615,34 @@ const runCleanupAgentFlow = async (
     }
     throw error;
   }
+};
+
+const selectCleanupRecommendations = async (
+  report: ScanReport,
+  input: Pick<ReviewFindingsInput, "prompts">,
+): Promise<readonly SkillCleanupRecommendation[]> => {
+  const usage = report.usage;
+  if (usage === undefined) throw new CliInputError("Usage analysis is required before cleanup.");
+  const candidates = usage.recommendations.filter(
+    (recommendation) => recommendation.action === "disable-candidate",
+  );
+  if (candidates.length === 0) return [];
+
+  const defaultPaths = new Set(
+    usage.topRecommendations.map((recommendation) => recommendation.skillPath),
+  );
+  const selectedPaths = new Set(
+    await input.prompts.checkbox(
+      "Select unused skills to disable",
+      candidates.map((recommendation) => ({
+        name: recommendation.skillName,
+        value: recommendation.skillPath,
+        description: compactSkillPath(recommendation.skillPath),
+        checked: defaultPaths.has(recommendation.skillPath),
+      })),
+    ),
+  );
+  return candidates.filter((recommendation) => selectedPaths.has(recommendation.skillPath));
 };
 
 const runRepairAgentFlow = async (

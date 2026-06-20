@@ -197,6 +197,7 @@ describe("cleanup handoff", () => {
     expect(prompt).toContain("Preserve project-local skills");
     expect(prompt).toContain("Do not delete skills");
     expect(prompt).toContain("Only disable skills with a `disable-candidate` recommendation");
+    expect(prompt).toContain("Disable only the selected skills listed below");
     expect(prompt).toContain(
       "Do not modify skills recommended as keep, review, shorten-description, or merge-candidate",
     );
@@ -210,6 +211,36 @@ describe("cleanup handoff", () => {
     expect(prompt).toContain("/tmp/usage-report");
     expect(prompt).toContain("disable-candidate unused-skill");
     expect(prompt).toContain("Make only reversible Codex skills-config disable changes");
+  });
+
+  it("limits cleanup prompts to selected recommendations", () => {
+    const baseUsage = makeUsage();
+    const skippedRecommendation = {
+      action: "disable-candidate" as const,
+      skillName: "skipped-unused",
+      skillPath: "/repo/.agents/skills/skipped-unused/SKILL.md",
+      reason: "No local usage was detected for this non-project skill.",
+      confidence: "none" as const,
+    };
+    const usage = {
+      ...baseUsage,
+      recommendations: [...baseUsage.recommendations, skippedRecommendation],
+      topRecommendations: [...baseUsage.topRecommendations, skippedRecommendation],
+    };
+    const report = makeReport([], usage);
+    const selectedRecommendation = usage.topRecommendations[0];
+    if (selectedRecommendation === undefined) {
+      throw new Error("Expected selected cleanup recommendation.");
+    }
+
+    const prompt = buildCleanupHandoffPrompt({
+      report,
+      recommendations: [selectedRecommendation],
+      reportDirectory: "/tmp/usage-report",
+    });
+
+    expect(prompt).toContain("unused-skill");
+    expect(prompt).not.toContain("skipped-unused");
   });
 
   it("writes usage JSON and Markdown cleanup reports", async () => {

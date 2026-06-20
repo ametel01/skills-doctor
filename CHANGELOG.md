@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-06-20
+
+### Added
+
+- Let users choose which unused cleanup candidates to include in cleanup handoff prompts.
+
+### Changed
+
+- Include all unused cleanup candidates in reports and handoff selection instead of capping the detected list.
+
 ## [0.5.1] - 2026-06-20
 
 ### Changed

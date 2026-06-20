@@ -84,13 +84,8 @@ export const renderHumanSummary = (
     }
     const cleanupCandidateCount = countCleanupCandidates(report);
     if (cleanupCandidateCount > 0) {
-      const shownCount = report.usage.topRecommendations.length;
-      const shownSuffix =
-        shownCount < cleanupCandidateCount
-          ? ` (${warning(String(shownCount), shouldColor)} shown in next cleanup batch)`
-          : "";
       lines.push(
-        `${label("Cleanup candidates", shouldColor)}: ${warning(String(cleanupCandidateCount), shouldColor)} enabled unused skills${shownSuffix}`,
+        `${label("Cleanup candidates", shouldColor)}: ${warning(String(cleanupCandidateCount), shouldColor)} enabled unused skills`,
       );
     }
   }
