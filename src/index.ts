@@ -1,4 +1,8 @@
 export {
+  type BuildCleanupHandoffPromptInput,
+  buildCleanupHandoffPrompt,
+} from "./domain/build-cleanup-handoff-prompt.js";
+export {
   analyzeSkillUsage,
   type AnalyzeSkillUsageInput,
   type SkillCleanupAction,
@@ -71,6 +75,11 @@ export type {
   SkillRecord,
   SkillRoot,
 } from "./domain/types.js";
+export {
+  type CleanupDirectoryInput,
+  type CleanupDirectoryResult,
+  writeCleanupDirectory,
+} from "./domain/write-cleanup-directory.js";
 export {
   type FindingsDirectoryInput,
   type FindingsDirectoryResult,

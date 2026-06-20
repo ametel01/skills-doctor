@@ -306,6 +306,8 @@ describe("scanAction", () => {
     ]);
     const stdout: string[] = [];
     const nextStepChoices: string[][] = [];
+    const reportOutputRoot = path.join(directory, "cleanup-reports");
+    const reportDirectory = path.join(reportOutputRoot, "2026-06-20T01-02-03-004Z");
 
     const report = await scanAction(
       ".",
@@ -316,20 +318,70 @@ describe("scanAction", () => {
         env: {},
         stdinIsTty: true,
         prompts: recordingPrompts({
-          selects: ["all", "cleanup", "exit"],
+          selects: ["all", "cleanup"],
           nextStepChoices,
         }),
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async () => false,
+        cleanupReportOutputRoot: reportOutputRoot,
+        cleanupReportTimestamp: "2026-06-20T01:02:03.004Z",
       },
     );
 
     expect(report.findingCount).toBe(0);
     expect(nextStepChoices[0]).toContain("Clean up unused skills and context-budget pressure");
     expect(nextStepChoices[0]).not.toContain("Fix skills with Claude or Codex");
-    expect(stdout.join("")).toContain("Recommended cleanup:");
-    expect(stdout.join("")).toContain("keep good-skill");
+    expect(stdout.join("")).toContain("No local repair agent was found.");
+    expect(stdout.join("")).toContain(`Report directory: ${reportDirectory}`);
+    expect(stdout.join("")).toContain(
+      `Cleanup prompt: ${path.join(reportDirectory, "cleanup-prompt.md")}`,
+    );
+    await expect(readFile(path.join(reportDirectory, "usage.json"), "utf8")).resolves.toContain(
+      "good-skill",
+    );
+  });
+
+  it("lets users cancel cleanup agent launch after report writing", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const homeDir = path.join(directory, "home");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "Using the `good-skill` skill.",
+      },
+    ]);
+    const stdout: string[] = [];
+    const launches: string[] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "cleanup"],
+          confirms: [true, false],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async (command) => command === "codex",
+        launchAgent: async (_agentId, prompt) => {
+          launches.push(prompt);
+          return 0;
+        },
+      },
+    );
+
+    expect(stdout.join("")).toContain("Selected Codex.");
+    expect(stdout.join("")).toContain("Cleanup agent launch cancelled.");
+    expect(launches).toEqual([]);
   });
 
   it("shows grouped findings when by-skill is selected", async () => {

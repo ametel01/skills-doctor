@@ -3,14 +3,21 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CliInputError } from "../src/cli/utils/handle-error.js";
+import { prepareCleanupHandoff } from "../src/cli/utils/cleanup-handoff-to-agent.js";
 import {
   prepareRepairHandoff,
   type RepairFindingSubset,
 } from "../src/cli/utils/handoff-to-agent.js";
 import type { PromptAdapter } from "../src/cli/utils/prompts.js";
-import type { ScanReport } from "../src/domain/build-report.js";
+import type { ScanReport, ScanReportUsage } from "../src/domain/build-report.js";
 import type { Finding } from "../src/index.js";
-import { buildHandoffPrompt, calculateScore, writeFindingsDirectory } from "../src/index.js";
+import {
+  buildCleanupHandoffPrompt,
+  buildHandoffPrompt,
+  calculateScore,
+  writeCleanupDirectory,
+  writeFindingsDirectory,
+} from "../src/index.js";
 
 describe("handoff prompt", () => {
   it("includes selected roots, exact paths, spec-grounded repair rules, and report path", () => {
@@ -147,6 +154,91 @@ describe("findings directory", () => {
     await expect(readFile(result.skillReportPaths[1] ?? "", "utf8")).resolves.toContain(
       "second-long-path-rule",
     );
+  });
+});
+
+describe("cleanup handoff", () => {
+  let directory: string;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(path.join(tmpdir(), "skills-doctor-cleanup-"));
+  });
+
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("builds a conservative cleanup prompt with npx verification", () => {
+    const report = makeReport([], makeUsage());
+
+    const prompt = buildCleanupHandoffPrompt({
+      report,
+      reportDirectory: "/tmp/usage-report",
+    });
+
+    expect(prompt).toContain("Inspect the usage report first");
+    expect(prompt).toContain("Preserve project-local skills");
+    expect(prompt).toContain("Do not delete skills solely because usage is unknown");
+    expect(prompt).toContain("Do not expose raw Codex logs");
+    expect(prompt).toContain("`npx skills-doctor@latest`");
+    expect(prompt).toContain("/tmp/usage-report");
+    expect(prompt).toContain("disable-candidate unused-skill");
+  });
+
+  it("writes usage JSON and Markdown cleanup reports", async () => {
+    const report = makeReport([], makeUsage());
+
+    const result = await writeCleanupDirectory({
+      report,
+      outputRoot: directory,
+      timestamp: "2026-06-20T01:02:03.004Z",
+    });
+
+    expect(result.directory).toBe(path.join(directory, "2026-06-20T01-02-03-004Z"));
+    await expect(readFile(result.usageJsonPath, "utf8")).resolves.toContain('"usage"');
+    await expect(readFile(result.usageMarkdownPath, "utf8")).resolves.toContain(
+      "# Skills Doctor Usage Cleanup",
+    );
+    await expect(readFile(result.usageMarkdownPath, "utf8")).resolves.toContain(
+      "disable-candidate",
+    );
+  });
+
+  it("prepares cleanup reports and writes cleanup-prompt.md", async () => {
+    const report = makeReport([], makeUsage());
+
+    const handoff = await prepareCleanupHandoff({
+      report,
+      outputRoot: directory,
+      timestamp: "2026-06-20T01:02:03.004Z",
+    });
+
+    const reportDirectory = handoff.reportDirectory;
+    const promptPath = handoff.promptPath;
+    if (reportDirectory === undefined || promptPath === undefined) {
+      throw new Error("Expected cleanup report directory and prompt path.");
+    }
+    expect(promptPath).toBe(path.join(reportDirectory, "cleanup-prompt.md"));
+    await expect(readFile(promptPath, "utf8")).resolves.toContain("npx skills-doctor@latest");
+    await expect(readFile(path.join(reportDirectory, "usage.json"), "utf8")).resolves.toContain(
+      "unused-skill",
+    );
+  });
+
+  it("keeps an inline cleanup prompt when report writing fails", async () => {
+    const report = makeReport([], makeUsage());
+
+    const handoff = await prepareCleanupHandoff({
+      report,
+      writeDirectory: async () => {
+        throw new Error("disk full");
+      },
+    });
+
+    expect(handoff.reportDirectory).toBeUndefined();
+    expect(handoff.promptPath).toBeUndefined();
+    expect(handoff.reportWriteError?.message).toBe("disk full");
+    expect(handoff.prompt).toContain("Usage report directory: unavailable");
   });
 });
 
@@ -342,7 +434,7 @@ const fakePrompts = (input: {
   },
 });
 
-const makeReport = (findings: readonly Finding[]): ScanReport => {
+const makeReport = (findings: readonly Finding[], usage?: ScanReportUsage): ScanReport => {
   const uniqueSkills = [...new Set(findings.map((finding) => finding.skillPath))];
   return {
     schemaVersion: 1,
@@ -371,6 +463,7 @@ const makeReport = (findings: readonly Finding[]): ScanReport => {
       };
     }),
     findings,
+    ...(usage === undefined ? {} : { usage }),
     diagnostics: [],
     handoffRequested: true,
   };
@@ -390,4 +483,86 @@ const makeFinding = (overrides: Partial<Finding>): Finding => ({
   skillName: "review-pr",
   agentRepairable: true,
   ...overrides,
+});
+
+const makeUsage = (): ScanReportUsage => ({
+  sourcePaths: ["/repo/.codex/sessions/session.jsonl"],
+  readableSourceCount: 1,
+  diagnostics: [],
+  contextPressure: {
+    level: "high",
+    recentWarningCount: 1,
+    truncatedDescriptionCount: 4,
+    budgetLimit: "2%",
+  },
+  totalSkillsAnalyzed: 2,
+  usedSkillCount: 1,
+  unusedSkillCount: 1,
+  unknownSkillCount: 0,
+  duplicateSkillCount: 0,
+  pluginContributedSkillCount: 1,
+  skillsByUsage: [
+    {
+      skillName: "used-skill",
+      directoryName: "used-skill",
+      ecosystem: "codex",
+      source: "global",
+      rootPath: "/repo/.agents/skills",
+      skillPath: "/repo/.agents/skills/used-skill/SKILL.md",
+      usageCount: 2,
+      tier: "recent",
+      confidence: "high",
+      lastUsedAt: "2026-06-20T00:00:00.000Z",
+      descriptionLength: 120,
+      recommendations: [
+        {
+          action: "keep",
+          skillName: "used-skill",
+          skillPath: "/repo/.agents/skills/used-skill/SKILL.md",
+          reason: "Detected recent or frequent local usage.",
+          confidence: "high",
+        },
+      ],
+    },
+    {
+      skillName: "unused-skill",
+      directoryName: "unused-skill",
+      ecosystem: "codex",
+      source: "global",
+      rootPath: "/repo/.agents/skills",
+      skillPath: "/repo/.agents/skills/unused-skill/SKILL.md",
+      usageCount: 0,
+      tier: "unused",
+      confidence: "none",
+      pluginName: "github",
+      descriptionLength: 80,
+      recommendations: [
+        {
+          action: "disable-candidate",
+          skillName: "unused-skill",
+          skillPath: "/repo/.agents/skills/unused-skill/SKILL.md",
+          reason: "No local usage was detected for this non-project skill.",
+          confidence: "none",
+        },
+      ],
+    },
+  ],
+  recommendations: [
+    {
+      action: "disable-candidate",
+      skillName: "unused-skill",
+      skillPath: "/repo/.agents/skills/unused-skill/SKILL.md",
+      reason: "No local usage was detected for this non-project skill.",
+      confidence: "none",
+    },
+  ],
+  topRecommendations: [
+    {
+      action: "disable-candidate",
+      skillName: "unused-skill",
+      skillPath: "/repo/.agents/skills/unused-skill/SKILL.md",
+      reason: "No local usage was detected for this non-project skill.",
+      confidence: "none",
+    },
+  ],
 });

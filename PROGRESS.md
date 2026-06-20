@@ -18,16 +18,16 @@ next step.
 - [x] Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure Detection
 - [x] Step 4: Extend Reports and Rendering With Usage Analysis
 - [x] Step 5: Add Usage Flags and Main Interactive Prompt Integration
-- [ ] Step 6: Add Cleanup Report Directory and Handoff Prompt
+- [x] Step 6: Add Cleanup Report Directory and Handoff Prompt
 - [ ] Step 7: Add Cleanup Recommendation Views
 - [ ] Step 8: Update Public API, Docs, and Package Smoke Coverage
 - [ ] Step 9: Final End-to-End Verification
 
 ## Current Status
 
-Step 5 is complete.
+Step 6 is complete.
 
-Next step: Step 6: Add Cleanup Report Directory and Handoff Prompt.
+Next step: Step 7: Add Cleanup Recommendation Views.
 
 ## Update Log
 
@@ -136,4 +136,23 @@ Next step: Step 6: Add Cleanup Report Directory and Handoff Prompt.
   - `bun run typecheck`
   - `bun run build`
 - Changelog: added an `Added` entry for the interactive usage-cleanup prompt and `--usage` automation flag.
+- Commit: `f1b94d2` (`feat: add usage cleanup to interactive scan flow`).
+
+### 2026-06-20: Step 6 Cleanup Report Directory and Handoff Prompt
+
+- Added cleanup handoff prompt generation with conservative cleanup rules and `npx skills-doctor@latest` verification guidance.
+- Added cleanup report directory writing for `usage.json` and `usage.md`.
+- Added cleanup handoff preparation that writes `cleanup-prompt.md` and falls back to an inline prompt if report or prompt writing fails.
+- Reused local Claude/Codex agent selection, launch preview, confirmation, and launch helpers for cleanup handoff.
+- Added post-cleanup re-scan and summary output for skill count, context pressure, findings count, and report directory.
+- Added tests for prompt content, report writing, fallback behavior, no-agent cleanup reports, and launch cancellation.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/handoff.test.ts` (1 file, 16 tests)
+  - `bun run test -- test/cli-scan.test.ts` (1 file, 25 tests)
+  - `bun run test` (18 files, 135 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added an `Added` entry for cleanup handoff reports and local agent launch support.
 - Commit: pending until this step is committed.

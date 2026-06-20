@@ -21,6 +21,7 @@ import {
   type ScanGateSeverity,
 } from "../../domain/summarize-findings.js";
 import type { Diagnostic, Finding, SkillRoot } from "../../domain/types.js";
+import { prepareCleanupHandoff } from "../utils/cleanup-handoff-to-agent.js";
 import { CliInputError } from "../utils/handle-error.js";
 import { prepareRepairHandoff } from "../utils/handoff-to-agent.js";
 import { enableJsonMode, writeJsonReport } from "../utils/json-mode.js";
@@ -62,6 +63,8 @@ export type ScanActionOptions = {
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe;
   readonly repairReportOutputRoot?: string;
   readonly repairReportTimestamp?: string;
+  readonly cleanupReportOutputRoot?: string;
+  readonly cleanupReportTimestamp?: string;
   readonly launchAgent?: RepairAgentLauncher;
   readonly discoverUsageSources?: (
     input: DiscoverUsageSourcesInput,
@@ -201,7 +204,12 @@ export const scanAction = async (
           now,
           repairReportOutputRoot: options.repairReportOutputRoot,
           repairReportTimestamp: options.repairReportTimestamp,
+          cleanupReportOutputRoot: options.cleanupReportOutputRoot,
+          cleanupReportTimestamp: options.cleanupReportTimestamp,
           launchAgent: options.launchAgent ?? launchRepairAgent,
+          homeDir: options.homeDir,
+          discoverUsageSources: options.discoverUsageSources ?? discoverUsageSources,
+          analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
         })) ?? report;
     }
   }
@@ -422,7 +430,16 @@ type ReviewFindingsInput = {
   readonly now?: () => number;
   readonly repairReportOutputRoot?: string | undefined;
   readonly repairReportTimestamp?: string | undefined;
+  readonly cleanupReportOutputRoot?: string | undefined;
+  readonly cleanupReportTimestamp?: string | undefined;
   readonly launchAgent: RepairAgentLauncher;
+  readonly homeDir?: string | undefined;
+  readonly discoverUsageSources: (
+    input: DiscoverUsageSourcesInput,
+  ) => Promise<DiscoverUsageSourcesResult>;
+  readonly analyzeSkillUsage: (
+    input: AnalyzeSkillUsageInput,
+  ) => ReturnType<typeof analyzeSkillUsage>;
 };
 
 const reviewScan = async (
@@ -455,8 +472,7 @@ const reviewScan = async (
 
     if (action === "exit") return;
     if (action === "cleanup") {
-      write(renderUsageCleanupSummary(report));
-      continue;
+      return runCleanupAgentFlow(report, input);
     }
     if (action === "repair") {
       return runRepairAgentFlow(report, input);
@@ -471,6 +487,91 @@ const reviewScan = async (
       continue;
     }
     write(renderFindings(selectedFindings));
+  }
+};
+
+const runCleanupAgentFlow = async (
+  report: ScanReport,
+  input: ReviewFindingsInput,
+): Promise<ScanReport | undefined> => {
+  try {
+    const handoff = await prepareCleanupHandoff({
+      report,
+      outputRoot: input.cleanupReportOutputRoot,
+      timestamp: input.cleanupReportTimestamp,
+    });
+    let agent: Awaited<ReturnType<typeof chooseRepairAgent>>;
+    try {
+      agent = await chooseRepairAgent({
+        prompts: input.prompts,
+        isAvailable: input.isRepairAgentAvailable,
+      });
+    } catch (error) {
+      if (error instanceof CliInputError) {
+        writeCleanupHandoffSummary(handoff, input.write);
+        input.write(`${error.message}\n`);
+        return undefined;
+      }
+      throw error;
+    }
+    if (agent === undefined) {
+      writeCleanupHandoffSummary(handoff, input.write);
+      input.write("Cleanup handoff cancelled.\n");
+      return undefined;
+    }
+    input.write(`Selected ${agent.displayName}.\n`);
+    input.write(`Launch preview: ${formatRepairAgentPreview(agent.id)}\n`);
+    writeCleanupHandoffSummary(handoff, input.write);
+    const shouldLaunch = await input.prompts.confirm(`Launch ${agent.displayName} now?`, false);
+    if (!shouldLaunch) {
+      input.write("Cleanup agent launch cancelled.\n");
+      return undefined;
+    }
+
+    let exitCode: number;
+    try {
+      exitCode = await input.launchAgent(agent.id, handoff.prompt, input.cwd);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      input.write(`Cleanup agent launch failed: ${message}\n`);
+      return undefined;
+    }
+    if (exitCode !== 0) {
+      input.write(`Cleanup agent exited with code ${exitCode}.\n`);
+    }
+
+    const reScanStartedAt = input.now?.();
+    const nextScan = await input.spinner.run("Re-scanning skills...", () =>
+      scanSkillRoots({ roots: input.roots }),
+    );
+    const nextElapsedMilliseconds =
+      input.now === undefined || reScanStartedAt === undefined
+        ? 0
+        : Math.max(0, Math.round(input.now() - reScanStartedAt));
+    const nextUsageInput = await input.spinner.run("Re-analyzing local Codex usage...", () =>
+      buildUsageReportInput({
+        scan: nextScan,
+        homeDir: input.homeDir,
+        discoverUsageSources: input.discoverUsageSources,
+        analyzeSkillUsage: input.analyzeSkillUsage,
+      }),
+    );
+    const nextReport = buildScanReport({
+      version: input.version,
+      directory: input.cwd,
+      elapsedMilliseconds: nextElapsedMilliseconds,
+      scan: nextScan,
+      usage: nextUsageInput,
+      handoffRequested: true,
+    });
+    input.write(renderPostCleanupSummary(report, nextReport, handoff.reportDirectory));
+    return nextReport;
+  } catch (error) {
+    if (error instanceof CliInputError) {
+      input.write(`${error.message}\n`);
+      return undefined;
+    }
+    throw error;
   }
 };
 
@@ -576,6 +677,29 @@ const writeRepairHandoffSummary = (
   }
 };
 
+const writeCleanupHandoffSummary = (
+  handoff: Awaited<ReturnType<typeof prepareCleanupHandoff>>,
+  write: (message: string) => void,
+): void => {
+  if (handoff.reportDirectory !== undefined) {
+    write(`Report directory: ${handoff.reportDirectory}\n`);
+  }
+  if (handoff.usageJsonPath !== undefined) {
+    write(`Usage JSON: ${handoff.usageJsonPath}\n`);
+  }
+  if (handoff.usageMarkdownPath !== undefined) {
+    write(`Usage report: ${handoff.usageMarkdownPath}\n`);
+  }
+  if (handoff.promptPath !== undefined) {
+    write(`Cleanup prompt: ${handoff.promptPath}\n`);
+  } else {
+    write(`Cleanup prompt:\n${handoff.prompt}\n`);
+  }
+  if (handoff.reportWriteError !== undefined) {
+    write(`Report write failed: ${handoff.reportWriteError.message}\n`);
+  }
+};
+
 const renderFindings = (findings: readonly Finding[]): string =>
   `${findings
     .map(
@@ -595,27 +719,19 @@ const renderFindingsBySkill = (findings: readonly Finding[]): string => {
     .concat("\n");
 };
 
-const renderUsageCleanupSummary = (report: ScanReport): string => {
-  if (report.usage === undefined) return "Usage analysis has not run.\n";
+const renderPostCleanupSummary = (
+  before: ScanReport,
+  after: ScanReport,
+  reportDirectory: string | undefined,
+): string => {
   const lines = [
-    "Usage analysis:",
-    `- ${report.usage.usedSkillCount} skills with detected usage`,
-    `- ${report.usage.unusedSkillCount} skills with no detected usage`,
-    `- ${report.usage.unknownSkillCount} skills with unknown usage`,
-    `- ${report.usage.duplicateSkillCount} duplicate same-name skills`,
-    `- ${report.usage.pluginContributedSkillCount} plugin-contributed skills`,
-    `Context budget pressure: ${report.usage.contextPressure.level}`,
-    "Recommended cleanup:",
+    "Post-cleanup re-scan:",
+    `Skills: ${before.skillCount} -> ${after.skillCount}`,
+    `Context budget pressure: ${before.usage?.contextPressure.level ?? "unknown"} -> ${after.usage?.contextPressure.level ?? "unknown"}`,
+    `Findings: ${before.findingCount} -> ${after.findingCount}`,
   ];
-  if (report.usage.topRecommendations.length === 0) {
-    lines.push("- No cleanup recommendations.");
-  } else {
-    lines.push(
-      ...report.usage.topRecommendations.map(
-        (recommendation) =>
-          `- ${recommendation.action} ${recommendation.skillName}: ${recommendation.reason}`,
-      ),
-    );
+  if (reportDirectory !== undefined) {
+    lines.push(`Report directory: ${reportDirectory}`);
   }
   return `${lines.join("\n")}\n`;
 };
