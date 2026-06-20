@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added interactive usage ranking and cleanup recommendation views before cleanup handoff.
 - Added cleanup handoff reports, cleanup prompts, and local Claude/Codex launch support for usage cleanup.
 - Added the `--usage` automation flag and interactive usage-cleanup prompt in the main scan flow.
 - Added optional usage analysis in scan reports and human summaries, including context-budget pressure notes.

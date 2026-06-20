@@ -332,6 +332,8 @@ describe("scanAction", () => {
 
     expect(report.findingCount).toBe(0);
     expect(nextStepChoices[0]).toContain("Clean up unused skills and context-budget pressure");
+    expect(nextStepChoices[0]).toContain("View usage ranking");
+    expect(nextStepChoices[0]).toContain("View cleanup recommendations");
     expect(nextStepChoices[0]).not.toContain("Fix skills with Claude or Codex");
     expect(stdout.join("")).toContain("No local repair agent was found.");
     expect(stdout.join("")).toContain(`Report directory: ${reportDirectory}`);
@@ -341,6 +343,43 @@ describe("scanAction", () => {
     await expect(readFile(path.join(reportDirectory, "usage.json"), "utf8")).resolves.toContain(
       "good-skill",
     );
+  });
+
+  it("renders usage ranking and cleanup recommendation views", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const homeDir = path.join(directory, "home");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "Using the `good-skill` skill.",
+      },
+    ]);
+    const stdout: string[] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "usage-ranking", "cleanup-recommendations", "exit"],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    const output = stdout.join("");
+    expect(output).toContain("Usage ranking:");
+    expect(output).toContain("good-skill: recent, 1 use, high confidence");
+    expect(output).toContain("Recommended cleanup:");
+    expect(output).toContain("keep good-skill");
+    expect(output).not.toContain("Using the `good-skill` skill.");
   });
 
   it("lets users cancel cleanup agent launch after report writing", async () => {

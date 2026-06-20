@@ -76,7 +76,15 @@ export type ScanActionOptions = {
 
 type RootSelection = "all" | "claude" | "codex" | "custom";
 type RootScopeSelection = "all" | "local" | "global" | "custom";
-type ReviewAction = "all" | "errors" | "by-skill" | "repair" | "cleanup" | "exit";
+type ReviewAction =
+  | "all"
+  | "errors"
+  | "by-skill"
+  | "repair"
+  | "cleanup"
+  | "usage-ranking"
+  | "cleanup-recommendations"
+  | "exit";
 type RootSelectionResult = {
   readonly roots: readonly SkillRoot[];
   readonly diagnostics: readonly Diagnostic[];
@@ -455,6 +463,11 @@ const reviewScan = async (
               name: "Clean up unused skills and context-budget pressure",
               value: "cleanup" as const,
             },
+            { name: "View usage ranking", value: "usage-ranking" as const },
+            {
+              name: "View cleanup recommendations",
+              value: "cleanup-recommendations" as const,
+            },
           ]
         : []),
       ...(report.findingCount > 0
@@ -473,6 +486,14 @@ const reviewScan = async (
     if (action === "exit") return;
     if (action === "cleanup") {
       return runCleanupAgentFlow(report, input);
+    }
+    if (action === "usage-ranking") {
+      write(renderUsageRanking(report));
+      continue;
+    }
+    if (action === "cleanup-recommendations") {
+      write(renderCleanupRecommendations(report));
+      continue;
     }
     if (action === "repair") {
       return runRepairAgentFlow(report, input);
@@ -717,6 +738,45 @@ const renderFindingsBySkill = (findings: readonly Finding[]): string => {
     })
     .join("\n\n")
     .concat("\n");
+};
+
+const renderUsageRanking = (report: ScanReport): string => {
+  if (report.usage === undefined) return "Usage analysis has not run.\n";
+  const lines = [
+    "Usage ranking:",
+    `- ${report.usage.usedSkillCount} skills with detected usage`,
+    `- ${report.usage.unusedSkillCount} skills with no detected usage`,
+    `- ${report.usage.unknownSkillCount} skills with unknown usage`,
+    `- ${report.usage.duplicateSkillCount} duplicate same-name skills`,
+    `- ${report.usage.pluginContributedSkillCount} plugin-contributed skills`,
+    "",
+  ];
+  for (const skill of report.usage.skillsByUsage.slice(0, 25)) {
+    const lastUsed = skill.lastUsedAt === undefined ? "no timestamp" : skill.lastUsedAt;
+    lines.push(
+      `- ${skill.skillName}: ${skill.tier}, ${skill.usageCount} use${skill.usageCount === 1 ? "" : "s"}, ${skill.confidence} confidence, ${lastUsed}`,
+      `  ${skill.skillPath}`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
+};
+
+const renderCleanupRecommendations = (report: ScanReport): string => {
+  if (report.usage === undefined) return "Usage analysis has not run.\n";
+  const lines = [
+    "Recommended cleanup:",
+    `Context budget pressure: ${report.usage.contextPressure.level}`,
+  ];
+  if (report.usage.recommendations.length === 0) {
+    lines.push("- No cleanup recommendations.");
+  } else {
+    lines.push(
+      ...report.usage.recommendations.slice(0, 25).map((recommendation) => {
+        return `- ${recommendation.action} ${recommendation.skillName}: ${recommendation.reason}\n  ${recommendation.skillPath}`;
+      }),
+    );
+  }
+  return `${lines.join("\n")}\n`;
 };
 
 const renderPostCleanupSummary = (

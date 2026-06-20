@@ -19,15 +19,15 @@ next step.
 - [x] Step 4: Extend Reports and Rendering With Usage Analysis
 - [x] Step 5: Add Usage Flags and Main Interactive Prompt Integration
 - [x] Step 6: Add Cleanup Report Directory and Handoff Prompt
-- [ ] Step 7: Add Cleanup Recommendation Views
+- [x] Step 7: Add Cleanup Recommendation Views
 - [ ] Step 8: Update Public API, Docs, and Package Smoke Coverage
 - [ ] Step 9: Final End-to-End Verification
 
 ## Current Status
 
-Step 6 is complete.
+Step 7 is complete.
 
-Next step: Step 7: Add Cleanup Recommendation Views.
+Next step: Step 8: Update Public API, Docs, and Package Smoke Coverage.
 
 ## Update Log
 
@@ -155,4 +155,21 @@ Next step: Step 7: Add Cleanup Recommendation Views.
   - `bun run typecheck`
   - `bun run build`
 - Changelog: added an `Added` entry for cleanup handoff reports and local agent launch support.
+- Commit: `434d443` (`feat: add usage cleanup handoff`).
+
+### 2026-06-20: Step 7 Cleanup Recommendation Views
+
+- Added read-only interactive views for usage ranking and cleanup recommendations before launching cleanup handoff.
+- Rendered deterministic usage details by skill name, tier, count, confidence, timestamp, and path without raw log text.
+- Rendered cleanup recommendations with action, skill name, reason, and path.
+- Added CLI coverage for opening both usage views and preserving transcript privacy.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/cli-scan.test.ts` (1 file, 26 tests)
+  - `bun run test -- test/skill-usage.test.ts` (1 file, 5 tests)
+  - `bun run test` (18 files, 136 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added an `Added` entry for interactive usage ranking and cleanup recommendation views.
 - Commit: pending until this step is committed.
