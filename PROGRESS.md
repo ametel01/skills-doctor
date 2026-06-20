@@ -16,7 +16,7 @@ next step.
 - [x] Step 1: Baseline Verification
 - [x] Step 2: Add Skill Usage Analysis Domain Module
 - [x] Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure Detection
-- [ ] Step 4: Extend Reports and Rendering With Usage Analysis
+- [x] Step 4: Extend Reports and Rendering With Usage Analysis
 - [ ] Step 5: Add Usage Flags and Main Interactive Prompt Integration
 - [ ] Step 6: Add Cleanup Report Directory and Handoff Prompt
 - [ ] Step 7: Add Cleanup Recommendation Views
@@ -25,9 +25,9 @@ next step.
 
 ## Current Status
 
-Step 3 is complete.
+Step 4 is complete.
 
-Next step: Step 4: Extend Reports and Rendering With Usage Analysis.
+Next step: Step 5: Add Usage Flags and Main Interactive Prompt Integration.
 
 ## Update Log
 
@@ -99,4 +99,21 @@ Next step: Step 4: Extend Reports and Rendering With Usage Analysis.
   - `bun run typecheck`
   - `bun run build`
 - Changelog: added an `Added` entry for Codex usage-source discovery and context-budget pressure detection.
+- Commit: `a471be8` (`feat: detect codex skill usage sources`).
+
+### 2026-06-20: Step 4 Usage Analysis in Reports and Summaries
+
+- Added optional `usage` data to `ScanReport` while preserving the current JSON shape when usage analysis is omitted.
+- Added `ScanReportUsage` and `BuildScanReportUsageInput` public types.
+- Added usage counts, context-pressure details, ranked skills, recommendations, and top recommendations to report usage data.
+- Updated human summaries to render usage counts, context-budget pressure, warning notes, and cleanup candidate counts when usage analysis ran.
+- Added reporting tests for reports with and without usage data and for usage summary rendering.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/reporting.test.ts` (1 file, 9 tests)
+  - `bun run test` (18 files, 127 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added an `Added` entry for usage analysis in scan reports and summaries.
 - Commit: pending until this step is committed.

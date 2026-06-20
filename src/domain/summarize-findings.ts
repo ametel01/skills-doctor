@@ -66,6 +66,18 @@ export const renderHumanSummary = (
   if (options.includeScore ?? true) {
     lines.splice(1, 0, `Score: ${report.score.value} (${report.score.label})`);
   }
+  if (report.usage !== undefined) {
+    lines.push(
+      `Usage analysis: ${report.usage.usedSkillCount} used, ${report.usage.unusedSkillCount} unused, ${report.usage.unknownSkillCount} unknown`,
+    );
+    lines.push(`Context budget pressure: ${report.usage.contextPressure.level}`);
+    if (report.usage.contextPressure.recentWarningCount > 0) {
+      lines.push("Recent Codex logs show skill descriptions were shortened.");
+    }
+    if (report.usage.topRecommendations.length > 0) {
+      lines.push(`Cleanup candidates: ${report.usage.topRecommendations.length}`);
+    }
+  }
 
   return `${lines.join("\n")}\n`;
 };

@@ -15,6 +15,7 @@ import {
   renderHumanSummary,
   resolveScanExitCode,
   type ScanResult,
+  type SkillUsageAnalysis,
   scanSkillRoots,
 } from "../src/index.js";
 
@@ -178,6 +179,88 @@ describe("scan reports", () => {
     expect(report.score.value).toBeLessThan(100);
     expect(resolveScanExitCode(report)).toBe(1);
   });
+
+  it("includes optional usage analysis without changing reports that omit it", () => {
+    const scan = {
+      roots: [],
+      skills: [],
+      findings: [],
+      diagnostics: [],
+    } satisfies ScanResult;
+    const withoutUsage = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan,
+    });
+    const withUsage = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan,
+      usage: {
+        analysis: makeUsageAnalysis(),
+        contextPressure: {
+          level: "high",
+          recentWarningCount: 1,
+          latestWarningTimestamp: "2026-06-20T00:00:00.000Z",
+          totalActiveSkills: 90,
+          includedSkills: 70,
+          omittedSkills: 20,
+          truncatedDescriptionCount: 12,
+          budgetLimit: "2%",
+        },
+        topRecommendationLimit: 1,
+      },
+    });
+
+    expect(Object.keys(JSON.parse(JSON.stringify(withoutUsage)))).not.toContain("usage");
+    expect(withUsage.usage).toMatchObject({
+      sourcePaths: ["/tmp/session.jsonl"],
+      readableSourceCount: 1,
+      totalSkillsAnalyzed: 2,
+      usedSkillCount: 1,
+      unusedSkillCount: 1,
+      unknownSkillCount: 0,
+      duplicateSkillCount: 0,
+      pluginContributedSkillCount: 1,
+      contextPressure: {
+        level: "high",
+        recentWarningCount: 1,
+        budgetLimit: "2%",
+      },
+    });
+    expect(withUsage.usage?.topRecommendations).toHaveLength(1);
+    expect(JSON.stringify(withUsage)).not.toContain("Using the");
+  });
+
+  it("renders usage summaries and context pressure when usage analysis ran", () => {
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan: {
+        roots: [],
+        skills: [],
+        findings: [],
+        diagnostics: [],
+      },
+      usage: {
+        analysis: makeUsageAnalysis(),
+        contextPressure: {
+          level: "high",
+          recentWarningCount: 1,
+        },
+      },
+    });
+
+    const rendered = renderHumanSummary(report);
+
+    expect(rendered).toContain("Usage analysis: 1 used, 1 unused, 0 unknown");
+    expect(rendered).toContain("Context budget pressure: high");
+    expect(rendered).toContain("Recent Codex logs show skill descriptions were shortened.");
+    expect(rendered).toContain("Cleanup candidates: 2");
+  });
 });
 
 const makeFinding = (overrides: Partial<Finding>): Finding => ({
@@ -194,6 +277,103 @@ const makeFinding = (overrides: Partial<Finding>): Finding => ({
   skillName: "example",
   agentRepairable: true,
   ...overrides,
+});
+
+const makeUsageAnalysis = (): SkillUsageAnalysis => ({
+  sourcePaths: ["/tmp/session.jsonl"],
+  readableSourceCount: 1,
+  diagnostics: [
+    {
+      code: "usage-source-unreadable",
+      severity: "warning",
+      message: "Unable to read old source",
+      path: "/tmp/old.jsonl",
+    },
+  ],
+  totalSkills: 2,
+  usedSkillCount: 1,
+  unusedSkillCount: 1,
+  unknownSkillCount: 0,
+  duplicateSkillCount: 0,
+  pluginContributedSkillCount: 1,
+  events: [
+    {
+      skillName: "used-skill",
+      skillPath: "/tmp/skills/used-skill/SKILL.md",
+      sourcePath: "/tmp/session.jsonl",
+      confidence: "high",
+      timestamp: "2026-06-20T00:00:00.000Z",
+    },
+  ],
+  skillsByUsage: [
+    {
+      skillName: "used-skill",
+      directoryName: "used-skill",
+      ecosystem: "codex",
+      source: "global",
+      rootPath: "/tmp/skills",
+      skillPath: "/tmp/skills/used-skill/SKILL.md",
+      usageCount: 1,
+      tier: "recent",
+      confidence: "high",
+      lastUsedAt: "2026-06-20T00:00:00.000Z",
+      pluginName: "github",
+      descriptionLength: 320,
+      recommendations: [
+        {
+          action: "keep",
+          skillName: "used-skill",
+          skillPath: "/tmp/skills/used-skill/SKILL.md",
+          reason: "Detected recent or frequent local usage.",
+          confidence: "high",
+        },
+        {
+          action: "shorten-description",
+          skillName: "used-skill",
+          skillPath: "/tmp/skills/used-skill/SKILL.md",
+          reason: "Skill appears useful but has high description context cost.",
+          confidence: "high",
+        },
+      ],
+    },
+    {
+      skillName: "unused-skill",
+      directoryName: "unused-skill",
+      ecosystem: "codex",
+      source: "global",
+      rootPath: "/tmp/skills",
+      skillPath: "/tmp/skills/unused-skill/SKILL.md",
+      usageCount: 0,
+      tier: "unused",
+      confidence: "none",
+      descriptionLength: 80,
+      recommendations: [
+        {
+          action: "disable-candidate",
+          skillName: "unused-skill",
+          skillPath: "/tmp/skills/unused-skill/SKILL.md",
+          reason: "No local usage was detected for this non-project skill.",
+          confidence: "none",
+        },
+      ],
+    },
+  ],
+  recommendations: [
+    {
+      action: "keep",
+      skillName: "used-skill",
+      skillPath: "/tmp/skills/used-skill/SKILL.md",
+      reason: "Detected recent or frequent local usage.",
+      confidence: "high",
+    },
+    {
+      action: "disable-candidate",
+      skillName: "unused-skill",
+      skillPath: "/tmp/skills/unused-skill/SKILL.md",
+      reason: "No local usage was detected for this non-project skill.",
+      confidence: "none",
+    },
+  ],
 });
 
 describe("json mode", () => {

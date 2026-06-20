@@ -15,7 +15,9 @@ export {
 } from "./domain/build-handoff-prompt.js";
 export type {
   BuildScanReportInput,
+  BuildScanReportUsageInput,
   ScanReport,
+  ScanReportUsage,
   SkillSummary,
 } from "./domain/build-report.js";
 export { buildScanReport } from "./domain/build-report.js";

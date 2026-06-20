@@ -1,5 +1,11 @@
 import { calculateScore, type ScoreSummary } from "./calculate-score.js";
 import { indexFindingsBySkillPath } from "./group-findings.js";
+import type {
+  SkillCleanupRecommendation,
+  SkillUsageAnalysis,
+  SkillUsageSummary,
+} from "./analyze-skill-usage.js";
+import type { ContextBudgetPressure } from "./discover-usage-sources.js";
 import type { Diagnostic, Finding, ScanResult, SkillRoot } from "./types.js";
 
 export type SkillSummary = {
@@ -29,7 +35,24 @@ export type ScanReport = {
   readonly score: ScoreSummary;
   readonly skills: readonly SkillSummary[];
   readonly findings: readonly Finding[];
+  readonly usage?: ScanReportUsage | undefined;
   readonly handoffRequested: boolean;
+};
+
+export type ScanReportUsage = {
+  readonly sourcePaths: readonly string[];
+  readonly readableSourceCount: number;
+  readonly diagnostics: readonly Diagnostic[];
+  readonly contextPressure: ContextBudgetPressure;
+  readonly totalSkillsAnalyzed: number;
+  readonly usedSkillCount: number;
+  readonly unusedSkillCount: number;
+  readonly unknownSkillCount: number;
+  readonly duplicateSkillCount: number;
+  readonly pluginContributedSkillCount: number;
+  readonly skillsByUsage: readonly SkillUsageSummary[];
+  readonly recommendations: readonly SkillCleanupRecommendation[];
+  readonly topRecommendations: readonly SkillCleanupRecommendation[];
 };
 
 export type BuildScanReportInput = {
@@ -37,7 +60,14 @@ export type BuildScanReportInput = {
   readonly directory: string;
   readonly elapsedMilliseconds: number;
   readonly scan: ScanResult;
+  readonly usage?: BuildScanReportUsageInput | undefined;
   readonly handoffRequested?: boolean;
+};
+
+export type BuildScanReportUsageInput = {
+  readonly analysis: SkillUsageAnalysis;
+  readonly contextPressure: ContextBudgetPressure;
+  readonly topRecommendationLimit?: number | undefined;
 };
 
 export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
@@ -82,9 +112,26 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
       };
     }),
     findings: input.scan.findings,
+    ...(input.usage === undefined ? {} : { usage: buildReportUsage(input.usage) }),
     handoffRequested: input.handoffRequested ?? false,
   };
 };
+
+const buildReportUsage = (input: BuildScanReportUsageInput): ScanReportUsage => ({
+  sourcePaths: input.analysis.sourcePaths,
+  readableSourceCount: input.analysis.readableSourceCount,
+  diagnostics: input.analysis.diagnostics,
+  contextPressure: input.contextPressure,
+  totalSkillsAnalyzed: input.analysis.totalSkills,
+  usedSkillCount: input.analysis.usedSkillCount,
+  unusedSkillCount: input.analysis.unusedSkillCount,
+  unknownSkillCount: input.analysis.unknownSkillCount,
+  duplicateSkillCount: input.analysis.duplicateSkillCount,
+  pluginContributedSkillCount: input.analysis.pluginContributedSkillCount,
+  skillsByUsage: input.analysis.skillsByUsage,
+  recommendations: input.analysis.recommendations,
+  topRecommendations: input.analysis.recommendations.slice(0, input.topRecommendationLimit ?? 10),
+});
 
 const countSeverity = (findings: readonly Finding[], severity: Finding["severity"]): number =>
   findings.filter((finding) => finding.severity === severity).length;
