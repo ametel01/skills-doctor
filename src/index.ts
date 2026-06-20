@@ -1,4 +1,15 @@
 export {
+  analyzeSkillUsage,
+  type AnalyzeSkillUsageInput,
+  type SkillCleanupAction,
+  type SkillCleanupRecommendation,
+  type SkillUsageAnalysis,
+  type SkillUsageConfidence,
+  type SkillUsageEvent,
+  type SkillUsageSummary,
+  type SkillUsageTier,
+} from "./domain/analyze-skill-usage.js";
+export {
   type BuildHandoffPromptInput,
   buildHandoffPrompt,
 } from "./domain/build-handoff-prompt.js";

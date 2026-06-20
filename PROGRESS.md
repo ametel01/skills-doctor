@@ -14,7 +14,7 @@ next step.
 
 - [x] Step 0: Progress and Changelog Tracking Setup
 - [x] Step 1: Baseline Verification
-- [ ] Step 2: Add Skill Usage Analysis Domain Module
+- [x] Step 2: Add Skill Usage Analysis Domain Module
 - [ ] Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure Detection
 - [ ] Step 4: Extend Reports and Rendering With Usage Analysis
 - [ ] Step 5: Add Usage Flags and Main Interactive Prompt Integration
@@ -25,9 +25,9 @@ next step.
 
 ## Current Status
 
-Step 1 is complete.
+Step 2 is complete.
 
-Next step: Step 2: Add Skill Usage Analysis Domain Module.
+Next step: Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure Detection.
 
 ## Update Log
 
@@ -62,4 +62,22 @@ Next step: Step 2: Add Skill Usage Analysis Domain Module.
   - `bun run typecheck`
   - `bun run build`
 - Changelog: no entry required because no source behavior changed.
+- Commit: `408d290` (`chore: record baseline verification`).
+
+### 2026-06-20: Step 2 Skill Usage Analysis Domain Module
+
+- Added `analyzeSkillUsage()` with deterministic usage ranking from caller-provided Codex JSONL session sources.
+- Added public usage-analysis types and root package exports.
+- Added high-confidence backticked skill announcement matching and unique medium-confidence phrase matching.
+- Added per-skill usage tiers, deduped usage events, plugin-prefixed alias inference, duplicate-skill detection, and conservative cleanup recommendations.
+- Added fixture-driven tests that use temporary JSONL files and never read real `~/.codex` data.
+- Verified reports omit raw user prompts and assistant transcript text.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/skill-usage.test.ts` (1 file, 5 tests)
+  - `bun run test` (17 files, 119 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added an `Added` entry for the local Codex session usage analyzer.
 - Commit: pending until this step is committed.
