@@ -13,7 +13,7 @@ next step.
 ## Step Checklist
 
 - [x] Step 0: Progress and Changelog Tracking Setup
-- [ ] Step 1: Baseline Verification
+- [x] Step 1: Baseline Verification
 - [ ] Step 2: Add Skill Usage Analysis Domain Module
 - [ ] Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure Detection
 - [ ] Step 4: Extend Reports and Rendering With Usage Analysis
@@ -25,9 +25,9 @@ next step.
 
 ## Current Status
 
-Step 0 is complete.
+Step 1 is complete.
 
-Next step: Step 1: Baseline Verification.
+Next step: Step 2: Add Skill Usage Analysis Domain Module.
 
 ## Update Log
 
@@ -44,4 +44,22 @@ Next step: Step 1: Baseline Verification.
   - `bun run test` (16 files, 114 tests)
   - `bun run typecheck`
   - `bun run build`
+- Commit: `9059460` (`chore: add usage cleanup implementation tracking`).
+
+### 2026-06-20: Step 1 Baseline Verification
+
+- Ran the repository baseline before usage-analysis implementation.
+- `bun install --frozen-lockfile` passed with no lockfile or dependency changes.
+- `bun run verify` passed:
+  - `bun run check`
+  - `bun run typecheck`
+  - `bun run test` (16 files, 114 tests)
+  - `bun run build`
+- Additional quality gates passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test` (16 files, 114 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: no entry required because no source behavior changed.
 - Commit: pending until this step is committed.
