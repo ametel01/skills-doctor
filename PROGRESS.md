@@ -15,7 +15,7 @@ next step.
 - [x] Step 0: Progress and Changelog Tracking Setup
 - [x] Step 1: Baseline Verification
 - [x] Step 2: Add Skill Usage Analysis Domain Module
-- [ ] Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure Detection
+- [x] Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure Detection
 - [ ] Step 4: Extend Reports and Rendering With Usage Analysis
 - [ ] Step 5: Add Usage Flags and Main Interactive Prompt Integration
 - [ ] Step 6: Add Cleanup Report Directory and Handoff Prompt
@@ -25,9 +25,9 @@ next step.
 
 ## Current Status
 
-Step 2 is complete.
+Step 3 is complete.
 
-Next step: Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure Detection.
+Next step: Step 4: Extend Reports and Rendering With Usage Analysis.
 
 ## Update Log
 
@@ -80,4 +80,23 @@ Next step: Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure 
   - `bun run typecheck`
   - `bun run build`
 - Changelog: added an `Added` entry for the local Codex session usage analyzer.
+- Commit: `682692e` (`feat: add skill usage analysis domain module`).
+
+### 2026-06-20: Step 3 Codex Usage Source Discovery and Context Pressure
+
+- Added `discoverUsageSources()` for bounded discovery of known local Codex session JSONL files and `history.jsonl`.
+- Added local context-budget pressure detection for the Codex skill-description warning text.
+- Added optional injected SQLite pressure reading for `logs_2.sqlite` without introducing a hard runtime dependency.
+- Added pressure summary fields for warning counts, latest warning timestamp, active/included/omitted skill counts, truncated descriptions, and budget limit when available.
+- Added non-fatal diagnostics for unreadable usage sources and SQLite adapter failures.
+- Added tests for bounded source discovery, known-path confinement, missing data, unreadable sources, warning extraction, and optional SQLite rows.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/skill-usage.test.ts` (1 file, 5 tests)
+  - `bun run test -- test/usage-sources.test.ts` (1 file, 6 tests)
+  - `bun run test` (18 files, 125 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added an `Added` entry for Codex usage-source discovery and context-budget pressure detection.
 - Commit: pending until this step is committed.

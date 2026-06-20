@@ -31,6 +31,15 @@ export {
   renderPostHandoffSummary,
 } from "./domain/compare-findings.js";
 export { discoverSkillRoots } from "./domain/discover-skill-roots.js";
+export {
+  type CodexPressureRow,
+  type ContextBudgetPressure,
+  type ContextPressureLevel,
+  discoverUsageSources,
+  type DiscoverUsageSourcesInput,
+  type DiscoverUsageSourcesResult,
+  type ReadCodexSqlitePressure,
+} from "./domain/discover-usage-sources.js";
 export { parseSkillContent } from "./domain/parse-skill.js";
 export { type RuleCatalogEntry, ruleCatalog } from "./domain/rule-catalog.js";
 export {
