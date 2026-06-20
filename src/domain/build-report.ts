@@ -1,11 +1,11 @@
-import { calculateScore, type ScoreSummary } from "./calculate-score.js";
-import { indexFindingsBySkillPath } from "./group-findings.js";
 import type {
   SkillCleanupRecommendation,
   SkillUsageAnalysis,
   SkillUsageSummary,
 } from "./analyze-skill-usage.js";
+import { calculateScore, type ScoreSummary } from "./calculate-score.js";
 import type { ContextBudgetPressure } from "./discover-usage-sources.js";
+import { indexFindingsBySkillPath } from "./group-findings.js";
 import type { Diagnostic, Finding, ScanResult, SkillRoot } from "./types.js";
 
 export type SkillSummary = {

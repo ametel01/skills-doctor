@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CliInputError } from "../src/cli/utils/handle-error.js";
 import { prepareCleanupHandoff } from "../src/cli/utils/cleanup-handoff-to-agent.js";
+import { CliInputError } from "../src/cli/utils/handle-error.js";
 import {
   prepareRepairHandoff,
   type RepairFindingSubset,

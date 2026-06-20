@@ -7,7 +7,9 @@ Install the package and import from the package root:
 
 ```ts
 import {
+  analyzeSkillUsage,
   buildScanReport,
+  discoverUsageSources,
   discoverSkillRoots,
   resolveScanExitCode,
   scanSkillRoots,
@@ -54,10 +56,14 @@ provide those values.
 Discovery and scanning:
 
 - `discoverSkillRoots(input)`: finds local, global, and custom skill roots.
+- `discoverUsageSources(input?)`: finds bounded local Codex usage sources under
+  known `~/.codex` paths and detects context-budget pressure.
 - `scanSkillRoots(input)`: reads skills from selected roots, parses `SKILL.md`,
   and returns skills, diagnostics, and findings.
 - `parseSkillContent(content)`: parses one `SKILL.md` string into frontmatter
   and body data.
+- `analyzeSkillUsage(input)`: ranks scanned skills by detected local Codex
+  usage and returns conservative cleanup recommendations.
 
 Rules and scoring:
 
@@ -83,9 +89,12 @@ Reports and rendering:
   warning, advice, or minimum-score gates.
 - `writeFindingsDirectory(input)`: writes `findings.json`, `findings.md`, and
   per-skill report files.
+- `writeCleanupDirectory(input)`: writes `usage.json` and `usage.md` cleanup
+  report files.
 
 Repair handoff helpers:
 
+- `buildCleanupHandoffPrompt(input)`: builds the cleanup prompt body.
 - `buildHandoffPrompt(input)`: builds the repair prompt body.
 - `compareFindings(before, after)`: compares pre- and post-repair findings.
 - `renderPostHandoffSummary(report, comparison)`: renders a post-repair summary.
@@ -94,6 +103,13 @@ Exported types include:
 
 - `BuildHandoffPromptInput`
 - `BuildScanReportInput`
+- `BuildScanReportUsageInput`
+- `BuildCleanupHandoffPromptInput`
+- `CleanupDirectoryInput`
+- `CleanupDirectoryResult`
+- `CodexPressureRow`
+- `ContextBudgetPressure`
+- `ContextPressureLevel`
 - `Diagnostic`
 - `Finding`
 - `FindingCategory`
@@ -108,6 +124,7 @@ Exported types include:
 - `ResourceStatus`
 - `RuleCatalogEntry`
 - `ScanReport`
+- `ScanReportUsage`
 - `ScanResult`
 - `ScoreLabel`
 - `ScoreSummary`
@@ -117,6 +134,11 @@ Exported types include:
 - `SkillRecord`
 - `SkillRoot`
 - `SkillSummary`
+- `SkillUsageAnalysis`
+- `SkillUsageConfidence`
+- `SkillUsageEvent`
+- `SkillUsageSummary`
+- `SkillUsageTier`
 
 ## Filesystem Notes
 
@@ -166,6 +188,7 @@ type ScanReport = {
   readonly score: ScoreSummary;
   readonly skills: readonly SkillSummary[];
   readonly findings: readonly Finding[];
+  readonly usage?: ScanReportUsage;
   readonly handoffRequested: boolean;
 };
 ```
@@ -187,8 +210,28 @@ Fields:
 - `score`: score summary from `calculateScore()`.
 - `skills`: per-skill summaries.
 - `findings`: detailed rule findings.
+- `usage`: optional usage analysis included only when the caller supplies usage
+  data or the CLI runs with `--usage`/interactive usage analysis.
 - `handoffRequested`: whether the report came from a scan that requested repair
   handoff.
+
+## Usage Analysis
+
+Usage source discovery is local, bounded, and best-effort. It checks known Codex
+paths only:
+
+- `~/.codex/sessions/**/*.jsonl`
+- `~/.codex/history.jsonl`
+- `~/.codex/logs_2.sqlite` when an optional adapter is supplied
+
+Unreadable or missing usage sources produce warning diagnostics and do not fail
+the scan. `logs_2.sqlite` is optional; integrations can provide
+`ReadCodexSqlitePressure` to add structured pressure rows without making SQLite
+a hard dependency.
+
+`ScanReportUsage` contains source paths, source diagnostics, context pressure,
+aggregate counts, `skillsByUsage`, recommendations, and top recommendations.
+It does not include raw user prompts or assistant transcript text.
 
 ## Finding
 

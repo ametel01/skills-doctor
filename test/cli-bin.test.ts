@@ -55,6 +55,41 @@ describe("CLI bin", () => {
     });
   });
 
+  it("prints one JSON report with usage for packaged --json --usage scans", async () => {
+    await writeSkill({
+      directoryName: "good-skill",
+      name: "good-skill",
+      body: ["## Workflow", "", "- Inspect the fixture."].join("\n"),
+      evals: true,
+    });
+    await writeJsonl(path.join(homeDirectory, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "Using the `good-skill` skill.",
+      },
+    ]);
+
+    const result = await runPackagedCli([
+      "--json",
+      "--json-compact",
+      "--usage",
+      "--yes",
+      directory,
+    ]);
+    const report = parseSingleJsonReport(result.stdout);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).not.toContain("Skills:");
+    expect(report).toMatchObject({
+      ok: true,
+      usage: {
+        totalSkillsAnalyzed: 1,
+        usedSkillCount: 1,
+      },
+    });
+  });
+
   it("prints one JSON report and exits nonzero for blocking packaged scans", async () => {
     await writeSkill({
       directoryName: "bad-skill",
@@ -224,6 +259,11 @@ describe("CLI bin", () => {
         "",
       ].join("\n"),
     );
+  };
+
+  const writeJsonl = async (filePath: string, records: readonly unknown[]): Promise<void> => {
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
   };
 
   const runPackagedCli = async (

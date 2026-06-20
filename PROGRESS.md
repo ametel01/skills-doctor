@@ -20,14 +20,14 @@ next step.
 - [x] Step 5: Add Usage Flags and Main Interactive Prompt Integration
 - [x] Step 6: Add Cleanup Report Directory and Handoff Prompt
 - [x] Step 7: Add Cleanup Recommendation Views
-- [ ] Step 8: Update Public API, Docs, and Package Smoke Coverage
+- [x] Step 8: Update Public API, Docs, and Package Smoke Coverage
 - [ ] Step 9: Final End-to-End Verification
 
 ## Current Status
 
-Step 7 is complete.
+Step 8 is complete.
 
-Next step: Step 8: Update Public API, Docs, and Package Smoke Coverage.
+Next step: Step 9: Final End-to-End Verification.
 
 ## Update Log
 
@@ -172,4 +172,25 @@ Next step: Step 8: Update Public API, Docs, and Package Smoke Coverage.
   - `bun run typecheck`
   - `bun run build`
 - Changelog: added an `Added` entry for interactive usage ranking and cleanup recommendation views.
-- Commit: pending until this step is committed.
+- Commit: `4dc5719` (`feat: render skill usage cleanup recommendations`).
+
+### 2026-06-20: Step 8 Public API, Docs, and Package Smoke Coverage
+
+- Updated the README with context-budget cleanup, the default `npx skills-doctor@latest` flow, `--usage`, `--json --usage`, `--no-logs`, privacy behavior, and cleanup handoff details.
+- Updated the CLI spec with usage analysis workflow placement, prompt behavior, JSON contract, usage flags, cleanup handoff, and local usage report artifacts.
+- Updated the API docs with public usage helpers and types, the optional `ScanReport.usage` field, usage source diagnostics, and privacy notes.
+- Confirmed root package exports include usage discovery, usage analysis, cleanup prompt generation, and cleanup report writing.
+- Added packaged CLI smoke coverage for `--json --usage` while preserving the one-object JSON stdout contract.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/api-fixtures.test.ts` (1 file, 8 tests)
+  - `bun run test -- test/cli-bin.test.ts` (1 file, 10 tests)
+  - `bun run test` (18 files, 137 tests)
+  - `bun run typecheck`
+  - `bun run build`
+  - `bun run verify`
+  - `bun run pack:dry-run`
+- Note: one parallel `bun run test` attempt observed stale `dist` while `bun run build` was running concurrently; rerunning after build passed.
+- Changelog: added `Added` and `Changed` entries for packaged usage smoke coverage and usage cleanup documentation.
+- Commit: `5656c0a` (`docs: document usage cleanup workflow`).

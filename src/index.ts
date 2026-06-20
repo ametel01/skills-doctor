@@ -1,10 +1,6 @@
 export {
-  type BuildCleanupHandoffPromptInput,
-  buildCleanupHandoffPrompt,
-} from "./domain/build-cleanup-handoff-prompt.js";
-export {
-  analyzeSkillUsage,
   type AnalyzeSkillUsageInput,
+  analyzeSkillUsage,
   type SkillCleanupAction,
   type SkillCleanupRecommendation,
   type SkillUsageAnalysis,
@@ -13,6 +9,10 @@ export {
   type SkillUsageSummary,
   type SkillUsageTier,
 } from "./domain/analyze-skill-usage.js";
+export {
+  type BuildCleanupHandoffPromptInput,
+  buildCleanupHandoffPrompt,
+} from "./domain/build-cleanup-handoff-prompt.js";
 export {
   type BuildHandoffPromptInput,
   buildHandoffPrompt,
@@ -41,9 +41,9 @@ export {
   type CodexPressureRow,
   type ContextBudgetPressure,
   type ContextPressureLevel,
-  discoverUsageSources,
   type DiscoverUsageSourcesInput,
   type DiscoverUsageSourcesResult,
+  discoverUsageSources,
   type ReadCodexSqlitePressure,
 } from "./domain/discover-usage-sources.js";
 export { parseSkillContent } from "./domain/parse-skill.js";

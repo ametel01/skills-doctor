@@ -23,6 +23,7 @@ Use these files as implementation evidence:
   - `src/cli/utils/json-mode.ts`
   - `src/cli/utils/prompts.ts`
   - `src/cli/utils/spinner.ts`
+  - `src/cli/utils/cleanup-handoff-to-agent.ts`
   - `src/cli/utils/handoff-to-agent.ts`
   - `src/cli/utils/launch-agent.ts`
   - `src/cli/utils/run-command.ts`
@@ -34,9 +35,13 @@ Use these files as implementation evidence:
   - `src/domain/rules/structural.ts`
   - `src/domain/rules/quality.ts`
   - `src/domain/build-report.ts`
+  - `src/domain/analyze-skill-usage.ts`
+  - `src/domain/discover-usage-sources.ts`
   - `src/domain/calculate-score.ts`
   - `src/domain/summarize-findings.ts`
+  - `src/domain/write-cleanup-directory.ts`
   - `src/domain/write-findings-directory.ts`
+  - `src/domain/build-cleanup-handoff-prompt.ts`
   - `src/domain/build-handoff-prompt.ts`
   - `src/domain/compare-findings.ts`
   - `src/domain/types.ts`
@@ -117,6 +122,10 @@ The root command currently accepts:
 - optional `[directory]`, defaulting to `.`
 - `--json`
 - `--json-compact`
+- `--usage`
+- `--no-logs`
+- `--fail-on <severity>`
+- `--min-score <number>`
 - `-y, --yes`
 - `-v, --version`
 
@@ -133,10 +142,13 @@ convert them into explicit domain inputs before doing scan work.
 3. Discover available local, global, and custom skill roots.
 4. Prompt for root and ecosystem choices when needed and allowed.
 5. Scan selected roots.
-6. Build a `ScanReport`.
-7. Render JSON or human output.
-8. Set `process.exitCode` when blocking findings or diagnostics remain.
-9. Optionally prepare repair handoff, launch a local agent, and re-scan.
+6. Run usage analysis in interactive mode, or in non-interactive/JSON mode only
+   when `--usage` is set.
+7. Build a `ScanReport`.
+8. Render JSON or human output.
+9. Set `process.exitCode` when blocking findings or diagnostics remain.
+10. Optionally prepare repair or cleanup handoff, launch a local agent, and
+    re-scan.
 
 The command may use prompts and spinners, but domain modules should not import
 prompt or terminal UI dependencies.
@@ -157,6 +169,9 @@ Contract:
 - expected parse and scan errors are represented as JSON error reports when
   `--json` is set.
 - human-readable errors stay on stderr outside JSON mode.
+- `--json` keeps the existing report shape unless `--usage` is also set.
+- `--json --usage` emits the same single JSON object with optional `usage`
+  data included.
 
 Any new output path must preserve this contract. Add or extend
 `test/cli-bin.test.ts` when changing package-level JSON behavior.
@@ -172,6 +187,10 @@ Responsibilities:
   roots.
 - `scan-skills.ts`: read `SKILL.md` files and collect diagnostics for unreadable
   roots or skill files.
+- `discover-usage-sources.ts`: discover bounded local Codex usage sources and
+  detect context-budget pressure.
+- `analyze-skill-usage.ts`: derive per-skill usage rankings and cleanup
+  recommendations from scanned skills and Codex JSONL sources.
 - `parse-skill.ts`: parse YAML frontmatter and body content.
 - `rules/structural.ts`: validate required skill shape.
 - `rules/quality.ts`: validate skill-quality heuristics, resources, scripts,
@@ -182,7 +201,10 @@ Responsibilities:
 - `summarize-findings.ts`: group findings for human output.
 - `write-findings-directory.ts`: write `findings.json`, `findings.md`, and
   per-skill report files.
+- `write-cleanup-directory.ts`: write `usage.json` and `usage.md` cleanup
+  artifacts.
 - `build-handoff-prompt.ts`: create the compact repair prompt.
+- `build-cleanup-handoff-prompt.ts`: create the conservative cleanup prompt.
 - `compare-findings.ts`: compare pre- and post-handoff findings.
 
 When a domain function needs filesystem access, keep it explicit in the module
@@ -205,12 +227,19 @@ Scan reports include:
 - diagnostics
 - score
 - findings
+- optional usage analysis, source diagnostics, context pressure, rankings, and
+  cleanup recommendations
 - handoff-request status
 
 Report files written for repair handoff are local artifacts under
 `.skills-doctor/reports/<timestamp>/` unless a test or caller passes another
 output root. Per-skill report filenames must be deterministic and collision
 resistant.
+
+Usage cleanup report files are also local artifacts under
+`.skills-doctor/reports/<timestamp>/` and include `usage.json`, `usage.md`, and
+`cleanup-prompt.md`. Usage reports must not include raw Codex prompts or full
+assistant transcript text.
 
 ## Repair Handoff
 
@@ -228,6 +257,22 @@ Repair handoff is an explicit post-scan workflow. The CLI:
 Launch behavior is implemented in `src/cli/utils/launch-agent.ts`. Keep command
 execution argument-based, not shell-string based, except where a platform wrapper
 must be resolved deliberately.
+
+## Usage Cleanup Handoff
+
+Cleanup handoff is an explicit post-scan workflow available when usage analysis
+has cleanup recommendations. The CLI:
+
+1. Lets users view usage ranking or cleanup recommendations before launch.
+2. Writes `usage.json` and `usage.md`.
+3. Writes `cleanup-prompt.md`.
+4. Detects available local `claude` and `codex` executables.
+5. Previews the command.
+6. Asks for confirmation before launching the selected agent.
+7. Re-scans and re-analyzes usage after the agent exits.
+
+If no findings exist but usage cleanup is available, the same next-step prompt
+still appears. If report writing fails, the CLI keeps an inline cleanup prompt.
 
 ## Error Handling
 
@@ -266,6 +311,8 @@ terminal surface includes:
 - repair subset prompts
 - agent launch preview
 - post-handoff comparison summary
+- usage ranking and cleanup recommendation views
+- cleanup handoff preview and post-cleanup summary
 
 Spinners are edge-only and live behind `src/cli/utils/spinner.ts`. Never write
 spinner or prompt output to stdout in JSON mode.

@@ -5,6 +5,8 @@ user-level skill roots. It scans `.claude/skills/`, `.agents/skills/`, or both,
 checks each `SKILL.md` against the local skill quality specification derived
 from the Agent Skills standards at <https://agentskills.io/home>, and can hand a
 findings-specific repair prompt to `claude` or `codex`.
+It can also analyze local Codex usage traces to surface unused skills and
+skills context-budget pressure before handing a cleanup prompt to a local agent.
 
 ## Install And Run
 
@@ -94,19 +96,22 @@ score. Score labels are `Great` for 75 or higher, `Needs work` for 50 through
 
 ## Interactive Repair Flow
 
-When findings exist, the CLI can:
+The default interactive `npx skills-doctor@latest` flow scans skills and, when
+available, reads local Codex usage traces from known `~/.codex` paths. It can:
 
 1. Show a concise score, skill count, and issue count.
-2. Let you choose a repair subset: errors, errors plus warnings, all findings,
+2. Show usage ranking and cleanup recommendations when usage analysis ran.
+3. Let you choose a repair subset: errors, errors plus warnings, all findings,
    or selected skills.
-3. Detect local `claude` and `codex` executables.
-4. Write a full report under `.skills-doctor/reports/<timestamp>/`.
-5. Generate a compact `handoff-prompt.md` tailored to the selected findings.
-6. Preview the launch command.
-7. Ask for explicit confirmation before handing the terminal to the selected
+4. Detect local `claude` and `codex` executables.
+5. Write a full report under `.skills-doctor/reports/<timestamp>/`.
+6. Generate a compact `handoff-prompt.md` tailored to the selected findings or
+   `cleanup-prompt.md` tailored to usage cleanup.
+7. Preview the launch command.
+8. Ask for explicit confirmation before handing the terminal to the selected
    agent.
-8. Re-scan the same roots after the agent exits and report fixed, remaining,
-   and new findings.
+9. Re-scan the same roots after the agent exits and report changed findings or
+   cleanup summary details.
 
 Launch mappings:
 
@@ -115,6 +120,11 @@ Launch mappings:
 
 Skills Doctor does not edit skill files during the scan phase. Repairs are made
 only by the local agent after you confirm the handoff.
+
+Cleanup handoff writes `usage.json`, `usage.md`, and `cleanup-prompt.md` before
+any agent launch. The prompt tells the agent to preserve recent/frequent skills,
+avoid deleting unknown-usage skills, prefer non-destructive cleanup for unused
+global/plugin skills, and verify with `npx skills-doctor@latest`.
 
 ## JSON Mode
 
@@ -126,12 +136,19 @@ skills-doctor --json --json-compact
 skills-doctor --yes --json
 skills-doctor --yes --json --fail-on warning
 skills-doctor --yes --json --min-score 95
+skills-doctor --yes --json --usage
 ```
 
 JSON mode writes one machine-readable report to stdout and suppresses prompts
 and spinners. Human logs and expected errors stay out of stdout.
 By default, the exit code fails only for blocking errors and error diagnostics.
 Use `--fail-on warning`, `--fail-on advice`, or `--min-score <number>` for stricter CI gates.
+
+Use `--usage` to include local Codex usage analysis in JSON or non-interactive
+runs. Interactive runs analyze usage by default; pass `--no-logs` to skip local
+Codex log discovery. Usage analysis reads only known local Codex paths such as
+`~/.codex/sessions/**/*.jsonl`, `~/.codex/history.jsonl`, and optional
+`~/.codex/logs_2.sqlite` pressure data.
 
 ## Programmatic API
 
@@ -166,6 +183,10 @@ Skills Doctor reads local skill files and writes local report files. It does not
 upload skill contents or call a hosted model. Content leaves the process only if
 you explicitly launch a local agent CLI such as `claude` or `codex`, and that
 agent then follows its own configuration.
+
+Usage analysis is local and best-effort. Reports include skill names, paths,
+counts, timestamps, confidence, diagnostics, and recommendations, but not raw
+Codex prompts or assistant transcript text.
 
 ## Release Checklist
 

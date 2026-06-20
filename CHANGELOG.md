@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added packaged CLI smoke coverage for `--json --usage` reports.
 - Added interactive usage ranking and cleanup recommendation views before cleanup handoff.
 - Added cleanup handoff reports, cleanup prompts, and local Claude/Codex launch support for usage cleanup.
 - Added the `--usage` automation flag and interactive usage-cleanup prompt in the main scan flow.
@@ -15,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added bounded Codex usage-source discovery and context-budget pressure detection for local session/history logs.
 - Added a local Codex session usage analyzer that ranks scanned skills by detected usage and emits conservative cleanup recommendations.
 - Established progress tracking for the usage cleanup implementation plan.
+
+### Changed
+
+- Documented the usage cleanup workflow, optional usage report shape, public usage helpers, and local Codex log privacy behavior.
 
 ## [0.4.1] - 2026-06-18
 

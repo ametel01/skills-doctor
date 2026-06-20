@@ -12,8 +12,12 @@ describe("public API facade", () => {
     const api = await import("../src/index.js");
 
     expect(api).toHaveProperty("discoverSkillRoots");
+    expect(api).toHaveProperty("discoverUsageSources");
     expect(api).toHaveProperty("scanSkillRoots");
+    expect(api).toHaveProperty("analyzeSkillUsage");
     expect(api).toHaveProperty("buildScanReport");
+    expect(api).toHaveProperty("buildCleanupHandoffPrompt");
+    expect(api).toHaveProperty("writeCleanupDirectory");
     expect(api).toHaveProperty("calculateScore");
     expect(api).toHaveProperty("getScoreLabel");
     expect(api).toHaveProperty("ruleCatalog");
