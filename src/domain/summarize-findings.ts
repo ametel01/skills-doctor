@@ -82,15 +82,26 @@ export const renderHumanSummary = (
     if (report.usage.contextPressure.recentWarningCount > 0) {
       lines.push(warning("Recent Codex logs show skill descriptions were shortened.", shouldColor));
     }
-    if (report.usage.topRecommendations.length > 0) {
+    const cleanupCandidateCount = countCleanupCandidates(report);
+    if (cleanupCandidateCount > 0) {
+      const shownCount = report.usage.topRecommendations.length;
+      const shownSuffix =
+        shownCount < cleanupCandidateCount
+          ? ` (${warning(String(shownCount), shouldColor)} shown in next cleanup batch)`
+          : "";
       lines.push(
-        `${label("Cleanup candidates", shouldColor)}: ${warning(String(report.usage.topRecommendations.length), shouldColor)}`,
+        `${label("Cleanup candidates", shouldColor)}: ${warning(String(cleanupCandidateCount), shouldColor)} enabled unused skills${shownSuffix}`,
       );
     }
   }
 
   return `${lines.join("\n")}\n`;
 };
+
+const countCleanupCandidates = (report: ScanReport): number =>
+  report.usage?.recommendations.filter(
+    (recommendation) => recommendation.action === "disable-candidate",
+  ).length ?? 0;
 
 const countSeverity = (findings: readonly Finding[], severity: Finding["severity"]): number =>
   findings.filter((finding) => finding.severity === severity).length;

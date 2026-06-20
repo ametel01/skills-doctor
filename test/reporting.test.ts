@@ -261,7 +261,45 @@ describe("scan reports", () => {
     expect(rendered).toContain("Usage analysis: 1 used, 1 unused, 0 unknown");
     expect(rendered).toContain("Context budget pressure: high");
     expect(rendered).toContain("Recent Codex logs show skill descriptions were shortened.");
-    expect(rendered).toContain("Cleanup candidates: 1");
+    expect(rendered).toContain("Cleanup candidates: 1 enabled unused skills");
+  });
+
+  it("renders the total cleanup candidate count when the handoff batch is capped", () => {
+    const analysis = makeUsageAnalysis();
+    const extraRecommendation = {
+      action: "disable-candidate" as const,
+      skillName: "another-unused-skill",
+      skillPath: "/tmp/skills/another-unused-skill/SKILL.md",
+      reason: "No local usage was detected for this non-project skill.",
+      confidence: "none" as const,
+    };
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan: {
+        roots: [],
+        skills: [],
+        findings: [],
+        diagnostics: [],
+      },
+      usage: {
+        analysis: {
+          ...analysis,
+          recommendations: [...analysis.recommendations, extraRecommendation],
+        },
+        contextPressure: {
+          level: "high",
+          recentWarningCount: 0,
+        },
+        topRecommendationLimit: 1,
+      },
+    });
+
+    expect(report.usage?.topRecommendations).toHaveLength(1);
+    expect(renderHumanSummary(report)).toContain(
+      "Cleanup candidates: 2 enabled unused skills (1 shown in next cleanup batch)",
+    );
   });
 
   it("colorizes human usage summaries when requested", () => {
@@ -293,7 +331,9 @@ describe("scan reports", () => {
     expect(rendered).toContain(
       "\x1b[33mRecent Codex logs show skill descriptions were shortened.\x1b[39m",
     );
-    expect(rendered).toContain("\x1b[36mCleanup candidates\x1b[39m: \x1b[33m1\x1b[39m");
+    expect(rendered).toContain(
+      "\x1b[36mCleanup candidates\x1b[39m: \x1b[33m1\x1b[39m enabled unused skills",
+    );
   });
 });
 

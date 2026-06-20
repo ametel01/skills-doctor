@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added color to human terminal scan summaries, usage ranking, usage recommendations, findings, and handoff summaries.
 - Limited cleanup handoff to unused `disable-candidate` skills and Codex skills-config disable operations.
 - Reworded interactive cleanup prompts to make clear unused skills are disabled, not deleted or moved.
+- Clarified cleanup summary counts by showing total enabled unused candidates separately from the next cleanup batch size.
 - Documented the usage cleanup workflow, optional usage report shape, public usage helpers, and local Codex log privacy behavior.
 
 ### Fixed
