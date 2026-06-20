@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   type AnalyzeSkillUsageInput,
   analyzeSkillUsage,
+  type SkillCleanupRecommendation,
 } from "../../domain/analyze-skill-usage.js";
 import type { ScanReport } from "../../domain/build-report.js";
 import { buildScanReport } from "../../domain/build-report.js";
@@ -795,38 +796,205 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
   const shouldColor = Boolean(options.color);
   const lines = [
     `${usageLabel("Usage ranking", shouldColor)}:`,
-    `- ${success(String(report.usage.usedSkillCount), shouldColor)} skills with detected usage`,
-    `- ${warning(String(report.usage.unusedSkillCount), shouldColor)} skills with no detected usage`,
-    `- ${dim(String(report.usage.unknownSkillCount), shouldColor)} skills with unknown usage`,
-    `- ${warning(String(report.usage.duplicateSkillCount), shouldColor)} duplicate same-name skills`,
-    `- ${accent(String(report.usage.pluginContributedSkillCount), shouldColor)} plugin-contributed skills`,
     "",
+    usageLabel("Summary", shouldColor),
+    ...renderTable(
+      ["Metric", "Count"],
+      [
+        ["Used", String(report.usage.usedSkillCount)],
+        ["Unused", String(report.usage.unusedSkillCount)],
+        ["Unknown", String(report.usage.unknownSkillCount)],
+        ["Duplicates", String(report.usage.duplicateSkillCount)],
+        ["Plugins", String(report.usage.pluginContributedSkillCount)],
+      ],
+      {
+        colorizers: [
+          (text) => dim(text, shouldColor),
+          (text, rowIndex) => colorizeUsageSummaryCount(rowIndex, text, shouldColor),
+        ],
+      },
+    ),
   ];
-  for (const skill of report.usage.skillsByUsage.slice(0, 25)) {
-    const lastUsed = skill.lastUsedAt === undefined ? "no timestamp" : skill.lastUsedAt;
+
+  for (const tier of ["frequent", "recent", "rare"] as const) {
+    const skills = report.usage.skillsByUsage.filter((skill) => skill.tier === tier);
+    if (skills.length === 0) continue;
     lines.push(
-      `- ${accent(skill.skillName, shouldColor)}: ${colorizeUsageTier(skill.tier, shouldColor)}, ${colorizeUsageCount(skill.usageCount, shouldColor)} use${skill.usageCount === 1 ? "" : "s"}, ${colorizeUsageConfidence(skill.confidence, shouldColor)} confidence, ${dim(lastUsed, shouldColor)}`,
-      `  ${dim(skill.skillPath, shouldColor)}`,
+      "",
+      colorizeUsageTier(toTitleCase(tier), shouldColor),
+      ...renderTable(
+        ["Skill", "Uses", "Confidence", "Last used"],
+        skills.map((skill) => [
+          skill.skillName,
+          String(skill.usageCount),
+          skill.confidence,
+          formatUsageTimestamp(skill.lastUsedAt),
+        ]),
+        {
+          colorizers: [
+            (text) => accent(text, shouldColor),
+            (text) => success(text, shouldColor),
+            (text, _rowIndex, row) =>
+              colorizeUsageConfidence(row[2] ?? text.trim(), text, shouldColor),
+            (text) => dim(text, shouldColor),
+          ],
+        },
+      ),
     );
   }
+
+  const unusedSkills = report.usage.skillsByUsage.filter((skill) => skill.tier === "unused");
+  if (unusedSkills.length > 0) {
+    const previewLimit = 10;
+    const preview = unusedSkills.slice(0, previewLimit);
+    lines.push(
+      "",
+      dim("Unused", shouldColor),
+      `  ${warning(String(unusedSkills.length), shouldColor)} enabled skills have no detected usage.`,
+      `  Showing ${warning(String(preview.length), shouldColor)}. Use "View usage recommendations" for cleanup actions.`,
+      "",
+      ...renderTable(
+        ["Skill", "Path"],
+        preview.map((skill) => [skill.skillName, compactSkillPath(skill.skillPath)]),
+        {
+          colorizers: [(text) => accent(text, shouldColor), (text) => dim(text, shouldColor)],
+        },
+      ),
+    );
+  }
+
   return `${lines.join("\n")}\n`;
 };
 
-const colorizeUsageTier = (tier: string, shouldColor: boolean): string => {
-  if (tier === "frequent" || tier === "recent") return success(tier, shouldColor);
-  if (tier === "rare") return warning(tier, shouldColor);
-  return dim(tier, shouldColor);
+const colorizeUsageTier = (text: string, shouldColor: boolean): string => {
+  const tier = text.toLowerCase();
+  if (tier === "frequent" || tier === "recent") return success(text, shouldColor);
+  if (tier === "rare") return warning(text, shouldColor);
+  return dim(text, shouldColor);
 };
 
-const colorizeUsageCount = (count: number, shouldColor: boolean): string => {
-  if (count > 0) return success(String(count), shouldColor);
-  return dim(String(count), shouldColor);
+const colorizeUsageConfidence = (
+  confidence: string,
+  text: string,
+  shouldColor: boolean,
+): string => {
+  if (confidence === "high") return success(text, shouldColor);
+  if (confidence === "medium") return warning(text, shouldColor);
+  return dim(text, shouldColor);
 };
 
-const colorizeUsageConfidence = (confidence: string, shouldColor: boolean): string => {
-  if (confidence === "high") return success(confidence, shouldColor);
-  if (confidence === "medium") return warning(confidence, shouldColor);
-  return dim(confidence, shouldColor);
+const colorizeUsageSummaryCount = (
+  rowIndex: number,
+  text: string,
+  shouldColor: boolean,
+): string => {
+  if (rowIndex === 0) return success(text, shouldColor);
+  if (rowIndex === 1 || rowIndex === 3) return warning(text, shouldColor);
+  if (rowIndex === 4) return accent(text, shouldColor);
+  return dim(text, shouldColor);
+};
+
+type TableColorizer = (
+  text: string,
+  rowIndex: number,
+  row: readonly string[],
+  columnIndex: number,
+) => string;
+
+const renderTable = (
+  headers: readonly string[],
+  rows: readonly (readonly string[])[],
+  options: {
+    readonly colorizers?: readonly TableColorizer[] | undefined;
+  } = {},
+): readonly string[] => {
+  if (rows.length === 0) return [];
+  const widths = headers.map((header, columnIndex) =>
+    Math.max(header.length, ...rows.map((row) => row[columnIndex]?.length ?? 0)),
+  );
+  return [
+    `  ${headers.map((header, index) => formatTableCell(header, index, headers.length, widths)).join("  ")}`,
+    ...rows.map((row, rowIndex) => {
+      const cells = headers.map((_, columnIndex) => {
+        const plainCell = formatTableCell(
+          row[columnIndex] ?? "",
+          columnIndex,
+          headers.length,
+          widths,
+        );
+        const colorizer = options.colorizers?.[columnIndex];
+        return colorizer === undefined
+          ? plainCell
+          : colorizer(plainCell, rowIndex, row, columnIndex);
+      });
+      return `  ${cells.join("  ")}`;
+    }),
+  ];
+};
+
+const padCell = (text: string, width: number): string => text.padEnd(width, " ");
+
+const formatTableCell = (
+  text: string,
+  columnIndex: number,
+  columnCount: number,
+  widths: readonly number[],
+): string => (columnIndex === columnCount - 1 ? text : padCell(text, widths[columnIndex] ?? 0));
+
+const formatUsageTimestamp = (timestamp: string | undefined): string => {
+  if (timestamp === undefined) return "never";
+  return timestamp.replace("T", " ").slice(0, 16);
+};
+
+const compactSkillPath = (skillPath: string): string => {
+  const normalizedPath = skillPath.split(path.sep).join("/");
+  const agentsMatch = normalizedPath.match(/\/\.agents\/skills\/(.+)$/u);
+  if (agentsMatch?.[1] !== undefined) return `~/.agents/skills/${agentsMatch[1]}`;
+  const claudeMatch = normalizedPath.match(/\/\.claude\/skills\/(.+)$/u);
+  if (claudeMatch?.[1] !== undefined) return `~/.claude/skills/${claudeMatch[1]}`;
+  const pluginMatch = normalizedPath.match(
+    /\/plugins\/cache\/[^/]+\/([^/]+)\/[^/]+\/skills\/(.+)$/u,
+  );
+  if (pluginMatch?.[1] !== undefined && pluginMatch[2] !== undefined) {
+    return `${pluginMatch[1]}:skills/${pluginMatch[2]}`;
+  }
+  return skillPath;
+};
+
+const toTitleCase = (text: string): string =>
+  text.replace(/\w\S*/gu, (word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`);
+
+const groupRecommendations = (
+  recommendations: readonly SkillCleanupRecommendation[],
+): readonly {
+  readonly action: SkillCleanupRecommendation["action"];
+  readonly recommendations: readonly SkillCleanupRecommendation[];
+}[] => {
+  const actionOrder: readonly SkillCleanupRecommendation["action"][] = [
+    "disable-candidate",
+    "shorten-description",
+    "review",
+    "merge-candidate",
+    "keep",
+  ];
+  return actionOrder.flatMap((action) => {
+    const matches = recommendations.filter((recommendation) => recommendation.action === action);
+    return matches.length === 0 ? [] : [{ action, recommendations: matches }];
+  });
+};
+
+const recommendationGroupTitle = (action: SkillCleanupRecommendation["action"]): string => {
+  if (action === "disable-candidate") return "Disable candidates";
+  if (action === "shorten-description") return "Shorten descriptions";
+  if (action === "merge-candidate") return "Merge candidates";
+  if (action === "review") return "Review";
+  return "Keep";
+};
+
+const recommendationPreviewLimit = (action: SkillCleanupRecommendation["action"]): number => {
+  if (action === "disable-candidate") return 10;
+  if (action === "keep") return 10;
+  return 8;
 };
 
 const colorizeSeverity = (
@@ -875,19 +1043,55 @@ const renderCleanupRecommendations = (
   if (report.usage.recommendations.length === 0) {
     lines.push(`- ${dim("No usage recommendations.", shouldColor)}`);
   } else {
-    lines.push(
-      ...report.usage.recommendations.slice(0, 25).map((recommendation) => {
-        return `- ${colorizeCleanupAction(recommendation.action, shouldColor)} ${accent(recommendation.skillName, shouldColor)}: ${recommendation.reason}\n  ${dim(recommendation.skillPath, shouldColor)}`;
-      }),
-    );
+    for (const group of groupRecommendations(report.usage.recommendations)) {
+      const previewLimit = recommendationPreviewLimit(group.action);
+      const shownRecommendations = group.recommendations.slice(0, previewLimit);
+      lines.push(
+        "",
+        colorizeCleanupAction(recommendationGroupTitle(group.action), shouldColor),
+        ...(shownRecommendations.length < group.recommendations.length
+          ? [
+              dim(
+                `  Showing ${shownRecommendations.length} of ${group.recommendations.length}.`,
+                shouldColor,
+              ),
+            ]
+          : []),
+        ...renderTable(
+          ["Skill", "Confidence", "Path"],
+          shownRecommendations.map((recommendation) => [
+            recommendation.skillName,
+            recommendation.confidence,
+            compactSkillPath(recommendation.skillPath),
+          ]),
+          {
+            colorizers: [
+              (text) => accent(text, shouldColor),
+              (text, _rowIndex, row) =>
+                colorizeUsageConfidence(row[1] ?? text.trim(), text, shouldColor),
+              (text) => dim(text, shouldColor),
+            ],
+          },
+        ),
+      );
+    }
   }
   return `${lines.join("\n")}\n`;
 };
 
 const colorizeCleanupAction = (action: string, shouldColor: boolean): string => {
-  if (action === "keep") return success(action, shouldColor);
-  if (action === "disable-candidate") return warning(action, shouldColor);
-  if (action === "review" || action === "shorten-description" || action === "merge-candidate") {
+  const normalizedAction = action.toLowerCase();
+  if (normalizedAction === "keep") return success(action, shouldColor);
+  if (normalizedAction === "disable-candidate" || normalizedAction === "disable candidates") {
+    return warning(action, shouldColor);
+  }
+  if (
+    normalizedAction === "review" ||
+    normalizedAction === "shorten-description" ||
+    normalizedAction === "shorten descriptions" ||
+    normalizedAction === "merge-candidate" ||
+    normalizedAction === "merge candidates"
+  ) {
     return warning(action, shouldColor);
   }
   return accent(action, shouldColor);

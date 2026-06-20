@@ -469,13 +469,18 @@ describe("scanAction", () => {
 
     const output = stdout.join("");
     expect(output).toContain("\x1b[36mUsage ranking\x1b[39m:");
+    expect(output).toContain("\x1b[36mSummary\x1b[39m");
+    expect(output).toContain("Metric      Count");
+    expect(output).toContain("\x1b[2mUnused\x1b[22m");
+    expect(output).toContain("enabled skills have no detected usage.");
+    expect(output).toContain("Skill         Path");
     expect(output).toContain(
-      "\x1b[36munused-skill\x1b[39m: \x1b[2munused\x1b[22m, \x1b[2m0\x1b[22m uses, \x1b[2mnone\x1b[22m confidence",
+      "\x1b[36munused-skill\x1b[39m  \x1b[2m~/.agents/skills/unused-skill/SKILL.md\x1b[22m",
     );
-    expect(output).toContain("\x1b[2mno timestamp\x1b[22m");
     expect(output).toContain("\x1b[36mUsage recommendations\x1b[39m:");
     expect(output).toContain("\x1b[36mContext budget pressure\x1b[39m: \x1b[32mlow\x1b[39m");
-    expect(output).toContain("\x1b[33mdisable-candidate\x1b[39m \x1b[36munused-skill\x1b[39m");
+    expect(output).toContain("\x1b[33mDisable candidates\x1b[39m");
+    expect(output).toContain("Skill         Confidence  Path");
     expect(output).not.toContain("No skill announcement here.");
   });
 
