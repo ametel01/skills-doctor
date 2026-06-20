@@ -129,6 +129,39 @@ describe("skill usage analysis", () => {
     ]);
   });
 
+  it("matches current Codex response_item payload assistant messages", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    await writeJsonl(usageSource, [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: "I'm using the agent coding workflow skill.",
+            },
+          ],
+        },
+      },
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [buildRecord({ name: "agent-coding-workflow", source: "global" })],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(summary(analysis, "agent-coding-workflow")).toMatchObject({
+      usageCount: 1,
+      confidence: "medium",
+      tier: "recent",
+      lastUsedAt: "2026-06-20T00:00:00.000Z",
+    });
+  });
+
   it("infers plugin-prefixed names from plugin cache paths", async () => {
     const usageSource = path.join(directory, "session.jsonl");
     await writeJsonl(usageSource, [

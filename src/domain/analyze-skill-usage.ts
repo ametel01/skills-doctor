@@ -420,8 +420,23 @@ const extractAssistantText = (record: unknown): string => {
   if (record.role === "assistant") return collectText(record.content ?? record.text);
   const message = isRecord(record.message) ? record.message : undefined;
   if (message?.role === "assistant") return collectText(message.content ?? message.text);
+  const payload = isRecord(record.payload) ? record.payload : undefined;
+  if (payload?.role === "assistant") return collectText(payload.content ?? payload.text);
+  const payloadMessage = isRecord(payload?.message) ? payload.message : undefined;
+  if (payloadMessage?.role === "assistant") {
+    return collectText(payloadMessage.content ?? payloadMessage.text);
+  }
   if (typeof record.type === "string" && record.type.includes("assistant")) {
-    return collectText(record.content ?? record.text ?? message?.content ?? message?.text);
+    return collectText(
+      record.content ??
+        record.text ??
+        message?.content ??
+        message?.text ??
+        payload?.content ??
+        payload?.text ??
+        payloadMessage?.content ??
+        payloadMessage?.text,
+    );
   }
   return "";
 };
@@ -445,6 +460,18 @@ const extractTurnMarker = (record: unknown): string | undefined => {
     const value = message[key];
     if (typeof value === "string" || typeof value === "number") return String(value);
   }
+  const payload = isRecord(record.payload) ? record.payload : undefined;
+  if (payload === undefined) return undefined;
+  for (const key of ["timestamp", "ts", "created_at", "turn_id", "turnId", "id"]) {
+    const value = payload[key];
+    if (typeof value === "string" || typeof value === "number") return String(value);
+  }
+  const payloadMessage = isRecord(payload.message) ? payload.message : undefined;
+  if (payloadMessage === undefined) return undefined;
+  for (const key of ["timestamp", "ts", "created_at", "turn_id", "turnId", "id"]) {
+    const value = payloadMessage[key];
+    if (typeof value === "string" || typeof value === "number") return String(value);
+  }
   return undefined;
 };
 
@@ -458,6 +485,18 @@ const extractTimestamp = (record: unknown): string | undefined => {
   if (message === undefined) return undefined;
   for (const key of ["timestamp", "ts", "created_at"]) {
     const value = message[key];
+    if (typeof value === "string") return value;
+  }
+  const payload = isRecord(record.payload) ? record.payload : undefined;
+  if (payload === undefined) return undefined;
+  for (const key of ["timestamp", "ts", "created_at"]) {
+    const value = payload[key];
+    if (typeof value === "string") return value;
+  }
+  const payloadMessage = isRecord(payload.message) ? payload.message : undefined;
+  if (payloadMessage === undefined) return undefined;
+  for (const key of ["timestamp", "ts", "created_at"]) {
+    const value = payloadMessage[key];
     if (typeof value === "string") return value;
   }
   return undefined;
