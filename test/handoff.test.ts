@@ -178,11 +178,21 @@ describe("cleanup handoff", () => {
 
     expect(prompt).toContain("Inspect the usage report first");
     expect(prompt).toContain("Preserve project-local skills");
+    expect(prompt).toContain("Do not delete skills");
+    expect(prompt).toContain("Only disable skills with a `disable-candidate` recommendation");
+    expect(prompt).toContain(
+      "Do not modify skills recommended as keep, review, shorten-description, or merge-candidate",
+    );
+    expect(prompt).toContain("Do not move skill directories");
+    expect(prompt).toContain("`[[skills.config]]` entries in `~/.codex/config.toml`");
+    expect(prompt).toContain("`enabled = false`");
+    expect(prompt).toContain("Restart Codex or start a fresh session after config changes");
     expect(prompt).toContain("Do not delete skills solely because usage is unknown");
     expect(prompt).toContain("Do not expose raw Codex logs");
     expect(prompt).toContain("`npx skills-doctor@latest`");
     expect(prompt).toContain("/tmp/usage-report");
     expect(prompt).toContain("disable-candidate unused-skill");
+    expect(prompt).toContain("Make only reversible Codex skills-config disable changes");
   });
 
   it("writes usage JSON and Markdown cleanup reports", async () => {

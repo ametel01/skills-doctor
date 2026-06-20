@@ -273,6 +273,11 @@ has cleanup recommendations. The CLI:
 
 If no findings exist but usage cleanup is available, the same next-step prompt
 still appears. If report writing fails, the CLI keeps an inline cleanup prompt.
+Cleanup prompts must forbid deletion and limit unused global/plugin cleanup to
+reversible Codex skills-config disable operations in `~/.codex/config.toml`.
+Cleanup handoff must act only on `disable-candidate` recommendations and leave
+keep, review, shorten-description, and merge-candidate recommendations as
+read-only report context.
 
 ## Error Handling
 

@@ -60,6 +60,7 @@ describe("scan reports", () => {
     expect(renderHumanSummary(report)).toContain("Issues:");
     expect(renderHumanSummary(report)).toContain(`Score: ${report.score.value}`);
     expect(renderHumanSummary(report, { includeScore: false })).not.toContain("Score:");
+    expect(renderHumanSummary(report)).not.toContain("\x1b[");
     expect(renderHumanSummary(report)).not.toContain("Top affected skills:");
   });
 
@@ -231,6 +232,7 @@ describe("scan reports", () => {
       },
     });
     expect(withUsage.usage?.topRecommendations).toHaveLength(1);
+    expect(withUsage.usage?.topRecommendations[0]?.action).toBe("disable-candidate");
     expect(JSON.stringify(withUsage)).not.toContain("Using the");
   });
 
@@ -259,7 +261,39 @@ describe("scan reports", () => {
     expect(rendered).toContain("Usage analysis: 1 used, 1 unused, 0 unknown");
     expect(rendered).toContain("Context budget pressure: high");
     expect(rendered).toContain("Recent Codex logs show skill descriptions were shortened.");
-    expect(rendered).toContain("Cleanup candidates: 2");
+    expect(rendered).toContain("Cleanup candidates: 1");
+  });
+
+  it("colorizes human usage summaries when requested", () => {
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan: {
+        roots: [],
+        skills: [],
+        findings: [],
+        diagnostics: [],
+      },
+      usage: {
+        analysis: makeUsageAnalysis(),
+        contextPressure: {
+          level: "high",
+          recentWarningCount: 1,
+        },
+      },
+    });
+
+    const rendered = renderHumanSummary(report, { includeScore: false, color: true });
+
+    expect(rendered).toContain("\x1b[36mSkills\x1b[39m");
+    expect(rendered).toContain("\x1b[32m1\x1b[39m used");
+    expect(rendered).toContain("\x1b[33m1\x1b[39m unused");
+    expect(rendered).toContain("Context budget pressure\x1b[39m: \x1b[31mhigh\x1b[39m");
+    expect(rendered).toContain(
+      "\x1b[33mRecent Codex logs show skill descriptions were shortened.\x1b[39m",
+    );
+    expect(rendered).toContain("\x1b[36mCleanup candidates\x1b[39m: \x1b[33m1\x1b[39m");
   });
 });
 

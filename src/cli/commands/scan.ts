@@ -198,7 +198,7 @@ export const scanAction = async (
       columns: options.terminalColumns ?? process.stdout.columns,
       animate: options.animateScoreHeader ?? (!skipPrompts && stdoutIsTty),
     });
-    writeStdout(renderHumanSummary(report, { includeScore: false }));
+    writeStdout(renderHumanSummary(report, { includeScore: false, color: stdoutIsTty }));
     if (!skipPrompts && shouldShowReviewMenu(report)) {
       finalReport =
         (await reviewScan(report, {
@@ -215,6 +215,7 @@ export const scanAction = async (
           cleanupReportOutputRoot: options.cleanupReportOutputRoot,
           cleanupReportTimestamp: options.cleanupReportTimestamp,
           launchAgent: options.launchAgent ?? launchRepairAgent,
+          color: stdoutIsTty,
           homeDir: options.homeDir,
           discoverUsageSources: options.discoverUsageSources ?? discoverUsageSources,
           analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
@@ -441,6 +442,7 @@ type ReviewFindingsInput = {
   readonly cleanupReportOutputRoot?: string | undefined;
   readonly cleanupReportTimestamp?: string | undefined;
   readonly launchAgent: RepairAgentLauncher;
+  readonly color?: boolean | undefined;
   readonly homeDir?: string | undefined;
   readonly discoverUsageSources: (
     input: DiscoverUsageSourcesInput,
@@ -460,12 +462,12 @@ const reviewScan = async (
       ...(report.usage !== undefined && report.usage.topRecommendations.length > 0
         ? [
             {
-              name: "Clean up unused skills and context-budget pressure",
+              name: "Disable unused skills to reduce context pressure",
               value: "cleanup" as const,
             },
             { name: "View usage ranking", value: "usage-ranking" as const },
             {
-              name: "View cleanup recommendations",
+              name: "View usage recommendations",
               value: "cleanup-recommendations" as const,
             },
           ]
@@ -488,11 +490,11 @@ const reviewScan = async (
       return runCleanupAgentFlow(report, input);
     }
     if (action === "usage-ranking") {
-      write(renderUsageRanking(report));
+      write(renderUsageRanking(report, { color: input.color }));
       continue;
     }
     if (action === "cleanup-recommendations") {
-      write(renderCleanupRecommendations(report));
+      write(renderCleanupRecommendations(report, { color: input.color }));
       continue;
     }
     if (action === "repair") {
@@ -504,10 +506,10 @@ const reviewScan = async (
         ? report.findings.filter((finding) => finding.severity === "error")
         : report.findings;
     if (action === "by-skill") {
-      write(renderFindingsBySkill(selectedFindings));
+      write(renderFindingsBySkill(selectedFindings, { color: input.color }));
       continue;
     }
-    write(renderFindings(selectedFindings));
+    write(renderFindings(selectedFindings, { color: input.color }));
   }
 };
 
@@ -529,20 +531,22 @@ const runCleanupAgentFlow = async (
       });
     } catch (error) {
       if (error instanceof CliInputError) {
-        writeCleanupHandoffSummary(handoff, input.write);
+        writeCleanupHandoffSummary(handoff, input.write, { color: input.color });
         input.write(`${error.message}\n`);
         return undefined;
       }
       throw error;
     }
     if (agent === undefined) {
-      writeCleanupHandoffSummary(handoff, input.write);
+      writeCleanupHandoffSummary(handoff, input.write, { color: input.color });
       input.write("Cleanup handoff cancelled.\n");
       return undefined;
     }
-    input.write(`Selected ${agent.displayName}.\n`);
-    input.write(`Launch preview: ${formatRepairAgentPreview(agent.id)}\n`);
-    writeCleanupHandoffSummary(handoff, input.write);
+    input.write(`${usageLabel("Selected", Boolean(input.color))} ${agent.displayName}.\n`);
+    input.write(
+      `${usageLabel("Launch preview", Boolean(input.color))}: ${formatRepairAgentPreview(agent.id)}\n`,
+    );
+    writeCleanupHandoffSummary(handoff, input.write, { color: input.color });
     const shouldLaunch = await input.prompts.confirm(`Launch ${agent.displayName} now?`, false);
     if (!shouldLaunch) {
       input.write("Cleanup agent launch cancelled.\n");
@@ -585,7 +589,11 @@ const runCleanupAgentFlow = async (
       usage: nextUsageInput,
       handoffRequested: true,
     });
-    input.write(renderPostCleanupSummary(report, nextReport, handoff.reportDirectory));
+    input.write(
+      renderPostCleanupSummary(report, nextReport, handoff.reportDirectory, {
+        color: input.color,
+      }),
+    );
     return nextReport;
   } catch (error) {
     if (error instanceof CliInputError) {
@@ -615,20 +623,22 @@ const runRepairAgentFlow = async (
       });
     } catch (error) {
       if (error instanceof CliInputError) {
-        writeRepairHandoffSummary(handoff, input.write);
+        writeRepairHandoffSummary(handoff, input.write, { color: input.color });
         input.write(`${error.message}\n`);
         return undefined;
       }
       throw error;
     }
     if (agent === undefined) {
-      writeRepairHandoffSummary(handoff, input.write);
+      writeRepairHandoffSummary(handoff, input.write, { color: input.color });
       input.write("Repair handoff cancelled.\n");
       return undefined;
     }
-    input.write(`Selected ${agent.displayName}.\n`);
-    input.write(`Launch preview: ${formatRepairAgentPreview(agent.id)}\n`);
-    writeRepairHandoffSummary(handoff, input.write);
+    input.write(`${usageLabel("Selected", Boolean(input.color))} ${agent.displayName}.\n`);
+    input.write(
+      `${usageLabel("Launch preview", Boolean(input.color))}: ${formatRepairAgentPreview(agent.id)}\n`,
+    );
+    writeRepairHandoffSummary(handoff, input.write, { color: input.color });
     const shouldLaunch = await input.prompts.confirm(`Launch ${agent.displayName} now?`, false);
     if (!shouldLaunch) {
       input.write("Agent launch cancelled.\n");
@@ -663,7 +673,7 @@ const runRepairAgentFlow = async (
       handoffRequested: true,
     });
     const comparison = compareFindings(report.findings, nextReport.findings);
-    input.write(renderPostHandoffSummary(comparison, nextReport));
+    input.write(renderPostHandoffSummary(comparison, nextReport, { color: input.color }));
 
     if (
       nextReport.findingCount > 0 &&
@@ -684,114 +694,216 @@ const runRepairAgentFlow = async (
 const writeRepairHandoffSummary = (
   handoff: Awaited<ReturnType<typeof prepareRepairHandoff>>,
   write: (message: string) => void,
+  options: RenderTerminalOptions = {},
 ): void => {
+  const shouldColor = Boolean(options.color);
   if (handoff.reportDirectory !== undefined) {
-    write(`Report directory: ${handoff.reportDirectory}\n`);
+    write(
+      `${usageLabel("Report directory", shouldColor)}: ${dim(handoff.reportDirectory, shouldColor)}\n`,
+    );
   }
   if (handoff.promptPath !== undefined) {
-    write(`Repair prompt: ${handoff.promptPath}\n`);
+    write(`${usageLabel("Repair prompt", shouldColor)}: ${dim(handoff.promptPath, shouldColor)}\n`);
   } else {
-    write(`Repair prompt:\n${handoff.prompt}\n`);
+    write(`${usageLabel("Repair prompt", shouldColor)}:\n${handoff.prompt}\n`);
   }
   if (handoff.reportWriteError !== undefined) {
-    write(`Report write failed: ${handoff.reportWriteError.message}\n`);
+    write(`${danger("Report write failed", shouldColor)}: ${handoff.reportWriteError.message}\n`);
   }
 };
 
 const writeCleanupHandoffSummary = (
   handoff: Awaited<ReturnType<typeof prepareCleanupHandoff>>,
   write: (message: string) => void,
+  options: RenderTerminalOptions = {},
 ): void => {
+  const shouldColor = Boolean(options.color);
   if (handoff.reportDirectory !== undefined) {
-    write(`Report directory: ${handoff.reportDirectory}\n`);
+    write(
+      `${usageLabel("Report directory", shouldColor)}: ${dim(handoff.reportDirectory, shouldColor)}\n`,
+    );
   }
   if (handoff.usageJsonPath !== undefined) {
-    write(`Usage JSON: ${handoff.usageJsonPath}\n`);
+    write(`${usageLabel("Usage JSON", shouldColor)}: ${dim(handoff.usageJsonPath, shouldColor)}\n`);
   }
   if (handoff.usageMarkdownPath !== undefined) {
-    write(`Usage report: ${handoff.usageMarkdownPath}\n`);
+    write(
+      `${usageLabel("Usage report", shouldColor)}: ${dim(handoff.usageMarkdownPath, shouldColor)}\n`,
+    );
   }
   if (handoff.promptPath !== undefined) {
-    write(`Cleanup prompt: ${handoff.promptPath}\n`);
+    write(
+      `${usageLabel("Cleanup prompt", shouldColor)}: ${dim(handoff.promptPath, shouldColor)}\n`,
+    );
   } else {
-    write(`Cleanup prompt:\n${handoff.prompt}\n`);
+    write(`${usageLabel("Cleanup prompt", shouldColor)}:\n${handoff.prompt}\n`);
   }
   if (handoff.reportWriteError !== undefined) {
-    write(`Report write failed: ${handoff.reportWriteError.message}\n`);
+    write(`${danger("Report write failed", shouldColor)}: ${handoff.reportWriteError.message}\n`);
   }
 };
 
-const renderFindings = (findings: readonly Finding[]): string =>
-  `${findings
-    .map(
-      (finding) =>
-        `[${finding.severity}] ${finding.ruleId} ${finding.skillName ?? finding.skillPath}\n${finding.message}\nSuggestion: ${finding.suggestion}`,
-    )
-    .join("\n\n")}\n`;
+type RenderTerminalOptions = {
+  readonly color?: boolean | undefined;
+};
 
-const renderFindingsBySkill = (findings: readonly Finding[]): string => {
+const renderFindings = (
+  findings: readonly Finding[],
+  options: RenderTerminalOptions = {},
+): string => {
+  const shouldColor = Boolean(options.color);
+  return `${findings
+    .map((finding) => {
+      const location = finding.skillName ?? finding.skillPath;
+      return [
+        `${colorizeSeverity(`[${finding.severity}]`, finding.severity, shouldColor)} ${accent(finding.ruleId, shouldColor)} ${dim(location, shouldColor)}`,
+        finding.message,
+        `${usageLabel("Suggestion", shouldColor)}: ${finding.suggestion}`,
+      ].join("\n");
+    })
+    .join("\n\n")}\n`;
+};
+
+const renderFindingsBySkill = (
+  findings: readonly Finding[],
+  options: RenderTerminalOptions = {},
+): string => {
+  const shouldColor = Boolean(options.color);
   return groupFindingsByKey(findings, (finding) => finding.skillName ?? finding.skillPath)
     .map((group) => {
-      const lines = [`${group.key}:`];
-      lines.push(...group.findings.map((finding) => `- [${finding.severity}] ${finding.ruleId}`));
+      const lines = [`${accent(group.key, shouldColor)}:`];
+      lines.push(
+        ...group.findings.map(
+          (finding) =>
+            `- ${colorizeSeverity(`[${finding.severity}]`, finding.severity, shouldColor)} ${accent(finding.ruleId, shouldColor)}`,
+        ),
+      );
       return lines.join("\n");
     })
     .join("\n\n")
     .concat("\n");
 };
 
-const renderUsageRanking = (report: ScanReport): string => {
+const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions = {}): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";
+  const shouldColor = Boolean(options.color);
   const lines = [
-    "Usage ranking:",
-    `- ${report.usage.usedSkillCount} skills with detected usage`,
-    `- ${report.usage.unusedSkillCount} skills with no detected usage`,
-    `- ${report.usage.unknownSkillCount} skills with unknown usage`,
-    `- ${report.usage.duplicateSkillCount} duplicate same-name skills`,
-    `- ${report.usage.pluginContributedSkillCount} plugin-contributed skills`,
+    `${usageLabel("Usage ranking", shouldColor)}:`,
+    `- ${success(String(report.usage.usedSkillCount), shouldColor)} skills with detected usage`,
+    `- ${warning(String(report.usage.unusedSkillCount), shouldColor)} skills with no detected usage`,
+    `- ${dim(String(report.usage.unknownSkillCount), shouldColor)} skills with unknown usage`,
+    `- ${warning(String(report.usage.duplicateSkillCount), shouldColor)} duplicate same-name skills`,
+    `- ${accent(String(report.usage.pluginContributedSkillCount), shouldColor)} plugin-contributed skills`,
     "",
   ];
   for (const skill of report.usage.skillsByUsage.slice(0, 25)) {
     const lastUsed = skill.lastUsedAt === undefined ? "no timestamp" : skill.lastUsedAt;
     lines.push(
-      `- ${skill.skillName}: ${skill.tier}, ${skill.usageCount} use${skill.usageCount === 1 ? "" : "s"}, ${skill.confidence} confidence, ${lastUsed}`,
-      `  ${skill.skillPath}`,
+      `- ${accent(skill.skillName, shouldColor)}: ${colorizeUsageTier(skill.tier, shouldColor)}, ${colorizeUsageCount(skill.usageCount, shouldColor)} use${skill.usageCount === 1 ? "" : "s"}, ${colorizeUsageConfidence(skill.confidence, shouldColor)} confidence, ${dim(lastUsed, shouldColor)}`,
+      `  ${dim(skill.skillPath, shouldColor)}`,
     );
   }
   return `${lines.join("\n")}\n`;
 };
 
-const renderCleanupRecommendations = (report: ScanReport): string => {
+const colorizeUsageTier = (tier: string, shouldColor: boolean): string => {
+  if (tier === "frequent" || tier === "recent") return success(tier, shouldColor);
+  if (tier === "rare") return warning(tier, shouldColor);
+  return dim(tier, shouldColor);
+};
+
+const colorizeUsageCount = (count: number, shouldColor: boolean): string => {
+  if (count > 0) return success(String(count), shouldColor);
+  return dim(String(count), shouldColor);
+};
+
+const colorizeUsageConfidence = (confidence: string, shouldColor: boolean): string => {
+  if (confidence === "high") return success(confidence, shouldColor);
+  if (confidence === "medium") return warning(confidence, shouldColor);
+  return dim(confidence, shouldColor);
+};
+
+const colorizeSeverity = (
+  text: string,
+  severity: Finding["severity"],
+  shouldColor: boolean,
+): string => {
+  if (severity === "error") return danger(text, shouldColor);
+  if (severity === "warning") return warning(text, shouldColor);
+  return dim(text, shouldColor);
+};
+
+const colorizePressure = (level: string, shouldColor: boolean): string => {
+  if (level === "high") return danger(level, shouldColor);
+  if (level === "medium") return warning(level, shouldColor);
+  if (level === "low") return success(level, shouldColor);
+  return dim(level, shouldColor);
+};
+
+const usageLabel = (text: string, shouldColor: boolean): string => accent(text, shouldColor);
+
+const accent = (text: string, shouldColor: boolean): string => color(text, 36, shouldColor);
+
+const success = (text: string, shouldColor: boolean): string => color(text, 32, shouldColor);
+
+const warning = (text: string, shouldColor: boolean): string => color(text, 33, shouldColor);
+
+const danger = (text: string, shouldColor: boolean): string => color(text, 31, shouldColor);
+
+const dim = (text: string, shouldColor: boolean): string =>
+  shouldColor && text.length > 0 ? `\x1b[2m${text}\x1b[22m` : text;
+
+const color = (text: string, code: number, shouldColor: boolean): string =>
+  shouldColor && text.length > 0 ? `\x1b[${code}m${text}\x1b[39m` : text;
+
+const renderCleanupRecommendations = (
+  report: ScanReport,
+  options: RenderTerminalOptions = {},
+): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";
+  const shouldColor = Boolean(options.color);
   const lines = [
-    "Recommended cleanup:",
-    `Context budget pressure: ${report.usage.contextPressure.level}`,
+    `${usageLabel("Usage recommendations", shouldColor)}:`,
+    `${usageLabel("Context budget pressure", shouldColor)}: ${colorizePressure(report.usage.contextPressure.level, shouldColor)}`,
   ];
   if (report.usage.recommendations.length === 0) {
-    lines.push("- No cleanup recommendations.");
+    lines.push(`- ${dim("No usage recommendations.", shouldColor)}`);
   } else {
     lines.push(
       ...report.usage.recommendations.slice(0, 25).map((recommendation) => {
-        return `- ${recommendation.action} ${recommendation.skillName}: ${recommendation.reason}\n  ${recommendation.skillPath}`;
+        return `- ${colorizeCleanupAction(recommendation.action, shouldColor)} ${accent(recommendation.skillName, shouldColor)}: ${recommendation.reason}\n  ${dim(recommendation.skillPath, shouldColor)}`;
       }),
     );
   }
   return `${lines.join("\n")}\n`;
 };
 
+const colorizeCleanupAction = (action: string, shouldColor: boolean): string => {
+  if (action === "keep") return success(action, shouldColor);
+  if (action === "disable-candidate") return warning(action, shouldColor);
+  if (action === "review" || action === "shorten-description" || action === "merge-candidate") {
+    return warning(action, shouldColor);
+  }
+  return accent(action, shouldColor);
+};
+
 const renderPostCleanupSummary = (
   before: ScanReport,
   after: ScanReport,
   reportDirectory: string | undefined,
+  options: RenderTerminalOptions = {},
 ): string => {
+  const shouldColor = Boolean(options.color);
   const lines = [
-    "Post-cleanup re-scan:",
-    `Skills: ${before.skillCount} -> ${after.skillCount}`,
-    `Context budget pressure: ${before.usage?.contextPressure.level ?? "unknown"} -> ${after.usage?.contextPressure.level ?? "unknown"}`,
-    `Findings: ${before.findingCount} -> ${after.findingCount}`,
+    `${usageLabel("Post-disable re-scan", shouldColor)}:`,
+    `${usageLabel("Skills", shouldColor)}: ${accent(String(before.skillCount), shouldColor)} -> ${accent(String(after.skillCount), shouldColor)}`,
+    `${usageLabel("Context budget pressure", shouldColor)}: ${colorizePressure(before.usage?.contextPressure.level ?? "unknown", shouldColor)} -> ${colorizePressure(after.usage?.contextPressure.level ?? "unknown", shouldColor)}`,
+    `${usageLabel("Findings", shouldColor)}: ${warning(String(before.findingCount), shouldColor)} -> ${warning(String(after.findingCount), shouldColor)}`,
   ];
   if (reportDirectory !== undefined) {
-    lines.push(`Report directory: ${reportDirectory}`);
+    lines.push(
+      `${usageLabel("Report directory", shouldColor)}: ${dim(reportDirectory, shouldColor)}`,
+    );
   }
   return `${lines.join("\n")}\n`;
 };

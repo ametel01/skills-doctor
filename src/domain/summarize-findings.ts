@@ -23,6 +23,7 @@ export type SummaryGroup = {
 
 export type RenderHumanSummaryOptions = {
   readonly includeScore?: boolean | undefined;
+  readonly color?: boolean | undefined;
 };
 
 export const summarizeFindings = (findings: readonly Finding[]): FindingSummary => ({
@@ -57,25 +58,34 @@ export const renderHumanSummary = (
   options: RenderHumanSummaryOptions = {},
 ): string => {
   const summary = summarizeFindings(report.findings);
+  const shouldColor = Boolean(options.color);
   const lines = [
-    `Skills: ${report.skillCount} scanned`,
+    `${label("Skills", shouldColor)}: ${accent(String(report.skillCount), shouldColor)} scanned`,
     report.findingCount === 0
-      ? "Issues: none"
-      : `Issues: ${report.findingCount} (${summary.errorCount} errors, ${summary.warningCount} warnings, ${summary.adviceCount} tips)`,
+      ? `${label("Issues", shouldColor)}: ${success("none", shouldColor)}`
+      : `${label("Issues", shouldColor)}: ${danger(String(report.findingCount), shouldColor)} (${danger(String(summary.errorCount), shouldColor)} errors, ${warning(String(summary.warningCount), shouldColor)} warnings, ${dim(String(summary.adviceCount), shouldColor)} tips)`,
   ];
   if (options.includeScore ?? true) {
-    lines.splice(1, 0, `Score: ${report.score.value} (${report.score.label})`);
+    lines.splice(
+      1,
+      0,
+      `${label("Score", shouldColor)}: ${colorizeScore(String(report.score.value), report.score.value, shouldColor)} (${colorizeScore(report.score.label, report.score.value, shouldColor)})`,
+    );
   }
   if (report.usage !== undefined) {
     lines.push(
-      `Usage analysis: ${report.usage.usedSkillCount} used, ${report.usage.unusedSkillCount} unused, ${report.usage.unknownSkillCount} unknown`,
+      `${label("Usage analysis", shouldColor)}: ${success(String(report.usage.usedSkillCount), shouldColor)} used, ${warning(String(report.usage.unusedSkillCount), shouldColor)} unused, ${dim(String(report.usage.unknownSkillCount), shouldColor)} unknown`,
     );
-    lines.push(`Context budget pressure: ${report.usage.contextPressure.level}`);
+    lines.push(
+      `${label("Context budget pressure", shouldColor)}: ${colorizePressure(report.usage.contextPressure.level, shouldColor)}`,
+    );
     if (report.usage.contextPressure.recentWarningCount > 0) {
-      lines.push("Recent Codex logs show skill descriptions were shortened.");
+      lines.push(warning("Recent Codex logs show skill descriptions were shortened.", shouldColor));
     }
     if (report.usage.topRecommendations.length > 0) {
-      lines.push(`Cleanup candidates: ${report.usage.topRecommendations.length}`);
+      lines.push(
+        `${label("Cleanup candidates", shouldColor)}: ${warning(String(report.usage.topRecommendations.length), shouldColor)}`,
+      );
     }
   }
 
@@ -101,3 +111,37 @@ const topGroups = (values: readonly string[], limit: number): SummaryGroup[] => 
     .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
     .slice(0, limit);
 };
+
+const SCORE_GOOD_THRESHOLD = 75;
+const SCORE_OK_THRESHOLD = 50;
+
+const label = (text: string, shouldColor: boolean): string => cyan(text, shouldColor);
+
+const accent = (text: string, shouldColor: boolean): string => cyan(text, shouldColor);
+
+const colorizeScore = (text: string, score: number, shouldColor: boolean): string => {
+  if (score >= SCORE_GOOD_THRESHOLD) return success(text, shouldColor);
+  if (score >= SCORE_OK_THRESHOLD) return warning(text, shouldColor);
+  return danger(text, shouldColor);
+};
+
+const colorizePressure = (level: string, shouldColor: boolean): string => {
+  if (level === "high") return danger(level, shouldColor);
+  if (level === "medium") return warning(level, shouldColor);
+  if (level === "low") return success(level, shouldColor);
+  return dim(level, shouldColor);
+};
+
+const success = (text: string, shouldColor: boolean): string => color(text, 32, shouldColor);
+
+const warning = (text: string, shouldColor: boolean): string => color(text, 33, shouldColor);
+
+const danger = (text: string, shouldColor: boolean): string => color(text, 31, shouldColor);
+
+const cyan = (text: string, shouldColor: boolean): string => color(text, 36, shouldColor);
+
+const dim = (text: string, shouldColor: boolean): string =>
+  shouldColor && text.length > 0 ? `\x1b[2m${text}\x1b[22m` : text;
+
+const color = (text: string, code: number, shouldColor: boolean): string =>
+  shouldColor && text.length > 0 ? `\x1b[${code}m${text}\x1b[39m` : text;

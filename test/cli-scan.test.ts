@@ -295,13 +295,13 @@ describe("scanAction", () => {
   });
 
   it("shows cleanup as an interactive next step even when no findings exist", async () => {
-    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
     const homeDir = path.join(directory, "home");
+    await writeStrongSkill(path.join(homeDir, ".agents", "skills", "unused-skill"), "unused-skill");
     await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
       {
         timestamp: "2026-06-20T00:00:00.000Z",
         role: "assistant",
-        content: "Using the `good-skill` skill.",
+        content: "No skill announcement here.",
       },
     ]);
     const stdout: string[] = [];
@@ -331,9 +331,9 @@ describe("scanAction", () => {
     );
 
     expect(report.findingCount).toBe(0);
-    expect(nextStepChoices[0]).toContain("Clean up unused skills and context-budget pressure");
+    expect(nextStepChoices[0]).toContain("Disable unused skills to reduce context pressure");
     expect(nextStepChoices[0]).toContain("View usage ranking");
-    expect(nextStepChoices[0]).toContain("View cleanup recommendations");
+    expect(nextStepChoices[0]).toContain("View usage recommendations");
     expect(nextStepChoices[0]).not.toContain("Fix skills with Claude or Codex");
     expect(stdout.join("")).toContain("No local repair agent was found.");
     expect(stdout.join("")).toContain(`Report directory: ${reportDirectory}`);
@@ -341,11 +341,11 @@ describe("scanAction", () => {
       `Cleanup prompt: ${path.join(reportDirectory, "cleanup-prompt.md")}`,
     );
     await expect(readFile(path.join(reportDirectory, "usage.json"), "utf8")).resolves.toContain(
-      "good-skill",
+      "unused-skill",
     );
   });
 
-  it("renders usage ranking and cleanup recommendation views", async () => {
+  it("does not offer cleanup handoff when only used skills are present", async () => {
     await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
     const homeDir = path.join(directory, "home");
     await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
@@ -353,6 +353,41 @@ describe("scanAction", () => {
         timestamp: "2026-06-20T00:00:00.000Z",
         role: "assistant",
         content: "Using the `good-skill` skill.",
+      },
+    ]);
+    const nextStepChoices: string[][] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: recordingPrompts({
+          selects: ["exit"],
+          nextStepChoices,
+        }),
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(report.usage?.usedSkillCount).toBe(1);
+    expect(report.usage?.topRecommendations).toHaveLength(0);
+    expect(nextStepChoices).toHaveLength(0);
+  });
+
+  it("renders usage ranking and cleanup recommendation views", async () => {
+    const homeDir = path.join(directory, "home");
+    await writeStrongSkill(path.join(homeDir, ".agents", "skills", "unused-skill"), "unused-skill");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "No skill announcement here.",
       },
     ]);
     const stdout: string[] = [];
@@ -365,6 +400,7 @@ describe("scanAction", () => {
         homeDir,
         env: {},
         stdinIsTty: true,
+        stdoutIsTty: true,
         prompts: queuedPrompts({
           selects: ["all", "usage-ranking", "cleanup-recommendations", "exit"],
         }),
@@ -375,21 +411,25 @@ describe("scanAction", () => {
     );
 
     const output = stdout.join("");
-    expect(output).toContain("Usage ranking:");
-    expect(output).toContain("good-skill: recent, 1 use, high confidence");
-    expect(output).toContain("Recommended cleanup:");
-    expect(output).toContain("keep good-skill");
-    expect(output).not.toContain("Using the `good-skill` skill.");
+    expect(output).toContain("\x1b[36mUsage ranking\x1b[39m:");
+    expect(output).toContain(
+      "\x1b[36munused-skill\x1b[39m: \x1b[2munused\x1b[22m, \x1b[2m0\x1b[22m uses, \x1b[2mnone\x1b[22m confidence",
+    );
+    expect(output).toContain("\x1b[2mno timestamp\x1b[22m");
+    expect(output).toContain("\x1b[36mUsage recommendations\x1b[39m:");
+    expect(output).toContain("\x1b[36mContext budget pressure\x1b[39m: \x1b[32mlow\x1b[39m");
+    expect(output).toContain("\x1b[33mdisable-candidate\x1b[39m \x1b[36munused-skill\x1b[39m");
+    expect(output).not.toContain("No skill announcement here.");
   });
 
   it("lets users cancel cleanup agent launch after report writing", async () => {
-    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
     const homeDir = path.join(directory, "home");
+    await writeStrongSkill(path.join(homeDir, ".agents", "skills", "unused-skill"), "unused-skill");
     await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
       {
         timestamp: "2026-06-20T00:00:00.000Z",
         role: "assistant",
-        content: "Using the `good-skill` skill.",
+        content: "No skill announcement here.",
       },
     ]);
     const stdout: string[] = [];
@@ -440,6 +480,7 @@ describe("scanAction", () => {
         homeDir: path.join(directory, "home"),
         env: {},
         stdinIsTty: true,
+        stdoutIsTty: true,
         prompts: fakePrompts(["all", "by-skill", "exit"]),
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
@@ -447,8 +488,10 @@ describe("scanAction", () => {
       },
     );
 
-    expect(stdout.join("")).toContain("bad-name:");
-    expect(stdout.join("")).toContain("- [error] name-directory-mismatch");
+    expect(stdout.join("")).toContain("\x1b[36mbad-name\x1b[39m:");
+    expect(stdout.join("")).toContain(
+      "- \x1b[31m[error]\x1b[39m \x1b[36mname-directory-mismatch\x1b[39m",
+    );
   });
 
   it("lets users view findings by skill and then repair", async () => {

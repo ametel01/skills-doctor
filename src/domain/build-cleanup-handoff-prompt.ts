@@ -29,12 +29,18 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
     "- Inspect the usage report first.",
     "- Preserve frequently used and recently used skills.",
     "- Preserve project-local skills unless there is strong evidence and clear user intent.",
-    "- Prefer disabling, moving aside, or proposing removal for unused global/plugin skills.",
+    "- Do not delete skills.",
+    "- Only disable skills with a `disable-candidate` recommendation.",
+    "- Do not modify skills recommended as keep, review, shorten-description, or merge-candidate.",
+    "- Do not move skill directories.",
+    "- For unused global/plugin skills, disable them the same way Codex `/skills` does: add or update `[[skills.config]]` entries in `~/.codex/config.toml` with the skill `path` and `enabled = false`.",
+    "- Re-enable skills by using Codex `/skills` or removing the matching disabled config entry.",
+    "- Restart Codex or start a fresh session after config changes so the disabled skill list is reloaded.",
     "- Do not delete skills solely because usage is unknown.",
     "- Do not expose raw Codex logs or transcript text.",
     "- Verify by rerunning `npx skills-doctor@latest` after changes.",
     "",
-    "Top cleanup recommendations:",
+    "Unused skills to disable:",
   );
 
   for (const recommendation of usage.topRecommendations.slice(0, 20)) {
@@ -45,10 +51,13 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
     );
   }
   if (usage.topRecommendations.length === 0) {
-    lines.push("- No cleanup recommendations were produced.");
+    lines.push("- No unused disable candidates were produced.");
   }
 
-  lines.push("", "Make conservative changes, then stop and report what changed.");
+  lines.push(
+    "",
+    "Make only reversible Codex skills-config disable changes, then stop and report what changed.",
+  );
 
   return lines.join("\n");
 };

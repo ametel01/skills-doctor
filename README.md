@@ -123,8 +123,9 @@ only by the local agent after you confirm the handoff.
 
 Cleanup handoff writes `usage.json`, `usage.md`, and `cleanup-prompt.md` before
 any agent launch. The prompt tells the agent to preserve recent/frequent skills,
-avoid deleting unknown-usage skills, prefer non-destructive cleanup for unused
-global/plugin skills, and verify with `npx skills-doctor@latest`.
+never delete skills, ignore non-disable recommendations during cleanup, disable
+unused global/plugin skills only through Codex `[[skills.config]]` entries in
+`~/.codex/config.toml`, and verify with `npx skills-doctor@latest`.
 
 ## JSON Mode
 

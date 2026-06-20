@@ -45,6 +45,23 @@ describe("post-handoff finding comparison", () => {
     expect(summary).toContain("Current blocking errors: 1");
     expect(summary).toContain("Current score: 99 (Great)");
   });
+
+  it("colorizes re-scan summary when requested", () => {
+    const report = makeReport(1);
+    const summary = renderPostHandoffSummary(
+      {
+        fixed: [makeFinding("a", "/repo/a/SKILL.md")],
+        remaining: [makeFinding("b", "/repo/b/SKILL.md")],
+        newFindings: [],
+      },
+      report,
+      { color: true },
+    );
+
+    expect(summary).toContain("\x1b[36mPost-handoff re-scan\x1b[39m:");
+    expect(summary).toContain("\x1b[36mFixed findings\x1b[39m: \x1b[32m1\x1b[39m");
+    expect(summary).toContain("\x1b[36mCurrent blocking errors\x1b[39m: \x1b[31m1\x1b[39m");
+  });
 });
 
 const makeReport = (errorCount: number): ScanReport => {
