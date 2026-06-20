@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Ignored Codex-disabled skills from scan, finding, usage-ranking, and cleanup-candidate results by reading `~/.codex/config.toml`.
 - Fixed usage analysis for current Codex session JSONL records that store assistant messages under `payload`.
 
 ### Tests

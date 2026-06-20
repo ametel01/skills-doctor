@@ -345,6 +345,63 @@ describe("scanAction", () => {
     );
   });
 
+  it("excludes Codex-disabled skills from usage cleanup candidates", async () => {
+    const homeDir = path.join(directory, "home");
+    const activeSkillPath = path.join(homeDir, ".agents", "skills", "active-unused", "SKILL.md");
+    const disabledSkillPath = path.join(
+      homeDir,
+      ".agents",
+      "skills",
+      "disabled-unused",
+      "SKILL.md",
+    );
+    await writeStrongSkill(path.dirname(activeSkillPath), "active-unused");
+    await writeStrongSkill(path.dirname(disabledSkillPath), "disabled-unused");
+    await mkdir(path.join(homeDir, ".codex"), { recursive: true });
+    await writeFile(
+      path.join(homeDir, ".codex", "config.toml"),
+      ["[[skills.config]]", `path = "${disabledSkillPath}"`, "enabled = false", ""].join("\n"),
+    );
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "No skill announcement here.",
+      },
+    ]);
+    const nextStepChoices: string[][] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: recordingPrompts({
+          selects: ["all", "exit"],
+          nextStepChoices,
+        }),
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(report.skillCount).toBe(1);
+    expect(report.skills.map((skill) => skill.name)).toEqual(["active-unused"]);
+    expect(report.usage?.totalSkillsAnalyzed).toBe(1);
+    expect(report.usage?.topRecommendations).toEqual([
+      expect.objectContaining({
+        action: "disable-candidate",
+        skillName: "active-unused",
+      }),
+    ]);
+    expect(JSON.stringify(report.usage)).not.toContain("disabled-unused");
+    expect(nextStepChoices[0]).toContain("Disable unused skills to reduce context pressure");
+  });
+
   it("does not offer cleanup handoff when only used skills are present", async () => {
     await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
     const homeDir = path.join(directory, "home");

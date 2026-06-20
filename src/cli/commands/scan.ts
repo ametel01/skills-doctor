@@ -13,6 +13,7 @@ import {
   discoverUsageSources,
 } from "../../domain/discover-usage-sources.js";
 import { groupFindingsByKey } from "../../domain/group-findings.js";
+import { readCodexDisabledSkillConfig } from "../../domain/read-codex-disabled-skill-config.js";
 import { scanSkillRoots } from "../../domain/scan-skills.js";
 import {
   renderHumanSummary,
@@ -164,9 +165,14 @@ export const scanAction = async (
     throw new CliInputError("No readable skills root was selected.");
   }
 
+  const disabledCodexSkills = await spinner.run("Reading Codex skill settings...", () =>
+    readCodexDisabledSkillConfig({ homeDir: options.homeDir }),
+  );
+  diagnostics.push(...disabledCodexSkills.diagnostics);
+
   const startedAt = now();
   const scan = await spinner.run("Scanning skills...", () =>
-    scanSkillRoots({ roots, diagnostics }),
+    scanSkillRoots({ roots, diagnostics, disabledSkills: disabledCodexSkills }),
   );
   const elapsedMilliseconds = Math.max(0, Math.round(now() - startedAt));
   const usageInput = shouldRunUsageAnalysis({ flags, skipPrompts })

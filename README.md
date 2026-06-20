@@ -126,6 +126,8 @@ any agent launch. The prompt tells the agent to preserve recent/frequent skills,
 never delete skills, ignore non-disable recommendations during cleanup, disable
 unused global/plugin skills only through Codex `[[skills.config]]` entries in
 `~/.codex/config.toml`, and verify with `npx skills-doctor@latest`.
+Skills already disabled in Codex config are omitted from scan, usage-ranking,
+and cleanup-candidate results.
 
 ## JSON Mode
 

@@ -47,6 +47,11 @@ export {
   type ReadCodexSqlitePressure,
 } from "./domain/discover-usage-sources.js";
 export { parseSkillContent } from "./domain/parse-skill.js";
+export {
+  type DisabledSkillSelectors,
+  parseCodexDisabledSkillConfig,
+  readCodexDisabledSkillConfig,
+} from "./domain/read-codex-disabled-skill-config.js";
 export { type RuleCatalogEntry, ruleCatalog } from "./domain/rule-catalog.js";
 export {
   type QualityRuleOptions,

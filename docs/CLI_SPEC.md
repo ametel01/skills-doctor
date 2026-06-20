@@ -278,6 +278,8 @@ reversible Codex skills-config disable operations in `~/.codex/config.toml`.
 Cleanup handoff must act only on `disable-candidate` recommendations and leave
 keep, review, shorten-description, and merge-candidate recommendations as
 read-only report context.
+Skills disabled through Codex `[[skills.config]]` entries are excluded from
+scan, finding, usage-ranking, and cleanup-candidate results.
 
 ## Error Handling
 

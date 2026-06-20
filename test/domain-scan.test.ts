@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { discoverSkillRoots, parseSkillContent, scanSkillRoots } from "../src/index.js";
+import {
+  discoverSkillRoots,
+  parseCodexDisabledSkillConfig,
+  parseSkillContent,
+  readCodexDisabledSkillConfig,
+  scanSkillRoots,
+} from "../src/index.js";
 
 describe("skill discovery and parsing", () => {
   let directory: string;
@@ -168,6 +174,80 @@ describe("skill discovery and parsing", () => {
     expect(secondScan.skills.map((skill) => skill.skillPath)).toEqual(expected);
   });
 
+  it("ignores disabled Codex skills by path and name", async () => {
+    const skillsRoot = path.join(directory, ".agents", "skills");
+    await writeFixtureSkill(path.join(skillsRoot, "active-skill"), "active-skill");
+    await writeFixtureSkill(path.join(skillsRoot, "disabled-by-path"), "disabled-by-path");
+    await writeFixtureSkill(path.join(skillsRoot, "disabled-by-name"), "disabled-by-name");
+    await mkdir(path.join(skillsRoot, "missing-disabled"), { recursive: true });
+
+    const scan = await scanSkillRoots({
+      roots: [{ ecosystem: "codex", rootPath: skillsRoot, source: "global" }],
+      disabledSkills: {
+        paths: [
+          path.join(skillsRoot, "disabled-by-path", "SKILL.md"),
+          path.join(skillsRoot, "missing-disabled", "SKILL.md"),
+        ],
+        names: ["disabled-by-name"],
+      },
+    });
+
+    expect(scan.skills.map((skill) => skill.directoryName)).toEqual(["active-skill"]);
+    expect(scan.findings).not.toContainEqual(
+      expect.objectContaining({
+        skillName: "missing-disabled",
+      }),
+    );
+  });
+
+  it("reads disabled Codex skill selectors from config.toml", async () => {
+    const homeDir = path.join(directory, "home");
+    const disabledPath = path.join(homeDir, ".agents", "skills", "disabled", "SKILL.md");
+    const enabledPath = path.join(homeDir, ".agents", "skills", "enabled", "SKILL.md");
+    await mkdir(path.join(homeDir, ".codex"), { recursive: true });
+    await writeFile(
+      path.join(homeDir, ".codex", "config.toml"),
+      [
+        "[profile.default]",
+        'model = "gpt-5"',
+        "",
+        "[[skills.config]]",
+        `path = "${disabledPath}"`,
+        "enabled = false",
+        "",
+        "[[skills.config]]",
+        'name = "github:yeet"',
+        "enabled = false",
+        "",
+        "[[skills.config]]",
+        `path = "${enabledPath}"`,
+        "enabled = true",
+      ].join("\n"),
+    );
+
+    const result = await readCodexDisabledSkillConfig({ homeDir });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.paths).toEqual([disabledPath]);
+    expect(result.names).toEqual(["github:yeet"]);
+  });
+
+  it("lets later enabled Codex skill config entries override disabled entries", () => {
+    const selectors = parseCodexDisabledSkillConfig(
+      [
+        "[[skills.config]]",
+        'path = "/tmp/skills/demo/SKILL.md"',
+        "enabled = false",
+        "",
+        "[[skills.config]]",
+        'path = "/tmp/skills/demo/SKILL.md"',
+        "enabled = true",
+      ].join("\n"),
+    );
+
+    expect(selectors.paths).toEqual([]);
+  });
+
   it("reports unreadable SKILL.md entries while scanning other skills", async () => {
     const skillsRoot = path.join(directory, ".agents", "skills");
     const validSkillDir = path.join(skillsRoot, "valid-skill");
@@ -272,3 +352,19 @@ describe("skill discovery and parsing", () => {
     });
   });
 });
+
+const writeFixtureSkill = async (skillDir: string, name: string): Promise<void> => {
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(
+    path.join(skillDir, "SKILL.md"),
+    [
+      "---",
+      `name: ${name}`,
+      "description: Use this skill when validating scanner fixtures.",
+      "---",
+      "",
+      "Follow the fixture workflow.",
+      "",
+    ].join("\n"),
+  );
+};

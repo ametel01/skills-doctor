@@ -1,6 +1,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseSkillContent } from "./parse-skill.js";
+import {
+  type DisabledSkillSelectors,
+  normalizeSkillPath,
+} from "./read-codex-disabled-skill-config.js";
 import { validateQualityRules } from "./rules/quality.js";
 import { buildMissingSkillFinding, validateStructuralRules } from "./rules/structural.js";
 import type { Diagnostic, Finding, ScanResult, SkillRecord, SkillRoot } from "./types.js";
@@ -10,6 +14,7 @@ const SKILL_FILE_READ_CONCURRENCY = 16;
 export type ScanSkillRootsInput = {
   readonly roots: readonly SkillRoot[];
   readonly diagnostics?: readonly Diagnostic[] | undefined;
+  readonly disabledSkills?: DisabledSkillSelectors | undefined;
 };
 
 export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanResult> => {
@@ -17,6 +22,7 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
   const diagnostics: Diagnostic[] = [...(input.diagnostics ?? [])];
   const findings: Finding[] = [];
   const rootPlans: RootReadPlan[] = [];
+  const disabledSkillFilter = buildDisabledSkillFilter(input.disabledSkills);
 
   for (const [rootIndex, root] of input.roots.entries()) {
     const entries = await readdir(root.rootPath, { withFileTypes: true }).catch(
@@ -51,7 +57,8 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
           skillDir,
           skillPath: path.join(skillDir, "SKILL.md"),
         };
-      });
+      })
+      .filter((task) => !disabledSkillFilter.hasPath(task.skillPath));
     rootPlans.push({ rootIndex, diagnostics: [], tasks });
   }
 
@@ -70,7 +77,9 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
       const result = readResultsByTask.get(taskKey(task.rootIndex, task.entryIndex));
       if (result?.diagnostic !== undefined) diagnostics.push(result.diagnostic);
       if (result?.finding !== undefined) findings.push(result.finding);
-      if (result?.skill !== undefined) skills.push(result.skill);
+      if (result?.skill !== undefined && !isDisabledByName(result.skill, disabledSkillFilter)) {
+        skills.push(result.skill);
+      }
     }
   }
 
@@ -106,6 +115,11 @@ type SkillReadResult = {
   readonly skill?: SkillRecord | undefined;
   readonly diagnostic?: Diagnostic | undefined;
   readonly finding?: Finding | undefined;
+};
+
+type DisabledSkillFilter = {
+  readonly hasPath: (skillPath: string) => boolean;
+  readonly names: ReadonlySet<string>;
 };
 
 const readSkillTask = async (task: SkillReadTask): Promise<SkillReadResult> => {
@@ -146,6 +160,39 @@ const readSkillTask = async (task: SkillReadTask): Promise<SkillReadResult> => {
       parseResult: parseSkillContent(content),
     },
   };
+};
+
+const buildDisabledSkillFilter = (
+  disabledSkills: DisabledSkillSelectors | undefined,
+): DisabledSkillFilter => {
+  const paths = new Set(disabledSkills?.paths.map(normalizeSkillPath) ?? []);
+  return {
+    hasPath: (skillPath: string) => paths.has(normalizeSkillPath(skillPath)),
+    names: new Set(disabledSkills?.names ?? []),
+  };
+};
+
+const isDisabledByName = (skill: SkillRecord, filter: DisabledSkillFilter): boolean => {
+  if (skill.ecosystem !== "codex" || filter.names.size === 0) return false;
+  const skillName = readSkillName(skill);
+  if (filter.names.has(skillName) || filter.names.has(skill.directoryName)) return true;
+  const pluginName = inferPluginName(skill.rootPath);
+  return pluginName !== undefined && filter.names.has(`${pluginName}:${skillName}`);
+};
+
+const readSkillName = (skill: SkillRecord): string => {
+  if (!skill.parseResult.ok) return skill.directoryName;
+  const name = skill.parseResult.frontmatter.data.name;
+  return typeof name === "string" && name.trim().length > 0 ? name : skill.directoryName;
+};
+
+const inferPluginName = (rootPath: string): string | undefined => {
+  const segments = rootPath.split(path.sep);
+  const cacheIndex = segments.lastIndexOf("cache");
+  if (cacheIndex < 0) return undefined;
+  const afterCache = segments.slice(cacheIndex + 1);
+  if (afterCache.length < 3 || afterCache.at(-1) !== "skills") return undefined;
+  return afterCache.at(-3);
 };
 
 const mapWithConcurrency = async <Input, Output>(
