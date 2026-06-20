@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ScanReport, ScanReportUsage } from "./build-report.js";
+import { defaultReportOutputRoot } from "./default-report-output-root.js";
 
 export type CleanupDirectoryInput = {
   readonly report: ScanReport;
@@ -18,11 +19,12 @@ export const writeCleanupDirectory = async (
   input: CleanupDirectoryInput,
 ): Promise<CleanupDirectoryResult> => {
   const usage = requireUsage(input.report);
+  const outputRoot = input.outputRoot ?? defaultReportOutputRoot();
   const directory = path.join(
-    input.outputRoot ?? path.join(input.report.directory, ".skills-doctor", "reports"),
+    outputRoot,
     sanitizeTimestamp(input.timestamp ?? new Date().toISOString()),
   );
-  await mkdir(directory, { recursive: true });
+  await mkdir(directory, { recursive: true, mode: 0o700 });
 
   const usageJsonPath = path.join(directory, "usage.json");
   const usageMarkdownPath = path.join(directory, "usage.md");

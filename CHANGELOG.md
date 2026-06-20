@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-20
+
+### Changed
+
+- Store default repair and cleanup handoff reports under the OS temp directory instead of creating `.skills-doctor/reports` in the scanned project.
+
 ## [0.5.0] - 2026-06-20
 
 ### Added

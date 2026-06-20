@@ -6,6 +6,7 @@ import packageJson from "../package.json" with { type: "json" };
 import { scanAction } from "../src/cli/commands/scan.js";
 import { CliInputError } from "../src/cli/utils/handle-error.js";
 import type { Choice, PromptAdapter } from "../src/cli/utils/prompts.js";
+import { defaultReportOutputRoot } from "../src/domain/default-report-output-root.js";
 
 describe("scanAction", () => {
   let directory: string;
@@ -828,6 +829,54 @@ describe("scanAction", () => {
     ).resolves.toContain("name-directory-mismatch");
     expect(launches).toEqual([]);
     expect(stdout.join("")).not.toContain("Post-handoff re-scan:");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("writes default repair handoff reports to OS temp instead of the scanned directory", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    const stdout: string[] = [];
+    const reportDirectory = path.join(defaultReportOutputRoot(), "2099-01-03T00-00-00-000Z");
+    await rm(reportDirectory, { recursive: true, force: true });
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        env: {},
+        stdinIsTty: true,
+        prompts: queuedPrompts({ selects: ["all", "repair", "errors"] }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async () => false,
+        repairReportTimestamp: "2099-01-03T00:00:00.000Z",
+      },
+    );
+
+    expect(stdout.join("")).toContain(`Report directory: ${reportDirectory}`);
+    await expect(readFile(path.join(reportDirectory, "findings.json"), "utf8")).resolves.toContain(
+      '"findingCount": 1',
+    );
+    await expect(
+      readFile(
+        path.join(
+          directory,
+          ".skills-doctor",
+          "reports",
+          "2099-01-03T00-00-00-000Z",
+          "findings.json",
+        ),
+        "utf8",
+      ),
+    ).rejects.toThrow();
+    await rm(reportDirectory, { recursive: true, force: true });
     expect(process.exitCode).toBe(1);
   });
 

@@ -10,6 +10,7 @@ import {
 } from "../src/cli/utils/handoff-to-agent.js";
 import type { PromptAdapter } from "../src/cli/utils/prompts.js";
 import type { ScanReport, ScanReportUsage } from "../src/domain/build-report.js";
+import { defaultReportOutputRoot } from "../src/domain/default-report-output-root.js";
 import type { Finding } from "../src/index.js";
 import {
   buildCleanupHandoffPrompt,
@@ -91,6 +92,22 @@ describe("findings directory", () => {
     const skillReportPath = result.skillReportPaths[0];
     if (skillReportPath === undefined) throw new Error("Expected one skill report path.");
     await expect(readFile(skillReportPath, "utf8")).resolves.toContain("description-specific");
+  });
+
+  it("writes findings to the user-scoped OS temp directory by default", async () => {
+    const report = makeReport([makeFinding({})]);
+    const expectedDirectory = path.join(defaultReportOutputRoot(), "2099-01-01T00-00-00-000Z");
+    await rm(expectedDirectory, { recursive: true, force: true });
+
+    const result = await writeFindingsDirectory({
+      report,
+      timestamp: "2099-01-01T00:00:00.000Z",
+    });
+
+    expect(result.directory).toBe(expectedDirectory);
+    expect(result.directory.startsWith(tmpdir())).toBe(true);
+    await expect(readFile(result.findingsJsonPath, "utf8")).resolves.toContain('"findingCount": 1');
+    await rm(expectedDirectory, { recursive: true, force: true });
   });
 
   it("keeps per-skill files distinct for same-name skills in different roots", async () => {
@@ -212,6 +229,22 @@ describe("cleanup handoff", () => {
     await expect(readFile(result.usageMarkdownPath, "utf8")).resolves.toContain(
       "disable-candidate",
     );
+  });
+
+  it("writes cleanup reports to the user-scoped OS temp directory by default", async () => {
+    const report = makeReport([], makeUsage());
+    const expectedDirectory = path.join(defaultReportOutputRoot(), "2099-01-02T00-00-00-000Z");
+    await rm(expectedDirectory, { recursive: true, force: true });
+
+    const result = await writeCleanupDirectory({
+      report,
+      timestamp: "2099-01-02T00:00:00.000Z",
+    });
+
+    expect(result.directory).toBe(expectedDirectory);
+    expect(result.directory.startsWith(tmpdir())).toBe(true);
+    await expect(readFile(result.usageJsonPath, "utf8")).resolves.toContain('"usage"');
+    await rm(expectedDirectory, { recursive: true, force: true });
   });
 
   it("prepares cleanup reports and writes cleanup-prompt.md", async () => {

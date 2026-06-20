@@ -231,15 +231,14 @@ Scan reports include:
   cleanup recommendations
 - handoff-request status
 
-Report files written for repair handoff are local artifacts under
-`.skills-doctor/reports/<timestamp>/` unless a test or caller passes another
-output root. Per-skill report filenames must be deterministic and collision
-resistant.
+Report files written for repair handoff are local artifacts under the OS temp
+directory, for example `/tmp/skills-doctor-<uid>/reports/<timestamp>/` on
+Linux, unless a test or caller passes another output root. Per-skill report
+filenames must be deterministic and collision resistant.
 
-Usage cleanup report files are also local artifacts under
-`.skills-doctor/reports/<timestamp>/` and include `usage.json`, `usage.md`, and
-`cleanup-prompt.md`. Usage reports must not include raw Codex prompts or full
-assistant transcript text.
+Usage cleanup report files are also local artifacts under the OS temp directory
+and include `usage.json`, `usage.md`, and `cleanup-prompt.md`. Usage reports
+must not include raw Codex prompts or full assistant transcript text.
 
 ## Repair Handoff
 

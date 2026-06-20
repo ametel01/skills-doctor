@@ -593,8 +593,8 @@ top-level crash-reporting path if telemetry is later added.
 - Generated handoff prompts remain local unless the user launches a local agent
   CLI that may contact external services according to the user's configuration.
 - Make that handoff explicit before launch.
-- Store scan reports under a local generated directory such as
-  `.skills-doctor/reports/<timestamp>/`.
+- Store scan reports under the OS temp directory, scoped to the current user,
+  such as `/tmp/skills-doctor-<uid>/reports/<timestamp>/` on Linux.
 - Do not write reports unless needed for handoff or explicitly requested.
 - Do not mutate skill files during scan.
 - Do not delete skills.

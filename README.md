@@ -104,7 +104,8 @@ available, reads local Codex usage traces from known `~/.codex` paths. It can:
 3. Let you choose a repair subset: errors, errors plus warnings, all findings,
    or selected skills.
 4. Detect local `claude` and `codex` executables.
-5. Write a full report under `.skills-doctor/reports/<timestamp>/`.
+5. Write a full report under the OS temp directory, for example
+   `/tmp/skills-doctor-<uid>/reports/<timestamp>/` on Linux.
 6. Generate a compact `handoff-prompt.md` tailored to the selected findings or
    `cleanup-prompt.md` tailored to usage cleanup.
 7. Preview the launch command.

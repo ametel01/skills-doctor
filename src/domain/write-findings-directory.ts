@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ScanReport } from "./build-report.js";
+import { defaultReportOutputRoot } from "./default-report-output-root.js";
 import { groupFindingsByKey } from "./group-findings.js";
 import type { Finding } from "./types.js";
 
@@ -23,13 +24,14 @@ export const writeFindingsDirectory = async (
   input: FindingsDirectoryInput,
 ): Promise<FindingsDirectoryResult> => {
   const findings = input.findings ?? input.report.findings;
+  const outputRoot = input.outputRoot ?? defaultReportOutputRoot();
   const directory = path.join(
-    input.outputRoot ?? path.join(input.report.directory, ".skills-doctor", "reports"),
+    outputRoot,
     sanitizeTimestamp(input.timestamp ?? new Date().toISOString()),
   );
   const skillDirectory = path.join(directory, "skills");
 
-  await mkdir(skillDirectory, { recursive: true });
+  await mkdir(skillDirectory, { recursive: true, mode: 0o700 });
 
   const findingsJsonPath = path.join(directory, "findings.json");
   const findingsMarkdownPath = path.join(directory, "findings.md");
