@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Established progress tracking for the usage cleanup implementation plan.
+
 ## [0.4.1] - 2026-06-18
 
 ### Changed
