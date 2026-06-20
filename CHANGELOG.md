@@ -21,6 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Documented the usage cleanup workflow, optional usage report shape, public usage helpers, and local Codex log privacy behavior.
 
+### Tests
+
+- Verified the end-to-end usage cleanup workflow across built CLI JSON, usage, missing-log fallback, cleanup report writing, transcript privacy, and launch-cancellation paths.
+
 ## [0.4.1] - 2026-06-18
 
 ### Changed

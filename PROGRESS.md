@@ -21,13 +21,13 @@ next step.
 - [x] Step 6: Add Cleanup Report Directory and Handoff Prompt
 - [x] Step 7: Add Cleanup Recommendation Views
 - [x] Step 8: Update Public API, Docs, and Package Smoke Coverage
-- [ ] Step 9: Final End-to-End Verification
+- [x] Step 9: Final End-to-End Verification
 
 ## Current Status
 
-Step 8 is complete.
+All plan steps are complete.
 
-Next step: Step 9: Final End-to-End Verification.
+Next step: none.
 
 ## Update Log
 
@@ -193,4 +193,28 @@ Next step: Step 9: Final End-to-End Verification.
   - `bun run pack:dry-run`
 - Note: one parallel `bun run test` attempt observed stale `dist` while `bun run build` was running concurrently; rerunning after build passed.
 - Changelog: added `Added` and `Changed` entries for packaged usage smoke coverage and usage cleanup documentation.
-- Commit: `5656c0a` (`docs: document usage cleanup workflow`).
+- Commit: `a586d17` (`docs: document usage cleanup workflow`).
+
+### 2026-06-20: Step 9 Final End-to-End Verification
+
+- Ran the full repository verification and package dry-run after all implementation slices were committed.
+- Exercised the built CLI against temporary fixture directories for:
+  - `--json`
+  - `--json --usage`
+  - `--yes --usage`
+- Verified `--json` still emits one JSON object without a `usage` field unless usage analysis is requested.
+- Verified `--json --usage` includes detected skill usage and context-budget pressure while omitting raw assistant transcript text.
+- Verified `--yes --usage` renders usage analysis without raw transcript text.
+- Verified missing `~/.codex` data degrades to unknown context pressure, unknown skill usage, and inventory-only `review` recommendations.
+- Exercised the cleanup handoff path through the built scan action with deterministic prompts:
+  - cleanup appears in the next-step prompt
+  - `usage.json`, `usage.md`, and `cleanup-prompt.md` are written
+  - cleanup launch can be cancelled safely
+  - usage artifacts omit raw Codex log text
+  - cleanup prompt includes `npx skills-doctor@latest` verification guidance
+- Validation passed:
+  - `bun run verify` (18 files, 137 tests; build passed)
+  - `bun run pack:dry-run`
+  - final built CLI smoke script (`final e2e CLI checks passed`)
+- Changelog: added a `Tests` entry for final end-to-end usage cleanup verification.
+- Commit: `test: verify usage cleanup workflow`.
