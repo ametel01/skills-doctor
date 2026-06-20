@@ -17,6 +17,8 @@ export const buildProgram = (options: BuildProgramOptions = {}): Command => {
     .argument("[directory]", "directory to scan from", ".")
     .option("--json", "output one machine-readable JSON report")
     .option("--json-compact", "with --json, omit indentation")
+    .option("--usage", "include local Codex skill usage analysis")
+    .option("--no-logs", "skip local Codex log discovery in interactive usage analysis")
     .option("--fail-on <severity>", "fail on findings at or above severity: error, warning, advice")
     .option("--min-score <number>", "fail when the scan score is below this threshold")
     .option("-y, --yes", "skip prompts and use conservative defaults")
@@ -26,6 +28,8 @@ export const buildProgram = (options: BuildProgramOptions = {}): Command => {
         flags: {
           json?: boolean;
           jsonCompact?: boolean;
+          usage?: boolean;
+          logs?: boolean;
           yes?: boolean;
           failOn?: string;
           minScore?: string;

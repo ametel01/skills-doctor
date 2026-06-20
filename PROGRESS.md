@@ -17,7 +17,7 @@ next step.
 - [x] Step 2: Add Skill Usage Analysis Domain Module
 - [x] Step 3: Add Codex Usage Source Discovery and Context-Budget Pressure Detection
 - [x] Step 4: Extend Reports and Rendering With Usage Analysis
-- [ ] Step 5: Add Usage Flags and Main Interactive Prompt Integration
+- [x] Step 5: Add Usage Flags and Main Interactive Prompt Integration
 - [ ] Step 6: Add Cleanup Report Directory and Handoff Prompt
 - [ ] Step 7: Add Cleanup Recommendation Views
 - [ ] Step 8: Update Public API, Docs, and Package Smoke Coverage
@@ -25,9 +25,9 @@ next step.
 
 ## Current Status
 
-Step 4 is complete.
+Step 5 is complete.
 
-Next step: Step 5: Add Usage Flags and Main Interactive Prompt Integration.
+Next step: Step 6: Add Cleanup Report Directory and Handoff Prompt.
 
 ## Update Log
 
@@ -116,4 +116,24 @@ Next step: Step 5: Add Usage Flags and Main Interactive Prompt Integration.
   - `bun run typecheck`
   - `bun run build`
 - Changelog: added an `Added` entry for usage analysis in scan reports and summaries.
+- Commit: `60ae2ba` (`feat: include usage analysis in scan reports`).
+
+### 2026-06-20: Step 5 Usage Flags and Interactive Prompt Integration
+
+- Added `--usage` for non-interactive and JSON usage analysis.
+- Added `--no-logs` to opt out of default interactive Codex log discovery.
+- Wired usage-source discovery and skill usage analysis into scan reports.
+- Kept JSON reports unchanged unless `--usage` is requested.
+- Ran usage analysis by default in interactive scans and surfaced cleanup as a main next-step action even when no quality findings exist.
+- Added a lightweight usage cleanup summary action pending the full cleanup handoff in Step 6.
+- Added CLI tests for `--json --usage`, `--yes --usage`, prompt skipping, and cleanup appearing with no findings.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/cli-scan.test.ts` (1 file, 24 tests)
+  - `bun run test -- test/cli-bin.test.ts` (1 file, 9 tests)
+  - `bun run test` (18 files, 130 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added an `Added` entry for the interactive usage-cleanup prompt and `--usage` automation flag.
 - Commit: pending until this step is committed.

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added the `--usage` automation flag and interactive usage-cleanup prompt in the main scan flow.
 - Added optional usage analysis in scan reports and human summaries, including context-budget pressure notes.
 - Added bounded Codex usage-source discovery and context-budget pressure detection for local session/history logs.
 - Added a local Codex session usage analyzer that ranks scanned skills by detected usage and emits conservative cleanup recommendations.

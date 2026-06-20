@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
 import { scanAction } from "../src/cli/commands/scan.js";
 import { CliInputError } from "../src/cli/utils/handle-error.js";
-import type { PromptAdapter } from "../src/cli/utils/prompts.js";
+import type { Choice, PromptAdapter } from "../src/cli/utils/prompts.js";
 
 describe("scanAction", () => {
   let directory: string;
@@ -47,6 +47,82 @@ describe("scanAction", () => {
     expect(stdout.join("")).toContain("Skills: 1 scanned");
     expect(stdout.join("")).not.toContain("Top affected skills:");
     expect(process.exitCode).toBe(1);
+  });
+
+  it("includes usage in JSON only when --usage is requested", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const homeDir = path.join(directory, "home");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "Using the `good-skill` skill.",
+      },
+    ]);
+    const options = {
+      cwd: directory,
+      homeDir,
+      stdinIsTty: false,
+      writeStderr: () => {},
+      spinner: {
+        run: async <Value>(_message: string, operation: () => Promise<Value>) => operation(),
+      },
+    };
+    const withoutUsageStdout: string[] = [];
+    const withUsageStdout: string[] = [];
+
+    await scanAction(
+      ".",
+      { json: true, jsonCompact: true },
+      {
+        ...options,
+        writeStdout: (message) => withoutUsageStdout.push(message),
+      },
+    );
+    await scanAction(
+      ".",
+      { json: true, jsonCompact: true, usage: true },
+      {
+        ...options,
+        writeStdout: (message) => withUsageStdout.push(message),
+      },
+    );
+
+    const withoutUsage = JSON.parse(withoutUsageStdout.join(""));
+    const withUsage = JSON.parse(withUsageStdout.join(""));
+    expect(withoutUsage).not.toHaveProperty("usage");
+    expect(withUsage.usage).toMatchObject({
+      totalSkillsAnalyzed: 1,
+      usedSkillCount: 1,
+      contextPressure: {
+        level: "low",
+      },
+    });
+  });
+
+  it("runs usage analysis with --yes --usage without prompting", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const stdout: string[] = [];
+
+    const report = await scanAction(
+      ".",
+      { yes: true, usage: true },
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        stdinIsTty: true,
+        prompts: throwingPrompts(),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(report.usage).toMatchObject({
+      totalSkillsAnalyzed: 1,
+      unknownSkillCount: 1,
+    });
+    expect(stdout.join("")).toContain("Usage analysis:");
   });
 
   it("reports a measurable elapsed scan time with injected clock", async () => {
@@ -216,6 +292,44 @@ describe("scanAction", () => {
     );
 
     expect(report.scannedRoots.map((root) => root.ecosystem)).toEqual(["claude"]);
+  });
+
+  it("shows cleanup as an interactive next step even when no findings exist", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const homeDir = path.join(directory, "home");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "Using the `good-skill` skill.",
+      },
+    ]);
+    const stdout: string[] = [];
+    const nextStepChoices: string[][] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: recordingPrompts({
+          selects: ["all", "cleanup", "exit"],
+          nextStepChoices,
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(report.findingCount).toBe(0);
+    expect(nextStepChoices[0]).toContain("Clean up unused skills and context-budget pressure");
+    expect(nextStepChoices[0]).not.toContain("Fix skills with Claude or Codex");
+    expect(stdout.join("")).toContain("Recommended cleanup:");
+    expect(stdout.join("")).toContain("keep good-skill");
   });
 
   it("shows grouped findings when by-skill is selected", async () => {
@@ -634,6 +748,31 @@ const writeSkill = async (skillDir: string, name: string): Promise<void> => {
   );
 };
 
+const writeStrongSkill = async (skillDir: string, name: string): Promise<void> => {
+  await mkdir(path.join(skillDir, "evals"), { recursive: true });
+  await writeFile(path.join(skillDir, "evals", "evals.json"), "{}\n");
+  await writeFile(
+    path.join(skillDir, "SKILL.md"),
+    [
+      "---",
+      `name: ${name}`,
+      "description: Use this skill when testing usage-aware CLI scans.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Inspect the fixture inputs.",
+      "- Compare results with expected output.",
+      "",
+    ].join("\n"),
+  );
+};
+
+const writeJsonl = async (filePath: string, records: readonly unknown[]): Promise<void> => {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
+};
+
 const fakePrompts = (answers: readonly string[]): PromptAdapter => {
   const queue = [...answers];
   return {
@@ -658,3 +797,34 @@ const queuedPrompts = (input: {
     select: async <Value extends string>() => (selects.shift() ?? "exit") as Value,
   };
 };
+
+const recordingPrompts = (input: {
+  readonly selects: readonly string[];
+  readonly nextStepChoices: string[][];
+}): PromptAdapter => {
+  const selects = [...input.selects];
+  return {
+    checkbox: async () => [],
+    confirm: async () => true,
+    input: async () => "",
+    select: async <Value extends string>(message: string, choices: readonly Choice<Value>[]) => {
+      if (message === "Next step") input.nextStepChoices.push(choices.map((choice) => choice.name));
+      return (selects.shift() ?? "exit") as Value;
+    },
+  };
+};
+
+const throwingPrompts = (): PromptAdapter => ({
+  checkbox: async () => {
+    throw new Error("unexpected prompt");
+  },
+  confirm: async () => {
+    throw new Error("unexpected prompt");
+  },
+  input: async () => {
+    throw new Error("unexpected prompt");
+  },
+  select: async () => {
+    throw new Error("unexpected prompt");
+  },
+});

@@ -1,8 +1,17 @@
 import path from "node:path";
+import {
+  analyzeSkillUsage,
+  type AnalyzeSkillUsageInput,
+} from "../../domain/analyze-skill-usage.js";
 import type { ScanReport } from "../../domain/build-report.js";
 import { buildScanReport } from "../../domain/build-report.js";
 import { compareFindings, renderPostHandoffSummary } from "../../domain/compare-findings.js";
 import { discoverSkillRoots } from "../../domain/discover-skill-roots.js";
+import {
+  discoverUsageSources,
+  type DiscoverUsageSourcesInput,
+  type DiscoverUsageSourcesResult,
+} from "../../domain/discover-usage-sources.js";
 import { groupFindingsByKey } from "../../domain/group-findings.js";
 import { scanSkillRoots } from "../../domain/scan-skills.js";
 import {
@@ -29,6 +38,8 @@ import { createSpinner, type SpinnerFactory } from "../utils/spinner.js";
 export type ScanFlags = {
   readonly json?: boolean;
   readonly jsonCompact?: boolean;
+  readonly usage?: boolean;
+  readonly logs?: boolean;
   readonly yes?: boolean;
   readonly failOn?: string | undefined;
   readonly minScore?: string | undefined;
@@ -52,11 +63,17 @@ export type ScanActionOptions = {
   readonly repairReportOutputRoot?: string;
   readonly repairReportTimestamp?: string;
   readonly launchAgent?: RepairAgentLauncher;
+  readonly discoverUsageSources?: (
+    input: DiscoverUsageSourcesInput,
+  ) => Promise<DiscoverUsageSourcesResult>;
+  readonly analyzeSkillUsage?: (
+    input: AnalyzeSkillUsageInput,
+  ) => ReturnType<typeof analyzeSkillUsage>;
 };
 
 type RootSelection = "all" | "claude" | "codex" | "custom";
 type RootScopeSelection = "all" | "local" | "global" | "custom";
-type ReviewAction = "all" | "errors" | "by-skill" | "repair" | "exit";
+type ReviewAction = "all" | "errors" | "by-skill" | "repair" | "cleanup" | "exit";
 type RootSelectionResult = {
   readonly roots: readonly SkillRoot[];
   readonly diagnostics: readonly Diagnostic[];
@@ -141,11 +158,22 @@ export const scanAction = async (
     scanSkillRoots({ roots, diagnostics }),
   );
   const elapsedMilliseconds = Math.max(0, Math.round(now() - startedAt));
+  const usageInput = shouldRunUsageAnalysis({ flags, skipPrompts })
+    ? await spinner.run("Analyzing local Codex usage...", () =>
+        buildUsageReportInput({
+          scan,
+          homeDir: options.homeDir,
+          discoverUsageSources: options.discoverUsageSources ?? discoverUsageSources,
+          analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
+        }),
+      )
+    : undefined;
   const report = buildScanReport({
     version: options.version ?? "0.0.0",
     directory: cwd,
     elapsedMilliseconds,
     scan,
+    ...(usageInput === undefined ? {} : { usage: usageInput }),
   });
   let finalReport = report;
 
@@ -160,9 +188,9 @@ export const scanAction = async (
       animate: options.animateScoreHeader ?? (!skipPrompts && stdoutIsTty),
     });
     writeStdout(renderHumanSummary(report, { includeScore: false }));
-    if (!skipPrompts && report.findingCount > 0) {
+    if (!skipPrompts && shouldShowReviewMenu(report)) {
       finalReport =
-        (await reviewFindings(report, {
+        (await reviewScan(report, {
           cwd,
           roots,
           version: options.version ?? "0.0.0",
@@ -186,6 +214,42 @@ const resolveGateOptions = (flags: ScanFlags): ScanExitCodeOptions => ({
   failOn: parseFailOnSeverity(flags.failOn),
   minScore: parseMinScore(flags.minScore),
 });
+
+const shouldRunUsageAnalysis = (input: {
+  readonly flags: ScanFlags;
+  readonly skipPrompts: boolean;
+}): boolean => {
+  if (input.flags.usage) return true;
+  if (input.skipPrompts) return false;
+  return input.flags.logs !== false;
+};
+
+const buildUsageReportInput = async (input: {
+  readonly scan: Awaited<ReturnType<typeof scanSkillRoots>>;
+  readonly homeDir?: string | undefined;
+  readonly discoverUsageSources: (
+    input: DiscoverUsageSourcesInput,
+  ) => Promise<DiscoverUsageSourcesResult>;
+  readonly analyzeSkillUsage: (
+    input: AnalyzeSkillUsageInput,
+  ) => ReturnType<typeof analyzeSkillUsage>;
+}): Promise<NonNullable<Parameters<typeof buildScanReport>[0]["usage"]>> => {
+  const discovered = await input.discoverUsageSources({ homeDir: input.homeDir });
+  const analysis = await input.analyzeSkillUsage({
+    skills: input.scan.skills,
+    usageSourcePaths: discovered.usageSourcePaths,
+  });
+  return {
+    analysis: {
+      ...analysis,
+      diagnostics: [...discovered.diagnostics, ...analysis.diagnostics],
+    },
+    contextPressure: discovered.contextPressure,
+  };
+};
+
+const shouldShowReviewMenu = (report: ScanReport): boolean =>
+  report.findingCount > 0 || (report.usage?.topRecommendations.length ?? 0) > 0;
 
 const parseFailOnSeverity = (value: string | undefined): ScanGateSeverity | undefined => {
   if (value === undefined) return undefined;
@@ -361,21 +425,39 @@ type ReviewFindingsInput = {
   readonly launchAgent: RepairAgentLauncher;
 };
 
-const reviewFindings = async (
+const reviewScan = async (
   report: ScanReport,
   input: ReviewFindingsInput,
 ): Promise<ScanReport | undefined> => {
   const { prompts, write } = input;
   while (true) {
     const action = await prompts.select<ReviewAction>("Next step", [
-      { name: "Fix skills with Claude or Codex", value: "repair" },
+      ...(report.usage !== undefined && report.usage.topRecommendations.length > 0
+        ? [
+            {
+              name: "Clean up unused skills and context-budget pressure",
+              value: "cleanup" as const,
+            },
+          ]
+        : []),
+      ...(report.findingCount > 0
+        ? [{ name: "Fix skills with Claude or Codex", value: "repair" as const }]
+        : []),
       ...(report.errorCount > 0 ? [{ name: "View errors", value: "errors" as const }] : []),
-      { name: "View all findings", value: "all" },
-      { name: "View findings by skill", value: "by-skill" },
+      ...(report.findingCount > 0
+        ? [
+            { name: "View all findings", value: "all" as const },
+            { name: "View findings by skill", value: "by-skill" as const },
+          ]
+        : []),
       { name: "Exit", value: "exit" },
     ]);
 
     if (action === "exit") return;
+    if (action === "cleanup") {
+      write(renderUsageCleanupSummary(report));
+      continue;
+    }
     if (action === "repair") {
       return runRepairAgentFlow(report, input);
     }
@@ -465,7 +547,7 @@ const runRepairAgentFlow = async (
       nextReport.findingCount > 0 &&
       (await input.prompts.confirm("Run another repair pass?", false))
     ) {
-      return (await reviewFindings(nextReport, input)) ?? nextReport;
+      return (await reviewScan(nextReport, input)) ?? nextReport;
     }
     return nextReport;
   } catch (error) {
@@ -511,4 +593,29 @@ const renderFindingsBySkill = (findings: readonly Finding[]): string => {
     })
     .join("\n\n")
     .concat("\n");
+};
+
+const renderUsageCleanupSummary = (report: ScanReport): string => {
+  if (report.usage === undefined) return "Usage analysis has not run.\n";
+  const lines = [
+    "Usage analysis:",
+    `- ${report.usage.usedSkillCount} skills with detected usage`,
+    `- ${report.usage.unusedSkillCount} skills with no detected usage`,
+    `- ${report.usage.unknownSkillCount} skills with unknown usage`,
+    `- ${report.usage.duplicateSkillCount} duplicate same-name skills`,
+    `- ${report.usage.pluginContributedSkillCount} plugin-contributed skills`,
+    `Context budget pressure: ${report.usage.contextPressure.level}`,
+    "Recommended cleanup:",
+  ];
+  if (report.usage.topRecommendations.length === 0) {
+    lines.push("- No cleanup recommendations.");
+  } else {
+    lines.push(
+      ...report.usage.topRecommendations.map(
+        (recommendation) =>
+          `- ${recommendation.action} ${recommendation.skillName}: ${recommendation.reason}`,
+      ),
+    );
+  }
+  return `${lines.join("\n")}\n`;
 };
