@@ -16,7 +16,7 @@ next step.
 ## Step Checklist
 
 - [x] Step 0: Progress and Changelog Tracking Setup
-- [ ] Step 1: Baseline Verification
+- [x] Step 1: Baseline Verification
 - [ ] Step 2: Add Security Category and Validator Skeleton
 - [ ] Step 3: Implement Instruction Subversion and Exfiltration Rules
 - [ ] Step 4: Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules
@@ -26,9 +26,9 @@ next step.
 
 ## Current Status
 
-Step 0 is complete.
+Step 1 is complete.
 
-Next step: Step 1 Baseline Verification.
+Next step: Step 2 Add Security Category and Validator Skeleton.
 
 ## Update Log
 
@@ -49,4 +49,22 @@ Next step: Step 1 Baseline Verification.
   - `bun run build`
 - Changelog: added an `Added` entry for malicious skill detector implementation
   tracking.
+- Commit: `0454eff` (`chore: add malicious skill detector implementation tracking`).
+
+### 2026-06-30: Step 1 Baseline Verification
+
+- Ran the repository baseline before malicious skill detector implementation.
+- `bun install --frozen-lockfile` passed with no dependency or lockfile changes.
+- `bun run verify` passed:
+  - `bun run check`
+  - `bun run typecheck`
+  - `bun run test` (18 files, 151 tests)
+  - `bun run build`
+- Additional quality gates passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test` (18 files, 151 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: no entry required because no source behavior changed.
 - Commit: pending.
