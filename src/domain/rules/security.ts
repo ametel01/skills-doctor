@@ -7,7 +7,11 @@ export type SecurityRuleOptions = {
 type SecurityRuleId =
   | "prompt-injection-instruction"
   | "secret-exfiltration-instruction"
-  | "network-exfiltration-command";
+  | "network-exfiltration-command"
+  | "remote-code-execution-bootstrap"
+  | "destructive-command-high-risk"
+  | "agent-safety-disablement"
+  | "external-resource-obfuscation";
 
 type SecurityRule = {
   readonly ruleId: SecurityRuleId;
@@ -37,8 +41,18 @@ const TRANSFER_PATTERN =
   /\b(send|post|upload|forward|transmit|copy|paste|exfiltrate)\b.{0,100}\b(remote|external|webhook|server|endpoint|url|site|gist|paste|chat|slack|discord)\b/i;
 const NETWORK_TRANSFER_PATTERN =
   /\b(curl|wget|netcat|nc|scp|rsync|http post|webhook|request to external)\b/i;
+const REMOTE_EXECUTION_PATTERN =
+  /\b(download|fetch|retrieve|remote|installer|curl|wget)\b.{0,100}\b(pipe|execute|run|shell|bash|sh|zsh|python|node|interpreter)\b/i;
+const BROAD_DESTRUCTIVE_PATTERN =
+  /\b(delete|remove|wipe|destroy|erase)\b.{0,100}\b(home directory|root directory|entire project|all files|everything|shell history|audit trail|logs?)\b/i;
+const PERMISSION_WEAKENING_PATTERN =
+  /\b(chmod|permission|permissions)\b.{0,80}\b(777|world-writable|everyone can write|disable ownership checks)\b/i;
+const SAFETY_DISABLEMENT_PATTERN =
+  /\b(--yolo|--dangerously-skip-permissions|skip permissions|disable sandbox|without sandbox|approve all prompts|auto-approve|bypass review|avoid confirmation|without confirmation)\b/i;
+const OBFUSCATED_EXECUTION_PATTERN =
+  /\b((base64|encoded|obfuscated|hidden remote)\b.{0,100}\b(decode|decode it|decoded|stage)|\b(decode|decode it|decoded|stage)\b.{0,100}\b(base64|encoded|obfuscated|hidden remote))\b.{0,100}\b(execute|run|shell|bash|sh|zsh|interpreter)\b/i;
 const PREVENTION_PATTERN =
-  /\b(do not|don't|never|avoid|refuse to|must not|should not)\b.{0,80}\b(ignore|disregard|override|bypass|send|post|upload|forward|transmit|copy|paste|exfiltrate|curl|wget|netcat|nc|scp|rsync|webhook)\b/i;
+  /\b(do not|don't|never|avoid|refuse to|must not|should not)\b.{0,80}\b(ignore|disregard|override|bypass|send|post|upload|forward|transmit|copy|paste|exfiltrate|curl|wget|netcat|nc|scp|rsync|webhook|--yolo|--dangerously-skip-permissions|sandbox|auto-approve|confirmation|base64|encoded)\b/i;
 
 const SECURITY_RULES: readonly SecurityRule[] = [
   {
@@ -83,6 +97,68 @@ const SECURITY_RULES: readonly SecurityRule[] = [
         lines,
         (line) => isSecretSourceLine(line) || FILE_READ_PATTERN.test(line.text),
         (line) => NETWORK_TRANSFER_PATTERN.test(line.text),
+      ),
+  },
+  {
+    ruleId: "remote-code-execution-bootstrap",
+    severity: "error",
+    title: "Remote code execution bootstrap appears in skill body",
+    message:
+      "The skill appears to instruct an agent to fetch remote content and execute it through a shell or interpreter.",
+    suggestion:
+      "Remove execute-from-network guidance. Require pinned, inspectable local scripts or documented package commands instead.",
+    findLine: (lines) =>
+      findFirstLine(
+        lines,
+        (line) => !isPreventiveLine(line.text) && REMOTE_EXECUTION_PATTERN.test(line.text),
+      ),
+  },
+  {
+    ruleId: "destructive-command-high-risk",
+    severity: "warning",
+    title: "High-risk destructive instruction appears in skill body",
+    message:
+      "The skill appears to describe broad deletion, trace removal, or permission weakening that could damage user files or hide activity.",
+    suggestion:
+      "Remove broad destructive guidance, avoid trace-hiding instructions, and require scoped dry-runs or explicit user confirmation for risky changes.",
+    findLine: (lines) =>
+      findFirstLine(
+        lines,
+        (line) =>
+          !isPreventiveLine(line.text) &&
+          (BROAD_DESTRUCTIVE_PATTERN.test(line.text) ||
+            PERMISSION_WEAKENING_PATTERN.test(line.text)),
+      ),
+  },
+  {
+    ruleId: "agent-safety-disablement",
+    severity: "warning",
+    title: "Agent safety disablement appears in skill body",
+    message:
+      "The skill appears to instruct an agent to disable sandboxing, skip permissions, auto-approve prompts, or avoid confirmation.",
+    suggestion:
+      "Remove safety-bypass instructions unless they are part of a documented user-approved handoff flow with explicit confirmation.",
+    findLine: (lines) =>
+      findFirstLine(
+        lines,
+        (line) =>
+          !isPreventiveLine(line.text) &&
+          !isDescriptiveLaunchPreview(line.text) &&
+          SAFETY_DISABLEMENT_PATTERN.test(line.text),
+      ),
+  },
+  {
+    ruleId: "external-resource-obfuscation",
+    severity: "warning",
+    title: "Obfuscated external execution appears in skill body",
+    message:
+      "The skill appears to instruct an agent to decode or stage obscured content and execute it.",
+    suggestion:
+      "Replace obfuscated execution guidance with transparent, reviewable files and explicit validation steps.",
+    findLine: (lines) =>
+      findFirstLine(
+        lines,
+        (line) => !isPreventiveLine(line.text) && OBFUSCATED_EXECUTION_PATTERN.test(line.text),
       ),
   },
 ];
@@ -156,6 +232,10 @@ const findProximityLine = (
 const isSecretSourceLine = (line: SourceLine): boolean => SECRET_SOURCE_PATTERN.test(line.text);
 
 const isPreventiveLine = (text: string): boolean => PREVENTION_PATTERN.test(text);
+
+const isDescriptiveLaunchPreview = (text: string): boolean =>
+  /\b(launch preview|example|documentation|documented)\b/i.test(text) &&
+  /\b(--yolo|--dangerously-skip-permissions)\b/i.test(text);
 
 const readSkillName = (skill: SkillRecord): string => {
   if (!skill.parseResult.ok) return skill.directoryName;

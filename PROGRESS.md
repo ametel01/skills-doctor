@@ -19,16 +19,16 @@ next step.
 - [x] Step 1: Baseline Verification
 - [x] Step 2: Add Security Category and Validator Skeleton
 - [x] Step 3: Implement Instruction Subversion and Exfiltration Rules
-- [ ] Step 4: Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules
+- [x] Step 4: Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules
 - [ ] Step 5: Wire Security Rules Into Scanning and Reports
 - [ ] Step 6: Document Rule Catalog and Public API
 - [ ] Step 7: Final Verification and Packaging Check
 
 ## Current Status
 
-Step 3 is complete.
+Step 4 is complete.
 
-Next step: Step 4 Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules.
+Next step: Step 5 Wire Security Rules Into Scanning and Reports.
 
 ## Update Log
 
@@ -104,4 +104,24 @@ Next step: Step 4 Implement Execution, Destruction, Safety-Disablement, and Obfu
   - `bun run build`
 - Changelog: added a `Security` entry for instruction-subversion and
   secret-exfiltration detection in skill files.
+- Commit: `7d188e9` (`feat: detect malicious instruction and exfiltration patterns`).
+
+### 2026-06-30: Step 4 Execution, Destruction, Safety-Disablement, and Obfuscation Rules
+
+- Implemented `remote-code-execution-bootstrap`.
+- Implemented `destructive-command-high-risk`.
+- Implemented `agent-safety-disablement`.
+- Implemented `external-resource-obfuscation`.
+- Added benign false-positive coverage for descriptive launch previews, static
+  fixture decoding, and scoped destructive cleanup with confirmation.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/security-rules.test.ts` (1 file, 11 tests)
+  - `bun run test` (19 files, 162 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added a `Security` entry for remote execution,
+  safety-disablement, destructive, and obfuscated command detection in skill
+  files.
 - Commit: pending.
