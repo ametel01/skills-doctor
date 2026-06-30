@@ -33,7 +33,7 @@
     "verify": "bun run check && bun run typecheck && bun run test && bun run build",
     "pack:dry-run": "bun pm pack --dry-run",
     "release:notes": "node scripts/extract-release-notes.mjs",
-    "dev": "node bin/skills-doctor.js"
+    "dev": "bun run build && node bin/skills-doctor.js"
   },
   "keywords": [
     "agent",

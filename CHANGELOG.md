@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added a public security-rule validator API surface for future malicious skill detection rules.
 - Established progress tracking for the malicious skill detector implementation plan.
 
+### Fixed
+
+- Made `bun run dev` rebuild ignored `dist/` output before launching the packaged bin so local CLI runs reflect source changes.
+
 ### Security
 
 - Surfaced security findings in the interactive CLI summary and review menu.

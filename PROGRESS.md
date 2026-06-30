@@ -39,16 +39,16 @@ Next step: none.
   findings exist.
 - Added CLI and reporting regression coverage so security findings are visible
   from the CLI path, not only the domain scanner.
+- Updated `bun run dev` to rebuild ignored `dist/` output before launching the
+  packaged bin, so local CLI runs reflect latest source changes.
 - Validation passed:
   - `bun run format:check`
   - `bun run lint`
-  - `bun run test -- test/reporting.test.ts test/cli-scan.test.ts` (2 files, 44 tests)
-  - `bun run test` (19 files, 166 tests)
-  - `bun run typecheck`
-  - `bun run build`
-- Changelog: added a `Security` entry for surfacing security findings in the
-  interactive CLI.
-- Commit: CLI visibility fix commit (`fix: surface security findings in cli`).
+  - `bun run test -- test/reporting.test.ts test/cli-scan.test.ts test/cli-bin.test.ts` (3 files, 55 tests)
+  - `bun run verify` (19 files, 167 tests)
+- Changelog: added entries for surfacing security findings in the interactive
+  CLI and keeping the development entrypoint fresh.
+- Commit: development entrypoint follow-up (`fix: rebuild before dev cli launch`).
 
 ### 2026-06-30: Step 0 Tracking Setup
 
