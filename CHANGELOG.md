@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Security
 
+- Integrated security findings into normal skill scans and report exit-code behavior.
 - Added deterministic detection for remote execution, safety-disablement, destructive, and obfuscated command patterns in skill files.
 - Added deterministic detection for instruction-subversion and secret-exfiltration patterns in skill files.
 

@@ -20,15 +20,15 @@ next step.
 - [x] Step 2: Add Security Category and Validator Skeleton
 - [x] Step 3: Implement Instruction Subversion and Exfiltration Rules
 - [x] Step 4: Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules
-- [ ] Step 5: Wire Security Rules Into Scanning and Reports
+- [x] Step 5: Wire Security Rules Into Scanning and Reports
 - [ ] Step 6: Document Rule Catalog and Public API
 - [ ] Step 7: Final Verification and Packaging Check
 
 ## Current Status
 
-Step 4 is complete.
+Step 5 is complete.
 
-Next step: Step 5 Wire Security Rules Into Scanning and Reports.
+Next step: Step 6 Document Rule Catalog and Public API.
 
 ## Update Log
 
@@ -124,4 +124,24 @@ Next step: Step 5 Wire Security Rules Into Scanning and Reports.
 - Changelog: added a `Security` entry for remote execution,
   safety-disablement, destructive, and obfuscated command detection in skill
   files.
+- Commit: `7805466` (`feat: detect high-risk skill command patterns`).
+
+### 2026-06-30: Step 5 Security Scan and Report Integration
+
+- Wired `validateSecurityRules()` into `scanSkillRoots()` after structural and
+  quality validation.
+- Added domain scan coverage proving security findings are emitted during normal
+  scans.
+- Added reporting coverage proving security error findings make reports fail
+  through the existing `buildScanReport()` and `resolveScanExitCode()` paths.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/domain-scan.test.ts` (1 file, 14 tests)
+  - `bun run test -- test/reporting.test.ts` (1 file, 12 tests)
+  - `bun run test` (19 files, 164 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added a `Security` entry for integrating security findings into
+  normal scans and reports.
 - Commit: pending.
