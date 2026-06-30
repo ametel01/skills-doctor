@@ -12,6 +12,7 @@ export type FindingSummary = {
   readonly errorCount: number;
   readonly warningCount: number;
   readonly adviceCount: number;
+  readonly securityCount: number;
   readonly topSkills: readonly SummaryGroup[];
   readonly topCategories: readonly SummaryGroup[];
 };
@@ -30,6 +31,7 @@ export const summarizeFindings = (findings: readonly Finding[]): FindingSummary 
   errorCount: countSeverity(findings, "error"),
   warningCount: countSeverity(findings, "warning"),
   adviceCount: countSeverity(findings, "advice"),
+  securityCount: findings.filter((finding) => finding.category === "security").length,
   topSkills: topGroups(
     findings.map((finding) => finding.skillName ?? finding.skillPath),
     5,
@@ -70,6 +72,11 @@ export const renderHumanSummary = (
       1,
       0,
       `${label("Score", shouldColor)}: ${colorizeScore(String(report.score.value), report.score.value, shouldColor)} (${colorizeScore(report.score.label, report.score.value, shouldColor)})`,
+    );
+  }
+  if (summary.securityCount > 0) {
+    lines.push(
+      `${label("Security findings", shouldColor)}: ${danger(String(summary.securityCount), shouldColor)} suspicious skill patterns`,
     );
   }
   if (report.usage !== undefined) {

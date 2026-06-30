@@ -105,6 +105,28 @@ describe("scan reports", () => {
     expect(resolveScanExitCode(report)).toBe(1);
   });
 
+  it("renders a security findings summary when security findings exist", () => {
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan: {
+        roots: [],
+        skills: [],
+        diagnostics: [],
+        findings: [
+          makeFinding({
+            ruleId: "prompt-injection-instruction",
+            severity: "error",
+            category: "security",
+          }),
+        ],
+      },
+    });
+
+    expect(renderHumanSummary(report)).toContain("Security findings: 1 suspicious skill patterns");
+  });
+
   it("fails when diagnostics include blocking errors", async () => {
     const scan = {
       roots: [],

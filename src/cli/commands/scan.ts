@@ -81,6 +81,7 @@ type RootScopeSelection = "all" | "local" | "global" | "custom";
 type ReviewAction =
   | "all"
   | "errors"
+  | "security"
   | "by-skill"
   | "repair"
   | "cleanup"
@@ -483,6 +484,9 @@ const reviewScan = async (
         ? [{ name: "Fix skills with Claude or Codex", value: "repair" as const }]
         : []),
       ...(report.errorCount > 0 ? [{ name: "View errors", value: "errors" as const }] : []),
+      ...(hasSecurityFindings(report)
+        ? [{ name: "View security findings", value: "security" as const }]
+        : []),
       ...(report.findingCount > 0
         ? [
             { name: "View all findings", value: "all" as const },
@@ -511,7 +515,9 @@ const reviewScan = async (
     const selectedFindings =
       action === "errors"
         ? report.findings.filter((finding) => finding.severity === "error")
-        : report.findings;
+        : action === "security"
+          ? report.findings.filter((finding) => finding.category === "security")
+          : report.findings;
     if (action === "by-skill") {
       write(renderFindingsBySkill(selectedFindings, { color: input.color }));
       continue;
@@ -519,6 +525,9 @@ const reviewScan = async (
     write(renderFindings(selectedFindings, { color: input.color }));
   }
 };
+
+const hasSecurityFindings = (report: ScanReport): boolean =>
+  report.findings.some((finding) => finding.category === "security");
 
 const runCleanupAgentFlow = async (
   report: ScanReport,

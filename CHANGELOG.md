@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Security
 
+- Surfaced security findings in the interactive CLI summary and review menu.
 - Verified malicious skill detector release readiness with full verification and package dry-run.
 - Integrated security findings into normal skill scans and report exit-code behavior.
 - Added deterministic detection for remote execution, safety-disablement, destructive, and obfuscated command patterns in skill files.

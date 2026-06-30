@@ -32,6 +32,24 @@ Next step: none.
 
 ## Update Log
 
+### 2026-06-30: Post-plan CLI Visibility Fix
+
+- Added a human summary line when scans include security findings.
+- Added a `View security findings` interactive review action when security
+  findings exist.
+- Added CLI and reporting regression coverage so security findings are visible
+  from the CLI path, not only the domain scanner.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/reporting.test.ts test/cli-scan.test.ts` (2 files, 44 tests)
+  - `bun run test` (19 files, 166 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added a `Security` entry for surfacing security findings in the
+  interactive CLI.
+- Commit: CLI visibility fix commit (`fix: surface security findings in cli`).
+
 ### 2026-06-30: Step 0 Tracking Setup
 
 - Replaced the stale usage-cleanup progress tracker with this malicious skill
