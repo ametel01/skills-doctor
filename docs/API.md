@@ -74,6 +74,11 @@ Rules and scoring:
   progressive disclosure, resources, scripts, eval guidance, and
   cross-ecosystem divergence. `options` can inject resource and eval existence
   checks for in-memory or alternate filesystem integrations.
+- `validateSecurityRules(skills, options?)`: validates deterministic security
+  heuristics for suspicious `SKILL.md` instructions such as instruction
+  subversion, secret exfiltration, network exfiltration, remote execution,
+  high-risk destructive actions, safety disablement, and obfuscated execution.
+  Findings describe suspicious patterns and are not proof of malicious intent.
 - `calculateScore(findings, options?)`: calculates a score summary.
 - `getScoreLabel(value)`: maps a numeric score to a score label.
 
@@ -123,6 +128,7 @@ Exported types include:
 - `QualityRuleOptions`
 - `ResourceStatus`
 - `RuleCatalogEntry`
+- `SecurityRuleOptions`
 - `ScanReport`
 - `ScanReportUsage`
 - `ScanResult`
@@ -252,6 +258,7 @@ type Finding = {
     | "scripts"
     | "evals"
     | "portability"
+    | "security"
     | "cross-ecosystem";
   readonly title: string;
   readonly message: string;

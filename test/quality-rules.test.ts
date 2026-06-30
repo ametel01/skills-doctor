@@ -420,6 +420,10 @@ describe("quality rules", () => {
       fileURLToPath(new URL("../src/domain/rules/structural.ts", import.meta.url)),
       "utf8",
     );
+    const securitySource = await readFile(
+      fileURLToPath(new URL("../src/domain/rules/security.ts", import.meta.url)),
+      "utf8",
+    );
     const ruleCatalogMarkdown = await readFile(
       fileURLToPath(new URL("../docs/RULES.md", import.meta.url)),
       "utf8",
@@ -434,7 +438,12 @@ describe("quality rules", () => {
     const structuralRuleIds = Array.from(structuralSource.matchAll(/ruleId:\s*"([^"]+)"/g)).map(
       (match) => match[1],
     );
-    const emittedRuleIds = [...new Set([...parseRuleIds, ...qualityRuleIds, ...structuralRuleIds])]
+    const securityRuleIds = Array.from(securitySource.matchAll(/ruleId:\s*"([^"]+)"/g)).map(
+      (match) => match[1],
+    );
+    const emittedRuleIds = [
+      ...new Set([...parseRuleIds, ...qualityRuleIds, ...structuralRuleIds, ...securityRuleIds]),
+    ]
       .filter((ruleId) => ruleId !== undefined)
       .sort();
     const catalogByRuleId = new Map<string, (typeof ruleCatalog)[number]>(

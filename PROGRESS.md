@@ -21,14 +21,14 @@ next step.
 - [x] Step 3: Implement Instruction Subversion and Exfiltration Rules
 - [x] Step 4: Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules
 - [x] Step 5: Wire Security Rules Into Scanning and Reports
-- [ ] Step 6: Document Rule Catalog and Public API
+- [x] Step 6: Document Rule Catalog and Public API
 - [ ] Step 7: Final Verification and Packaging Check
 
 ## Current Status
 
-Step 5 is complete.
+Step 6 is complete.
 
-Next step: Step 6 Document Rule Catalog and Public API.
+Next step: Step 7 Final Verification and Packaging Check.
 
 ## Update Log
 
@@ -144,4 +144,27 @@ Next step: Step 6 Document Rule Catalog and Public API.
   - `bun run build`
 - Changelog: added a `Security` entry for integrating security findings into
   normal scans and reports.
+- Commit: `16a6477` (`feat: include security findings in skill scans`).
+
+### 2026-06-30: Step 6 Rule Catalog and Public API Documentation
+
+- Added all security rule IDs to `ruleCatalog`.
+- Added a Security section to `docs/RULES.md`.
+- Updated `docs/API.md` with `validateSecurityRules()`, `SecurityRuleOptions`,
+  and the `security` finding category.
+- Updated `docs/CLI_SPEC.md` with the security rule module in the source map
+  and domain boundary.
+- Updated `README.md` with suspicious skill security checks and CI behavior.
+- Extended rule catalog synchronization coverage to include
+  `src/domain/rules/security.ts`.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/api-fixtures.test.ts` (1 file, 8 tests)
+  - `bun run test -- test/reporting.test.ts` (1 file, 12 tests)
+  - `bun run test` (19 files, 164 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added an `Added` entry for documenting the security detector and
+  public API.
 - Commit: pending.

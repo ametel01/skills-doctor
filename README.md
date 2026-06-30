@@ -80,9 +80,15 @@ the Agent Skills standards from <https://agentskills.io/home>, including:
 - script guidance that is non-interactive and reproducible
 - eval guidance for non-trivial skills
 - divergent same-name skills across Claude and Codex/agents roots
+- suspicious security patterns in `SKILL.md`, including instruction
+  subversion, secret exfiltration, remote execution bootstraps, high-risk
+  destructive actions, safety disablement, and obfuscated execution guidance
 
 See `docs/RULES.md` for a full rule catalog, severity, and intended rationale.
 Programmatic consumers can import `ruleCatalog` for the same metadata as structured data.
+Security findings are deterministic heuristic findings about suspicious
+instructions or capabilities; they are not proof that a skill author intended
+harm.
 
 Findings are grouped as blocking errors, warnings, and advisory improvements.
 The human summary opens with a score header showing a face, `0` to `100` score,
@@ -147,6 +153,8 @@ JSON mode writes one machine-readable report to stdout and suppresses prompts
 and spinners. Human logs and expected errors stay out of stdout.
 By default, the exit code fails only for blocking errors and error diagnostics.
 Use `--fail-on warning`, `--fail-on advice`, or `--min-score <number>` for stricter CI gates.
+High-confidence security findings are blocking errors by default. Warning-level
+security findings can be made blocking in automation with `--fail-on warning`.
 
 Use `--usage` to include local Codex usage analysis in JSON or non-interactive
 runs. Interactive runs analyze usage by default; pass `--no-logs` to skip local

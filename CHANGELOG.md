@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Documented the malicious skill detector rules, report category, and public API.
 - Added a public security-rule validator API surface for future malicious skill detection rules.
 - Established progress tracking for the malicious skill detector implementation plan.
 
