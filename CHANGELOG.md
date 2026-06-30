@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added a public security-rule validator API surface for future malicious skill detection rules.
 - Established progress tracking for the malicious skill detector implementation plan.
 
+### Security
+
+- Added deterministic detection for instruction-subversion and secret-exfiltration patterns in skill files.
+
 ## [0.5.2] - 2026-06-20
 
 ### Added

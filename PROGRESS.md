@@ -18,7 +18,7 @@ next step.
 - [x] Step 0: Progress and Changelog Tracking Setup
 - [x] Step 1: Baseline Verification
 - [x] Step 2: Add Security Category and Validator Skeleton
-- [ ] Step 3: Implement Instruction Subversion and Exfiltration Rules
+- [x] Step 3: Implement Instruction Subversion and Exfiltration Rules
 - [ ] Step 4: Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules
 - [ ] Step 5: Wire Security Rules Into Scanning and Reports
 - [ ] Step 6: Document Rule Catalog and Public API
@@ -26,9 +26,9 @@ next step.
 
 ## Current Status
 
-Step 2 is complete.
+Step 3 is complete.
 
-Next step: Step 3 Implement Instruction Subversion and Exfiltration Rules.
+Next step: Step 4 Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules.
 
 ## Update Log
 
@@ -85,4 +85,23 @@ Next step: Step 3 Implement Instruction Subversion and Exfiltration Rules.
   - `bun run typecheck`
   - `bun run build`
 - Changelog: added an `Added` entry for the public security-rule validator API.
+- Commit: `d2d172d` (`feat: add security rule validator surface`).
+
+### 2026-06-30: Step 3 Instruction Subversion and Exfiltration Rules
+
+- Implemented `prompt-injection-instruction`.
+- Implemented `secret-exfiltration-instruction`.
+- Implemented `network-exfiltration-command`.
+- Added deterministic line-number coverage and enabled-rule isolation coverage.
+- Added benign false-positive coverage for defensive secret handling and public
+  network examples.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/security-rules.test.ts` (1 file, 6 tests)
+  - `bun run test` (19 files, 157 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added a `Security` entry for instruction-subversion and
+  secret-exfiltration detection in skill files.
 - Commit: pending.
