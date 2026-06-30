@@ -58,6 +58,10 @@ export {
   type ResourceStatus,
   validateQualityRules,
 } from "./domain/rules/quality.js";
+export {
+  type SecurityRuleOptions,
+  validateSecurityRules,
+} from "./domain/rules/security.js";
 export { buildMissingSkillFinding, validateStructuralRules } from "./domain/rules/structural.js";
 export { scanSkillRoots } from "./domain/scan-skills.js";
 export {

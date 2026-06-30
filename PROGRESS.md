@@ -17,7 +17,7 @@ next step.
 
 - [x] Step 0: Progress and Changelog Tracking Setup
 - [x] Step 1: Baseline Verification
-- [ ] Step 2: Add Security Category and Validator Skeleton
+- [x] Step 2: Add Security Category and Validator Skeleton
 - [ ] Step 3: Implement Instruction Subversion and Exfiltration Rules
 - [ ] Step 4: Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules
 - [ ] Step 5: Wire Security Rules Into Scanning and Reports
@@ -26,9 +26,9 @@ next step.
 
 ## Current Status
 
-Step 1 is complete.
+Step 2 is complete.
 
-Next step: Step 2 Add Security Category and Validator Skeleton.
+Next step: Step 3 Implement Instruction Subversion and Exfiltration Rules.
 
 ## Update Log
 
@@ -67,4 +67,22 @@ Next step: Step 2 Add Security Category and Validator Skeleton.
   - `bun run typecheck`
   - `bun run build`
 - Changelog: no entry required because no source behavior changed.
+- Commit: `a8df1a4` (`chore: record malicious detector baseline verification`).
+
+### 2026-06-30: Step 2 Security Category and Validator Skeleton
+
+- Added the `security` finding category.
+- Added `src/domain/rules/security.ts` with the public
+  `validateSecurityRules()` validator and `SecurityRuleOptions`.
+- Exported the security validator API from the package root.
+- Added security-rule skeleton tests for benign skills and enabled-rule filters.
+- Updated public API facade coverage for the new export.
+- Validation passed:
+  - `bun run format:check`
+  - `bun run lint`
+  - `bun run test -- test/security-rules.test.ts` (1 file, 2 tests)
+  - `bun run test` (19 files, 153 tests)
+  - `bun run typecheck`
+  - `bun run build`
+- Changelog: added an `Added` entry for the public security-rule validator API.
 - Commit: pending.

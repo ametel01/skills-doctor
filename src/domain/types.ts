@@ -38,6 +38,7 @@ export type FindingCategory =
   | "scripts"
   | "evals"
   | "portability"
+  | "security"
   | "cross-ecosystem";
 
 export type Finding = {
