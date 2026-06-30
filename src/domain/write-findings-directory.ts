@@ -95,6 +95,13 @@ const renderFindingsMarkdown = (report: ScanReport, findings: readonly Finding[]
         `  - Message: ${finding.message}`,
         `  - Repair: ${finding.suggestion}`,
       );
+      if (finding.evidence !== undefined) {
+        lines.push("  - Evidence:");
+        for (const line of finding.evidence.excerpt) {
+          const marker = line.highlighted ? ">" : " ";
+          lines.push(`    ${marker} ${line.line}: ${line.text}`);
+        }
+      }
     }
     lines.push("");
   }
@@ -117,6 +124,14 @@ const renderSkillFindingsMarkdown = (skillLabel: string, findings: readonly Find
       `Repair: ${finding.suggestion}`,
       "",
     );
+    if (finding.evidence !== undefined) {
+      lines.push("Evidence:", "", "```text");
+      for (const line of finding.evidence.excerpt) {
+        const marker = line.highlighted ? ">" : " ";
+        lines.push(`${marker} ${line.line}: ${line.text}`);
+      }
+      lines.push("```", "");
+    }
   }
   return lines.join("\n");
 };

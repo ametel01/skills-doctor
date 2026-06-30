@@ -77,6 +77,8 @@ const makeReport = (errorCount: number): ScanReport => {
     scannedRoots: [],
     skillCount: 0,
     findingCount: errorCount,
+    qualityFindingCount: errorCount,
+    securityFindingCount: 0,
     errorCount,
     warningCount: 0,
     adviceCount: 0,

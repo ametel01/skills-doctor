@@ -50,6 +50,25 @@ Next step: none.
   CLI and keeping the development entrypoint fresh.
 - Commit: development entrypoint follow-up (`fix: rebuild before dev cli launch`).
 
+### 2026-06-30: Security Report Separation Follow-up
+
+- Separated security findings from quality issue counts, scoring, per-skill
+  quality summaries, and default exit-code gates.
+- Downgraded security rules to review warnings and kept security findings in a
+  separate interactive report.
+- Added evidence excerpts to security findings so users can inspect the matched
+  `SKILL.md` lines and deselect false positives.
+- Added a `Fix selected security findings with Claude or Codex` flow that sends
+  only checked security findings to the repair handoff prompt.
+- Validation passed:
+  - `bun run typecheck`
+  - `bun run test -- test/security-rules.test.ts test/reporting.test.ts test/domain-scan.test.ts test/cli-scan.test.ts test/handoff.test.ts` (5 files, 89 tests)
+  - `bun run check`
+  - `bun run verify` (19 files, 168 tests)
+- Changelog: added `Changed` entries for the separated security report and
+  per-finding security handoff selection.
+- Commit: security report separation follow-up (`feat: separate security review findings`).
+
 ### 2026-06-30: Step 0 Tracking Setup
 
 - Replaced the stale usage-cleanup progress tracker with this malicious skill

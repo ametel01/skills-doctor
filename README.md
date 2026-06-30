@@ -90,7 +90,9 @@ Security findings are deterministic heuristic findings about suspicious
 instructions or capabilities; they are not proof that a skill author intended
 harm.
 
-Findings are grouped as blocking errors, warnings, and advisory improvements.
+Quality findings are grouped as blocking errors, warnings, and advisory improvements.
+Security findings are reported separately as suspicious skill patterns with
+source excerpts for false-positive review.
 The human summary opens with a score header showing a face, `0` to `100` score,
 label, and proportional terminal bar. The score starts at 100 and deducts 1.5
 points for each distinct error rule and 0.75 points for each distinct warning
@@ -153,8 +155,9 @@ JSON mode writes one machine-readable report to stdout and suppresses prompts
 and spinners. Human logs and expected errors stay out of stdout.
 By default, the exit code fails only for blocking errors and error diagnostics.
 Use `--fail-on warning`, `--fail-on advice`, or `--min-score <number>` for stricter CI gates.
-High-confidence security findings are blocking errors by default. Warning-level
-security findings can be made blocking in automation with `--fail-on warning`.
+Security findings are separate review warnings by default. They do not fail the
+quality gate or affect the quality score unless a future security-specific gate
+is added.
 
 Use `--usage` to include local Codex usage analysis in JSON or non-interactive
 runs. Interactive runs analyze usage by default; pass `--no-logs` to skip local

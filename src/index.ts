@@ -75,6 +75,8 @@ export type {
   Diagnostic,
   Finding,
   FindingCategory,
+  FindingEvidence,
+  FindingEvidenceLine,
   FindingSeverity,
   ParsedFrontmatter,
   ParseFailure,

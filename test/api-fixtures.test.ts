@@ -90,6 +90,8 @@ describe("fixture scanner coverage", () => {
       "diagnostics",
       "skillCount",
       "findingCount",
+      "qualityFindingCount",
+      "securityFindingCount",
       "errorCount",
       "warningCount",
       "adviceCount",

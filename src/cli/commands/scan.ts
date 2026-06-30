@@ -82,6 +82,7 @@ type ReviewAction =
   | "all"
   | "errors"
   | "security"
+  | "security-repair"
   | "by-skill"
   | "repair"
   | "cleanup"
@@ -480,17 +481,23 @@ const reviewScan = async (
             },
           ]
         : []),
-      ...(report.findingCount > 0
+      ...(report.qualityFindingCount > 0
         ? [{ name: "Fix skills with Claude or Codex", value: "repair" as const }]
         : []),
       ...(report.errorCount > 0 ? [{ name: "View errors", value: "errors" as const }] : []),
       ...(hasSecurityFindings(report)
-        ? [{ name: "View security findings", value: "security" as const }]
-        : []),
-      ...(report.findingCount > 0
         ? [
-            { name: "View all findings", value: "all" as const },
-            { name: "View findings by skill", value: "by-skill" as const },
+            { name: "Review security findings", value: "security" as const },
+            {
+              name: "Fix selected security findings with Claude or Codex",
+              value: "security-repair" as const,
+            },
+          ]
+        : []),
+      ...(report.qualityFindingCount > 0
+        ? [
+            { name: "View quality findings", value: "all" as const },
+            { name: "View quality findings by skill", value: "by-skill" as const },
           ]
         : []),
       { name: "Exit", value: "exit" },
@@ -511,23 +518,53 @@ const reviewScan = async (
     if (action === "repair") {
       return runRepairAgentFlow(report, input);
     }
+    if (action === "security-repair") {
+      const selectedSecurityFindings = await selectSecurityFindings(report, input);
+      if (selectedSecurityFindings.length === 0) {
+        write("Security repair handoff cancelled.\n");
+        continue;
+      }
+      return runRepairAgentFlow(report, input, selectedSecurityFindings);
+    }
 
     const selectedFindings =
       action === "errors"
         ? report.findings.filter((finding) => finding.severity === "error")
         : action === "security"
           ? report.findings.filter((finding) => finding.category === "security")
-          : report.findings;
+          : report.findings.filter((finding) => finding.category !== "security");
     if (action === "by-skill") {
       write(renderFindingsBySkill(selectedFindings, { color: input.color }));
+      continue;
+    }
+    if (action === "security") {
+      write(renderSecurityFindings(selectedFindings, { color: input.color }));
       continue;
     }
     write(renderFindings(selectedFindings, { color: input.color }));
   }
 };
 
-const hasSecurityFindings = (report: ScanReport): boolean =>
-  report.findings.some((finding) => finding.category === "security");
+const hasSecurityFindings = (report: ScanReport): boolean => report.securityFindingCount > 0;
+
+const selectSecurityFindings = async (
+  report: ScanReport,
+  input: Pick<ReviewFindingsInput, "prompts">,
+): Promise<readonly Finding[]> => {
+  const securityFindings = report.findings.filter((finding) => finding.category === "security");
+  const selectedIndexes = new Set(
+    await input.prompts.checkbox(
+      "Select security findings to send for repair",
+      securityFindings.map((finding, index) => ({
+        name: `${finding.skillName ?? path.basename(path.dirname(finding.skillPath))}: ${finding.ruleId}`,
+        value: String(index),
+        description: formatFindingLocation(finding),
+        checked: true,
+      })),
+    ),
+  );
+  return securityFindings.filter((_finding, index) => selectedIndexes.has(String(index)));
+};
 
 const runCleanupAgentFlow = async (
   report: ScanReport,
@@ -657,11 +694,13 @@ const selectCleanupRecommendations = async (
 const runRepairAgentFlow = async (
   report: ScanReport,
   input: ReviewFindingsInput,
+  preselectedFindings?: readonly Finding[],
 ): Promise<ScanReport | undefined> => {
   try {
     const handoff = await prepareRepairHandoff({
       report,
       prompts: input.prompts,
+      preselectedFindings,
       outputRoot: input.repairReportOutputRoot,
       timestamp: input.repairReportTimestamp,
     });
@@ -814,6 +853,38 @@ const renderFindings = (
     .join("\n\n")}\n`;
 };
 
+const renderSecurityFindings = (
+  findings: readonly Finding[],
+  options: RenderTerminalOptions = {},
+): string => {
+  const shouldColor = Boolean(options.color);
+  const lines = [
+    `${usageLabel("Security report", shouldColor)}: ${warning(String(findings.length), shouldColor)} suspicious skill pattern${findings.length === 1 ? "" : "s"}`,
+    "",
+  ];
+  for (const finding of findings) {
+    const location = finding.skillName ?? finding.skillPath;
+    lines.push(
+      `${colorizeSeverity(`[${finding.severity}]`, finding.severity, shouldColor)} ${accent(finding.ruleId, shouldColor)} ${dim(location, shouldColor)}`,
+      formatFindingLocation(finding),
+      finding.message,
+      `${usageLabel("Suggestion", shouldColor)}: ${finding.suggestion}`,
+    );
+    if (finding.evidence !== undefined) {
+      lines.push(`${usageLabel("Evidence", shouldColor)}:`);
+      for (const line of finding.evidence.excerpt) {
+        const marker = line.highlighted ? ">" : " ";
+        const renderedLine = `${marker} ${String(line.line).padStart(4, " ")} | ${line.text}`;
+        lines.push(
+          line.highlighted ? warning(renderedLine, shouldColor) : dim(renderedLine, shouldColor),
+        );
+      }
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+};
+
 const renderFindingsBySkill = (
   findings: readonly Finding[],
   options: RenderTerminalOptions = {},
@@ -833,6 +904,9 @@ const renderFindingsBySkill = (
     .join("\n\n")
     .concat("\n");
 };
+
+const formatFindingLocation = (finding: Finding): string =>
+  `Location: ${finding.skillPath}${finding.line === undefined ? "" : `:${finding.line}`}`;
 
 const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions = {}): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";

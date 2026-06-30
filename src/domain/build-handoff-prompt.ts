@@ -61,6 +61,13 @@ export const buildHandoffPrompt = (input: BuildHandoffPromptInput): string => {
         `     ${finding.message}`,
         `     Repair: ${finding.suggestion}`,
       );
+      if (finding.evidence !== undefined) {
+        lines.push("     Evidence:");
+        for (const line of finding.evidence.excerpt) {
+          const marker = line.highlighted ? ">" : " ";
+          lines.push(`     ${marker} ${line.line}: ${line.text}`);
+        }
+      }
     }
     const omittedInGroup = group.findings.length - MAX_INLINE_FINDINGS_PER_GROUP;
     if (omittedInGroup > 0) {

@@ -519,6 +519,8 @@ const makeReport = (findings: readonly Finding[], usage?: ScanReportUsage): Scan
     scannedRoots: [{ ecosystem: "codex", rootPath: "/repo/.agents/skills", source: "local" }],
     skillCount: uniqueSkills.length,
     findingCount: findings.length,
+    qualityFindingCount: findings.filter((finding) => finding.category !== "security").length,
+    securityFindingCount: findings.filter((finding) => finding.category === "security").length,
     errorCount: findings.filter((finding) => finding.severity === "error").length,
     warningCount: findings.filter((finding) => finding.severity === "warning").length,
     adviceCount: findings.filter((finding) => finding.severity === "advice").length,

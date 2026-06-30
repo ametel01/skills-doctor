@@ -57,7 +57,7 @@ const PREVENTION_PATTERN =
 const SECURITY_RULES: readonly SecurityRule[] = [
   {
     ruleId: "prompt-injection-instruction",
-    severity: "error",
+    severity: "warning",
     title: "Instruction subversion appears in skill body",
     message:
       "The skill appears to instruct an agent to override higher-priority instructions, conceal behavior, or avoid telling the user about its actions.",
@@ -75,7 +75,7 @@ const SECURITY_RULES: readonly SecurityRule[] = [
   },
   {
     ruleId: "secret-exfiltration-instruction",
-    severity: "error",
+    severity: "warning",
     title: "Secret exfiltration instruction appears in skill body",
     message:
       "The skill appears to combine secret-reading guidance with instructions to transmit that data outside the local task context.",
@@ -86,7 +86,7 @@ const SECURITY_RULES: readonly SecurityRule[] = [
   },
   {
     ruleId: "network-exfiltration-command",
-    severity: "error",
+    severity: "warning",
     title: "Network transfer appears near secret-reading guidance",
     message:
       "The skill appears to combine network transfer tooling with secret or sensitive file-reading guidance.",
@@ -101,7 +101,7 @@ const SECURITY_RULES: readonly SecurityRule[] = [
   },
   {
     ruleId: "remote-code-execution-bootstrap",
-    severity: "error",
+    severity: "warning",
     title: "Remote code execution bootstrap appears in skill body",
     message:
       "The skill appears to instruct an agent to fetch remote content and execute it through a shell or interpreter.",
@@ -192,10 +192,35 @@ const validateSkillSecurity = (skill: SkillRecord, rules: readonly SecurityRule[
         skillPath: skill.skillPath,
         skillName: readSkillName(skill),
         line,
+        evidence: buildEvidence(skill, lines, line),
         agentRepairable: true,
       },
     ];
   });
+};
+
+const EVIDENCE_CONTEXT_LINES = 1;
+
+const buildEvidence = (
+  skill: SkillRecord,
+  lines: readonly SourceLine[],
+  lineNumber: number,
+): Finding["evidence"] => {
+  const startLine = Math.max(1, lineNumber - EVIDENCE_CONTEXT_LINES);
+  const endLine = Math.min(lines.length, lineNumber + EVIDENCE_CONTEXT_LINES);
+  const excerpt = lines
+    .filter((line) => line.number >= startLine && line.number <= endLine)
+    .map((line) => ({
+      line: line.number,
+      text: line.text,
+      highlighted: line.number === lineNumber,
+    }));
+  return {
+    path: skill.skillPath,
+    startLine,
+    endLine,
+    excerpt,
+  };
 };
 
 const filterRules = (enabledRuleIds: readonly string[] | undefined): readonly SecurityRule[] => {

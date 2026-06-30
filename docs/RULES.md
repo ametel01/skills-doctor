@@ -68,10 +68,10 @@ content that should be removed or reviewed before a skill is trusted.
 
 | Rule ID | Severity | Category | What it checks |
 | --- | --- | --- | --- |
-| `prompt-injection-instruction` | error | security | Skill instructions appear to subvert higher-priority instructions. |
-| `secret-exfiltration-instruction` | error | security | Skill instructions appear to send secrets outside the local task context. |
-| `network-exfiltration-command` | error | security | Network transfer guidance appears near secret or sensitive file reading. |
-| `remote-code-execution-bootstrap` | error | security | Skill instructions appear to fetch remote content and execute it. |
+| `prompt-injection-instruction` | warning | security | Skill instructions appear to subvert higher-priority instructions. |
+| `secret-exfiltration-instruction` | warning | security | Skill instructions appear to send secrets outside the local task context. |
+| `network-exfiltration-command` | warning | security | Network transfer guidance appears near secret or sensitive file reading. |
+| `remote-code-execution-bootstrap` | warning | security | Skill instructions appear to fetch remote content and execute it. |
 | `destructive-command-high-risk` | warning | security | Skill instructions describe broad destructive or trace-hiding actions. |
 | `agent-safety-disablement` | warning | security | Skill instructions appear to disable sandboxing, permissions, or confirmation. |
 | `external-resource-obfuscation` | warning | security | Skill instructions appear to decode or stage obscured content for execution. |

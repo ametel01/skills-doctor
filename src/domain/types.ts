@@ -54,7 +54,21 @@ export type Finding = {
   readonly skillPath: string;
   readonly skillName?: string | undefined;
   readonly line?: number | undefined;
+  readonly evidence?: FindingEvidence | undefined;
   readonly agentRepairable: boolean;
+};
+
+export type FindingEvidence = {
+  readonly path: string;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly excerpt: readonly FindingEvidenceLine[];
+};
+
+export type FindingEvidenceLine = {
+  readonly line: number;
+  readonly text: string;
+  readonly highlighted: boolean;
 };
 
 export type ParseResult =

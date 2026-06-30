@@ -24,6 +24,7 @@ export type PreparedRepairHandoff = {
 export type PrepareRepairHandoffInput = {
   readonly report: ScanReport;
   readonly prompts: PromptAdapter;
+  readonly preselectedFindings?: readonly Finding[] | undefined;
   readonly outputRoot?: string | undefined;
   readonly timestamp?: string | undefined;
   readonly writeDirectory?: typeof writeFindingsDirectory | undefined;
@@ -32,7 +33,8 @@ export type PrepareRepairHandoffInput = {
 export const prepareRepairHandoff = async (
   input: PrepareRepairHandoffInput,
 ): Promise<PreparedRepairHandoff> => {
-  const findings = await chooseRepairFindings(input.report, input.prompts);
+  const findings =
+    input.preselectedFindings ?? (await chooseRepairFindings(input.report, input.prompts));
   if (findings.length === 0) {
     throw new CliInputError("No findings were selected for repair.");
   }
@@ -76,29 +78,33 @@ const chooseRepairFindings = async (
   prompts: PromptAdapter,
 ): Promise<readonly Finding[]> => {
   const choices: Array<{ name: string; value: RepairFindingSubset }> = [];
+  const qualityFindings = report.findings.filter(isQualityFinding);
+  const qualitySkillPaths = new Set(qualityFindings.map((finding) => finding.skillPath));
   if (report.errorCount > 0) {
     choices.push({ name: "Blocking errors only", value: "errors" });
   }
   if (report.errorCount + report.warningCount > 0) {
     choices.push({ name: "Blocking errors and warnings", value: "errors-and-warnings" });
   }
-  if (report.findingCount > 0) {
+  if (qualityFindings.length > 0) {
     choices.push({ name: "All findings", value: "all" });
   }
-  if (report.skills.some((skill) => skill.findingCount > 0)) {
+  if (
+    report.skills.some((skill) => skill.findingCount > 0 && qualitySkillPaths.has(skill.skillPath))
+  ) {
     choices.push({ name: "Selected skills", value: "selected-skills" });
   }
 
   const subset = await prompts.select<RepairFindingSubset>("Choose findings to repair", choices);
 
   if (subset === "errors") {
-    return report.findings.filter((finding) => finding.severity === "error");
+    return qualityFindings.filter((finding) => finding.severity === "error");
   }
   if (subset === "errors-and-warnings") {
-    return report.findings.filter((finding) => finding.severity !== "advice");
+    return qualityFindings.filter((finding) => finding.severity !== "advice");
   }
   if (subset === "all") {
-    return report.findings;
+    return qualityFindings;
   }
 
   const skillChoices = report.skills
@@ -112,8 +118,10 @@ const chooseRepairFindings = async (
   if (selectedSkillPaths.length === 0) {
     throw new CliInputError("No skills were selected for repair.");
   }
-  return report.findings.filter((finding) => selectedSkillPaths.includes(finding.skillPath));
+  return qualityFindings.filter((finding) => selectedSkillPaths.includes(finding.skillPath));
 };
+
+const isQualityFinding = (finding: Finding): boolean => finding.category !== "security";
 
 const tryWriteFindingsDirectory = async (input: {
   readonly report: ScanReport;
