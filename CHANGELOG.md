@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Established progress tracking for the malicious skill detector implementation plan.
+
 ## [0.5.2] - 2026-06-20
 
 ### Added
