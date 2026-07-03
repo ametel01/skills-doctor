@@ -105,6 +105,9 @@ describe("scan reports", () => {
         ruleId: "prompt-injection-instruction",
         severity: "warning",
         category: "security",
+        confidence: "medium",
+        rationale: expect.stringContaining("instruction-subversion"),
+        counterevidence: expect.arrayContaining([expect.stringContaining("Defensive guidance")]),
         evidence: expect.objectContaining({
           excerpt: expect.arrayContaining([
             expect.objectContaining({
@@ -117,6 +120,35 @@ describe("scan reports", () => {
     );
     expect(resolveScanExitCode(report)).toBe(0);
     expect(resolveScanExitCode(report, { failOn: "warning" })).toBe(0);
+  });
+
+  it("does not fail or reduce score for low-confidence security findings", () => {
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan: {
+        roots: [],
+        skills: [],
+        diagnostics: [],
+        findings: [
+          makeFinding({
+            ruleId: "low-confidence-security",
+            severity: "warning",
+            category: "security",
+            confidence: "low",
+          }),
+        ],
+      },
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.score.value).toBe(100);
+    expect(resolveScanExitCode(report)).toBe(0);
+    expect(resolveScanExitCode(report, { failOn: "warning" })).toBe(0);
+    expect(renderHumanSummary(report)).toContain(
+      "Security findings: 1 suspicious skill patterns (low: 1)",
+    );
   });
 
   it("renders a security findings summary when security findings exist", () => {
@@ -133,12 +165,15 @@ describe("scan reports", () => {
             ruleId: "prompt-injection-instruction",
             severity: "warning",
             category: "security",
+            confidence: "medium",
           }),
         ],
       },
     });
 
-    expect(renderHumanSummary(report)).toContain("Security findings: 1 suspicious skill patterns");
+    expect(renderHumanSummary(report)).toContain(
+      "Security findings: 1 suspicious skill patterns (medium: 1)",
+    );
     expect(renderHumanSummary(report)).toContain("Issues: none");
   });
 

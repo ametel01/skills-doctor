@@ -59,6 +59,7 @@ export const buildHandoffPrompt = (input: BuildHandoffPromptInput): string => {
         `   - [${finding.severity}] ${finding.ruleId}: ${finding.title}`,
         `     ${formatFindingLocation(finding)}`,
         `     ${finding.message}`,
+        ...formatFindingMetadata(finding),
         `     Repair: ${finding.suggestion}`,
       );
       if (finding.evidence !== undefined) {
@@ -128,3 +129,20 @@ const severityScore = (finding: Finding | undefined): number => {
 
 const formatFindingLocation = (finding: Finding): string =>
   `Location: ${finding.skillPath}${finding.line === undefined ? "" : `:${finding.line}`}`;
+
+const formatFindingMetadata = (finding: Finding): readonly string[] => {
+  const lines: string[] = [];
+  if (finding.confidence !== undefined) {
+    lines.push(`     Confidence: ${finding.confidence}`);
+  }
+  if (finding.rationale !== undefined) {
+    lines.push(`     Rationale: ${finding.rationale}`);
+  }
+  if (finding.counterevidence !== undefined && finding.counterevidence.length > 0) {
+    lines.push("     Counterevidence:");
+    for (const item of finding.counterevidence) {
+      lines.push(`     - ${item}`);
+    }
+  }
+  return lines;
+};

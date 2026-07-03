@@ -27,6 +27,7 @@ export type ParseFailure = {
 };
 
 export type FindingSeverity = "error" | "warning" | "advice";
+export type FindingConfidence = "high" | "medium" | "low";
 
 export type FindingCategory =
   | "frontmatter"
@@ -55,6 +56,9 @@ export type Finding = {
   readonly skillName?: string | undefined;
   readonly line?: number | undefined;
   readonly evidence?: FindingEvidence | undefined;
+  readonly confidence?: FindingConfidence | undefined;
+  readonly rationale?: string | undefined;
+  readonly counterevidence?: readonly string[] | undefined;
   readonly agentRepairable: boolean;
 };
 

@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Added confidence, rationale, and counterevidence metadata to security findings in JSON and human reports.
 - Replaced the plain interactive review prompt with a painted ANSI dashboard while preserving JSON, non-interactive, and injected-prompt output paths.
 - Separated security findings from quality issue counts, scoring, and default exit gates.
 - Added source excerpts to security findings and a per-finding security repair selection flow.

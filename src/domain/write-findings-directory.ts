@@ -95,6 +95,7 @@ const renderFindingsMarkdown = (report: ScanReport, findings: readonly Finding[]
         `  - Message: ${finding.message}`,
         `  - Repair: ${finding.suggestion}`,
       );
+      lines.push(...renderSecurityMetadata(finding, "  - "));
       if (finding.evidence !== undefined) {
         lines.push("  - Evidence:");
         for (const line of finding.evidence.excerpt) {
@@ -124,6 +125,7 @@ const renderSkillFindingsMarkdown = (skillLabel: string, findings: readonly Find
       `Repair: ${finding.suggestion}`,
       "",
     );
+    lines.push(...renderSecurityMetadata(finding, ""), "");
     if (finding.evidence !== undefined) {
       lines.push("Evidence:", "", "```text");
       for (const line of finding.evidence.excerpt) {
@@ -134,6 +136,23 @@ const renderSkillFindingsMarkdown = (skillLabel: string, findings: readonly Find
     }
   }
   return lines.join("\n");
+};
+
+const renderSecurityMetadata = (finding: Finding, prefix: string): readonly string[] => {
+  const lines: string[] = [];
+  if (finding.confidence !== undefined) {
+    lines.push(`${prefix}Confidence: ${finding.confidence}`);
+  }
+  if (finding.rationale !== undefined) {
+    lines.push(`${prefix}Rationale: ${finding.rationale}`);
+  }
+  if (finding.counterevidence !== undefined && finding.counterevidence.length > 0) {
+    lines.push(`${prefix}Counterevidence:`);
+    for (const item of finding.counterevidence) {
+      lines.push(`${prefix}- ${item}`);
+    }
+  }
+  return lines;
 };
 
 type SkillFindingGroup = {
