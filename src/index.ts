@@ -61,6 +61,7 @@ export {
 export {
   type SecurityRuleOptions,
   validateSecurityRules,
+  validateSkillPackageSecurityRules,
 } from "./domain/rules/security.js";
 export { buildMissingSkillFinding, validateStructuralRules } from "./domain/rules/structural.js";
 export { scanSkillRoots } from "./domain/scan-skills.js";

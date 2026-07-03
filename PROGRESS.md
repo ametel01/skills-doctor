@@ -6,9 +6,9 @@
 - User gap summary from 2026-07-03
 
 ## Current Status
-- Status: Step 4 complete.
-- Current step: Step 5: Migrate Security Validation To Package-Level Evaluation.
-- Next step: Step 5: Migrate Security Validation To Package-Level Evaluation.
+- Status: Step 5 complete.
+- Current step: Step 6: Implement P0 Blocker Rules.
+- Next step: Step 6: Implement P0 Blocker Rules.
 
 ## Step Checklist
 - [x] Step 0: Progress and Changelog Tracking Setup
@@ -16,7 +16,7 @@
 - [x] Step 2: Introduce Skill Package And Artifact Models
 - [x] Step 3: Add Package Artifact Discovery
 - [x] Step 4: Build Shared Capability Detectors
-- [ ] Step 5: Migrate Security Validation To Package-Level Evaluation
+- [x] Step 5: Migrate Security Validation To Package-Level Evaluation
 - [ ] Step 6: Implement P0 Blocker Rules
 - [ ] Step 7: Implement P1 High-Risk Rules
 - [ ] Step 8: Implement P2 Quality And Hygiene Rules
@@ -95,7 +95,20 @@ After each completed step, update this file with:
 - Changelog: Added an `Added` entry for derived security capability facts.
 - Commit: Step 4 commit (`feat: derive security capability facts from artifacts`).
 
+### Step 5: Migrate Security Validation To Package-Level Evaluation
+- Summary: Added `validateSkillPackageSecurityRules()` and switched normal scans to package-level security validation. Existing `validateSecurityRules()` remains available for `SKILL.md`-only integrations, while package-level scans can now report risky script artifacts with capability evidence chains.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run typecheck` passed.
+  - `bun test test/domain-scan.test.ts test/api-fixtures.test.ts test/security-rules.test.ts` passed: 79 tests.
+  - `bun run test` passed: 21 files, 219 tests.
+  - `bun run build` passed.
+- Changelog: Added a `Changed` entry for package-level security validation.
+- Commit: Step 5 commit (`feat: evaluate security rules at package scope`).
+
 ## Update Log
+- 2026-07-03: Completed Step 5 validation and prepared the package-level security validation commit.
 - 2026-07-03: Completed Step 4 validation and prepared the capability detector commit.
 - 2026-07-03: Completed Step 3 validation and prepared the package artifact discovery commit.
 - 2026-07-03: Completed Step 2 validation and prepared the package security model commit.

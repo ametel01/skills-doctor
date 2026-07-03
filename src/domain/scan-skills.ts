@@ -8,7 +8,7 @@ import {
   normalizeSkillPath,
 } from "./read-codex-disabled-skill-config.js";
 import { validateQualityRules } from "./rules/quality.js";
-import { validateSecurityRules } from "./rules/security.js";
+import { validateSkillPackageSecurityRules } from "./rules/security.js";
 import { buildMissingSkillFinding, validateStructuralRules } from "./rules/structural.js";
 import type {
   Diagnostic,
@@ -98,10 +98,10 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
 
   findings.push(...skills.flatMap(validateStructuralRules));
   findings.push(...(await validateQualityRules(skills)));
-  findings.push(...validateSecurityRules(skills));
   packages.push(
     ...(await mapWithConcurrency(skills, SKILL_FILE_READ_CONCURRENCY, buildSkillPackage)),
   );
+  findings.push(...validateSkillPackageSecurityRules(packages));
 
   return {
     roots: input.roots,

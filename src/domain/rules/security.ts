@@ -1,4 +1,12 @@
-import type { Finding, FindingConfidence, FindingSeverity, SkillRecord } from "../types.js";
+import type {
+  CapabilityFact,
+  CapabilityKind,
+  Finding,
+  FindingConfidence,
+  FindingSeverity,
+  SkillPackage,
+  SkillRecord,
+} from "../types.js";
 
 export type SecurityRuleOptions = {
   readonly enabledRuleIds?: readonly string[] | undefined;
@@ -360,6 +368,18 @@ export const validateSecurityRules = (
   return skills.flatMap((skill) => validateSkillSecurity(skill, rules));
 };
 
+export const validateSkillPackageSecurityRules = (
+  packages: readonly SkillPackage[],
+  options: SecurityRuleOptions = {},
+): Finding[] => {
+  const rules = filterRules(options.enabledRuleIds);
+  if (rules.length === 0) return [];
+  return packages.flatMap((skillPackage) => [
+    ...validateSkillSecurity(skillPackage.skill, rules),
+    ...validatePackageCapabilitySecurity(skillPackage, options.enabledRuleIds),
+  ]);
+};
+
 const validateSkillSecurity = (skill: SkillRecord, rules: readonly SecurityRule[]): Finding[] => {
   if (!skill.parseResult.ok) return [];
   const lines = readSourceLines(skill.content);
@@ -414,6 +434,191 @@ const buildEvidence = (
     excerpt,
   };
 };
+
+const CAPABILITY_SECURITY_RULES = new Map<
+  CapabilityKind,
+  Pick<
+    SecurityRule,
+    | "ruleId"
+    | "severity"
+    | "confidence"
+    | "title"
+    | "message"
+    | "suggestion"
+    | "rationale"
+    | "counterevidence"
+  >
+>([
+  [
+    "remote_code_exec",
+    {
+      ruleId: "remote-code-execution-bootstrap",
+      severity: "warning",
+      confidence: "high",
+      title: "Remote code execution bootstrap appears in skill package",
+      message:
+        "The skill package appears to fetch or decode content and execute it through a shell or interpreter.",
+      suggestion:
+        "Remove execute-from-network guidance. Require pinned, inspectable local scripts or documented package commands instead.",
+      rationale:
+        "A package artifact produced a remote-code-execution capability fact outside the main SKILL.md file.",
+      counterevidence: [
+        "Remote docs/spec parsing, parse-only pipelines, local static parsers, and unrelated inline command snippets are not reportable.",
+      ],
+    },
+  ],
+  [
+    "destructive_action",
+    {
+      ruleId: "destructive-command-high-risk",
+      severity: "warning",
+      confidence: "medium",
+      title: "High-risk destructive instruction appears in skill package",
+      message:
+        "The skill package appears to describe broad deletion, trace removal, or permission weakening that could damage user files or hide activity.",
+      suggestion:
+        "Remove broad destructive guidance, avoid trace-hiding instructions, and require scoped dry-runs or explicit user confirmation for risky changes.",
+      rationale: "A package artifact produced a destructive-action capability fact.",
+      counterevidence: [
+        "Preventive wording and scoped confirmation guidance are filtered before reporting this rule.",
+      ],
+    },
+  ],
+  [
+    "bypasses_approval",
+    {
+      ruleId: "agent-safety-disablement",
+      severity: "warning",
+      confidence: "medium",
+      title: "Agent safety disablement appears in skill package",
+      message:
+        "The skill package appears to instruct an agent to disable sandboxing, skip permissions, auto-approve prompts, or avoid confirmation.",
+      suggestion:
+        "Remove safety-bypass instructions unless they are part of a documented user-approved handoff flow with explicit confirmation.",
+      rationale: "A package artifact produced an approval-bypass capability fact.",
+      counterevidence: [
+        "Descriptive examples and documented launch previews are suppressed when they do not instruct bypass behavior.",
+      ],
+    },
+  ],
+  [
+    "obfuscation",
+    {
+      ruleId: "external-resource-obfuscation",
+      severity: "warning",
+      confidence: "medium",
+      title: "Obfuscated external execution appears in skill package",
+      message:
+        "The skill package appears to contain or instruct use of obscured content that may be staged for execution.",
+      suggestion:
+        "Replace obfuscated execution guidance with transparent, reviewable files and explicit validation steps.",
+      rationale: "A package artifact produced an obfuscation capability fact.",
+      counterevidence: [
+        "Defensive warnings and decode-only fixture handling without execution are suppressed.",
+      ],
+    },
+  ],
+]);
+
+const validatePackageCapabilitySecurity = (
+  skillPackage: SkillPackage,
+  enabledRuleIds: readonly string[] | undefined,
+): Finding[] => {
+  const enabled = enabledRuleIds === undefined ? undefined : new Set(enabledRuleIds);
+  const skillMdPath = skillPackage.skill.skillPath;
+  const facts = skillPackage.capabilities ?? [];
+  const directFindings = facts.flatMap((fact) => {
+    if (fact.artifactPath === skillMdPath) return [];
+    const rule = CAPABILITY_SECURITY_RULES.get(fact.kind);
+    if (rule === undefined) return [];
+    if (enabled !== undefined && !enabled.has(rule.ruleId)) return [];
+    return [buildCapabilityFinding(skillPackage, fact, rule)];
+  });
+
+  const exfiltrationFinding = buildPackageExfiltrationFinding(skillPackage, facts, enabled);
+  return exfiltrationFinding === undefined
+    ? directFindings
+    : [...directFindings, exfiltrationFinding];
+};
+
+const buildPackageExfiltrationFinding = (
+  skillPackage: SkillPackage,
+  facts: readonly CapabilityFact[],
+  enabled: ReadonlySet<string> | undefined,
+): Finding | undefined => {
+  const ruleId: SecurityRuleId = "network-exfiltration-command";
+  if (enabled !== undefined && !enabled.has(ruleId)) return undefined;
+  const secretFact = facts.find(
+    (fact) => fact.artifactPath !== skillPackage.skill.skillPath && fact.kind === "reads_secrets",
+  );
+  const networkFact = facts.find(
+    (fact) => fact.artifactPath !== skillPackage.skill.skillPath && fact.kind === "network_egress",
+  );
+  if (secretFact === undefined || networkFact === undefined) return undefined;
+  return buildCapabilityFinding(skillPackage, networkFact, {
+    ruleId,
+    severity: "warning",
+    confidence: "high",
+    title: "Network transfer appears near secret-reading package capability",
+    message:
+      "The skill package appears to combine network transfer capability with secret or sensitive file-reading capability.",
+    suggestion:
+      "Remove network-transfer guidance around secrets or sensitive files, and keep security review workflows local unless the user explicitly provides a safe destination.",
+    rationale:
+      "Package artifacts produced both secret-reading and network-egress capability facts outside the main SKILL.md file.",
+    counterevidence: [
+      "Official service API authentication, parse-only local commands, and local destinations are ignored unless secret material is also sent to an unrelated external sink.",
+    ],
+  });
+};
+
+const buildCapabilityFinding = (
+  skillPackage: SkillPackage,
+  fact: CapabilityFact,
+  rule: Pick<
+    SecurityRule,
+    | "ruleId"
+    | "severity"
+    | "confidence"
+    | "title"
+    | "message"
+    | "suggestion"
+    | "rationale"
+    | "counterevidence"
+  >,
+): Finding => ({
+  ruleId: rule.ruleId,
+  severity: rule.severity,
+  category: "security",
+  title: rule.title,
+  message: rule.message,
+  suggestion: rule.suggestion,
+  confidence: rule.confidence,
+  rationale: rule.rationale,
+  counterevidence: rule.counterevidence,
+  ecosystem: skillPackage.skill.ecosystem,
+  rootPath: skillPackage.skill.rootPath,
+  skillDir: skillPackage.skill.skillDir,
+  skillPath: skillPackage.skill.skillPath,
+  skillName: readSkillName(skillPackage.skill),
+  line: fact.line,
+  evidence: fact.evidence,
+  capabilities: [fact.kind],
+  evidenceChain: {
+    summary: fact.description ?? rule.rationale,
+    items: [
+      {
+        path: fact.artifactPath,
+        capability: fact.kind,
+        startLine: fact.evidence?.startLine,
+        endLine: fact.evidence?.endLine,
+        excerpt: fact.evidence?.excerpt,
+        note: fact.description,
+      },
+    ],
+  },
+  agentRepairable: true,
+});
 
 const filterRules = (enabledRuleIds: readonly string[] | undefined): readonly SecurityRule[] => {
   if (enabledRuleIds === undefined) return SECURITY_RULES;

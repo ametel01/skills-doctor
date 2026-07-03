@@ -80,6 +80,10 @@ Rules and scoring:
   subversion, secret exfiltration, network exfiltration, remote execution,
   high-risk destructive actions, safety disablement, and obfuscated execution.
   Findings describe suspicious patterns and are not proof of malicious intent.
+- `validateSkillPackageSecurityRules(packages, options?)`: validates
+  deterministic security heuristics against package records and can report
+  cross-artifact capability evidence while preserving `validateSecurityRules()`
+  for `SKILL.md`-only integrations.
 - `calculateScore(findings, options?)`: calculates a score summary.
 - `getScoreLabel(value)`: maps a numeric score to a score label.
 
