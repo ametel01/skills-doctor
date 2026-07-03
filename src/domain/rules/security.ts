@@ -81,12 +81,14 @@ const HIDE_BEHAVIOR_PATTERN =
   /\b(hide|conceal|mask)\b.{0,80}\b(actions?|behavior|instructions?|changes?|activity)\b/i;
 const SECRET_SOURCE_PATTERN =
   /\b(\.env|credentials?|secrets?|tokens?|ssh keys?|private keys?|browser sessions?|session files?|npm tokens?|github tokens?|cloud credentials?|aws credentials?|gcp credentials?)\b/i;
-const FILE_READ_PATTERN =
-  /\b(read|collect|capture|copy|open|load)\b.{0,80}\b(files?|contents?|data)\b/i;
 const TRANSFER_PATTERN =
-  /\b(send|post|upload|forward|transmit|copy|paste|exfiltrate)\b.{0,100}\b(remote|external|webhook|server|endpoint|url|site|gist|paste|chat|slack|discord)\b/i;
+  /\b(send|post|upload|forward|transmit|copy|paste|exfiltrate)\b.{0,100}\b(remote|external|webhooks?(?!\s+(?:signing\s+)?secrets?\b|\s+signatures?\b)|server|endpoint|url|site|gist|paste|chat|slack|discord)\b/i;
 const NETWORK_TRANSFER_PATTERN =
   /\b(curl|wget|netcat|nc|scp|rsync|http post|webhook|request to external)\b/i;
+const EXFILTRATION_TRANSFER_ACTION_PATTERN =
+  /\b(send|post|upload|forward|transmit|copy|paste|exfiltrate|move)\b/i;
+const EXFILTRATION_SUSPICIOUS_DESTINATION_PATTERN =
+  /\b(remote|external|webhooks?(?!\s+(?:signing\s+)?secrets?\b|\s+signatures?\b)|server|endpoint|url|site|gist|paste|chat|slack|discord)\b|https?:\/\/(?!api\.github\.com\b|github\.com\b|registry\.npmjs\.org\b|npmjs\.com\b|api\.stripe\.com\b|api\.openai\.com\b|api\.anthropic\.com\b|api\.clerk\.com\b|[^/\s`"']+\.googleapis\.com\b)[^\s`"')]+/i;
 const REMOTE_EXECUTION_PATTERN =
   /\b(download|fetch|retrieve|remote|installer|curl|wget)\b.{0,100}\b(pipe|execute|run|shell|bash|sh|zsh|python|node|interpreter)\b/i;
 const BROAD_DESTRUCTIVE_PATTERN =
@@ -99,6 +101,9 @@ const OBFUSCATED_EXECUTION_PATTERN =
   /\b((base64|encoded|obfuscated|hidden remote)\b.{0,100}\b(decode|decode it|decoded|stage)|\b(decode|decode it|decoded|stage)\b.{0,100}\b(base64|encoded|obfuscated|hidden remote))\b.{0,100}\b(execute|run|shell|bash|sh|zsh|interpreter)\b/i;
 const PREVENTION_PATTERN =
   /\b(do not|don't|never|avoid|refuse to|must not|should not)\b.{0,80}\b(ignore|disregard|override|bypass|send|post|upload|forward|transmit|copy|paste|exfiltrate|curl|wget|netcat|nc|scp|rsync|webhook|--yolo|--dangerously-skip-permissions|sandbox|auto-approve|confirmation|base64|encoded)\b/i;
+const EVIDENCE_SECRET_VALUE_PATTERN =
+  /(\b[A-Za-z0-9_-]*(?:secret|token|credential|password|private[_-]?key)[A-Za-z0-9_-]*\s*[:=]\s*)(["']?)[^\s"']+(\2)/gi;
+const EVIDENCE_BEARER_VALUE_PATTERN = /(\bAuthorization\s*:\s*Bearer\s+)([A-Za-z0-9._~+/-]+)/gi;
 
 const COMMAND_SENSITIVE_SOURCE_PATTERN =
   /(?:^|[\s"'`|])(?:\.env(?:\b|[./_-])|[~/./A-Za-z0-9_-]*(?:credentials|secrets?|tokens?|private[_-]?keys?|session[_-]?files?|npm[_-]?tokens?|github[_-]?tokens?|cloud[_-]?credentials?|aws[_-]?credentials?|gcp[_-]?credentials?)(?:\b|[./_-]))/i;
@@ -183,8 +188,7 @@ const SECURITY_RULES: readonly SecurityRule[] = [
       "The skill appears to combine secret-reading guidance with instructions to transmit that data outside the local task context.",
     suggestion:
       "Remove any guidance that sends credentials, tokens, keys, sessions, or secret file contents to external destinations.",
-    findLine: (lines) =>
-      findProximityLine(lines, isSecretSourceLine, (line) => TRANSFER_PATTERN.test(line.text)),
+    findLine: (lines) => findSecretExfiltrationInstructionLine(lines),
   },
   {
     ruleId: "network-exfiltration-command",
@@ -194,12 +198,7 @@ const SECURITY_RULES: readonly SecurityRule[] = [
       "The skill appears to combine network transfer tooling with secret or sensitive file-reading guidance.",
     suggestion:
       "Remove network-transfer guidance around secrets or sensitive files, and keep security review workflows local unless the user explicitly provides a safe destination.",
-    findLine: (lines) =>
-      findProximityLine(
-        lines,
-        (line) => isSecretSourceLine(line) || FILE_READ_PATTERN.test(line.text),
-        (line) => NETWORK_TRANSFER_PATTERN.test(line.text),
-      ),
+    findLine: (lines) => findNetworkExfiltrationCommandLine(lines),
   },
   {
     ruleId: "remote-code-execution-bootstrap",
@@ -315,7 +314,7 @@ const buildEvidence = (
     .filter((line) => line.number >= startLine && line.number <= endLine)
     .map((line) => ({
       line: line.number,
-      text: line.text,
+      text: redactEvidenceText(line.text),
       highlighted: line.number === lineNumber,
     }));
   return {
@@ -389,25 +388,62 @@ const findFirstLine = (
   predicate: (candidate: MarkdownSecurityCandidate) => boolean,
 ): number | undefined => candidates.find(predicate)?.number;
 
-const findProximityLine = (
+const findSecretExfiltrationInstructionLine = (
   candidates: readonly MarkdownSecurityCandidate[],
-  leftPredicate: (candidate: MarkdownSecurityCandidate) => boolean,
-  rightPredicate: (candidate: MarkdownSecurityCandidate) => boolean,
-): number | undefined => {
-  for (const [index, candidate] of candidates.entries()) {
-    if (!leftPredicate(candidate) || isPreventiveLine(candidate.text)) continue;
-    const nearby = candidates.slice(index, index + 1 + MARKDOWN_NEARBY_LINE_RADIUS);
-    const transferLine = nearby.find(
-      (candidate) => !isPreventiveLine(candidate.text) && rightPredicate(candidate),
-    );
-    if (transferLine !== undefined) return transferLine.number;
-  }
+): number | undefined =>
+  findFirstLine(candidates, (candidate) => hasBoundedExfiltrationEvidence(candidate));
 
-  return undefined;
+const findNetworkExfiltrationCommandLine = (
+  candidates: readonly MarkdownSecurityCandidate[],
+): number | undefined =>
+  findFirstLine(candidates, (candidate) => {
+    if (isPreventiveLine(candidate.text)) return false;
+    if (hasArbitrarySecretTransferCommand(candidate)) return true;
+    if (!NETWORK_TRANSFER_PATTERN.test(candidate.text)) return false;
+    return hasBoundedExfiltrationEvidence(candidate);
+  });
+
+const hasBoundedExfiltrationEvidence = (candidate: MarkdownSecurityCandidate): boolean => {
+  if (isPreventiveLine(candidate.text)) return false;
+  if (!hasExfiltrationTransferAction(candidate)) return false;
+  if (!hasSuspiciousExfiltrationDestination(candidate)) return false;
+  return candidate.nearbyLines.some((line) => SECRET_SOURCE_PATTERN.test(line.text));
 };
 
-const isSecretSourceLine = (line: MarkdownSecurityCandidate): boolean =>
-  SECRET_SOURCE_PATTERN.test(line.text);
+const hasArbitrarySecretTransferCommand = (candidate: MarkdownSecurityCandidate): boolean => {
+  const { commandContext } = candidate;
+  if (!commandContext.hasTransferAction || !commandContext.hasExternalDestination) return false;
+  if (commandContext.hasOfficialServiceDestination && !hasNonOfficialExternalCommand(candidate))
+    return false;
+  return hasCommandSensitiveSourceInBoundedContext(candidate);
+};
+
+const hasNonOfficialExternalCommand = (candidate: MarkdownSecurityCandidate): boolean =>
+  candidate.commandContext.commands.some(
+    (command) => command.destination === "external" && command.action !== "none",
+  );
+
+const hasCommandSensitiveSourceInBoundedContext = (
+  candidate: MarkdownSecurityCandidate,
+): boolean => {
+  if (candidate.commandContext.hasSensitiveSource) return true;
+  return candidate.nearbyLines.some((line) => SECRET_SOURCE_PATTERN.test(line.text));
+};
+
+const hasExfiltrationTransferAction = (candidate: MarkdownSecurityCandidate): boolean =>
+  TRANSFER_PATTERN.test(candidate.text) ||
+  EXFILTRATION_TRANSFER_ACTION_PATTERN.test(candidate.text) ||
+  candidate.commandContext.hasTransferAction;
+
+const hasSuspiciousExfiltrationDestination = (candidate: MarkdownSecurityCandidate): boolean =>
+  TRANSFER_PATTERN.test(candidate.text) ||
+  EXFILTRATION_SUSPICIOUS_DESTINATION_PATTERN.test(candidate.text) ||
+  candidate.commandContext.hasExternalDestination;
+
+const redactEvidenceText = (text: string): string =>
+  text
+    .replace(EVIDENCE_SECRET_VALUE_PATTERN, "$1[REDACTED]")
+    .replace(EVIDENCE_BEARER_VALUE_PATTERN, "$1[REDACTED]");
 
 const isPreventiveLine = (text: string): boolean => PREVENTION_PATTERN.test(text);
 

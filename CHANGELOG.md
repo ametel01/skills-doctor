@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Reduced exfiltration-rule false positives for webhook signing-secret setup and official API bearer-token examples while preserving arbitrary external secret-transfer findings.
 - Made `bun run dev` rebuild ignored `dist/` output before launching the packaged bin so local CLI runs reflect source changes.
 
 ### Security
