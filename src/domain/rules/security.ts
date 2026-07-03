@@ -34,6 +34,7 @@ export type MarkdownSecurityCandidate = SourceLine & {
   readonly sectionHeading: string | undefined;
   readonly inCodeFence: boolean;
   readonly tableRow: MarkdownTableRowContext | undefined;
+  readonly commandContext: CommandLineContext;
 };
 
 export type MarkdownTableRowContext = {
@@ -41,6 +42,37 @@ export type MarkdownTableRowContext = {
   readonly cells: readonly string[];
 };
 
+export type CommandLineContext = {
+  readonly sourceText: string | undefined;
+  readonly commands: readonly CommandSegmentContext[];
+  readonly hasPipeline: boolean;
+  readonly hasSensitiveSource: boolean;
+  readonly hasLocalDestination: boolean;
+  readonly hasOfficialServiceDestination: boolean;
+  readonly hasExternalDestination: boolean;
+  readonly hasExecutionSink: boolean;
+  readonly hasParseOnlySink: boolean;
+  readonly hasTransferAction: boolean;
+};
+
+export type CommandSegmentContext = {
+  readonly text: string;
+  readonly command: string | undefined;
+  readonly position: number;
+  readonly source: CommandSourceClassification;
+  readonly destination: CommandDestinationClassification;
+  readonly sink: CommandSinkClassification;
+  readonly action: CommandActionClassification;
+};
+
+export type CommandSourceClassification = "sensitive" | "none";
+export type CommandDestinationClassification =
+  | "local"
+  | "official-service-api"
+  | "external"
+  | "none";
+export type CommandSinkClassification = "execution" | "parse-only" | "none";
+export type CommandActionClassification = "transfer" | "connective-transfer" | "none";
 const PROMPT_OVERRIDE_PATTERN =
   /\b(ignore|disregard|override|bypass|supersede)\b.{0,80}\b(previous|system|developer|user|safety|policy|instructions?)\b/i;
 const PROMPT_CONCEALMENT_PATTERN =
@@ -67,6 +99,62 @@ const OBFUSCATED_EXECUTION_PATTERN =
   /\b((base64|encoded|obfuscated|hidden remote)\b.{0,100}\b(decode|decode it|decoded|stage)|\b(decode|decode it|decoded|stage)\b.{0,100}\b(base64|encoded|obfuscated|hidden remote))\b.{0,100}\b(execute|run|shell|bash|sh|zsh|interpreter)\b/i;
 const PREVENTION_PATTERN =
   /\b(do not|don't|never|avoid|refuse to|must not|should not)\b.{0,80}\b(ignore|disregard|override|bypass|send|post|upload|forward|transmit|copy|paste|exfiltrate|curl|wget|netcat|nc|scp|rsync|webhook|--yolo|--dangerously-skip-permissions|sandbox|auto-approve|confirmation|base64|encoded)\b/i;
+
+const COMMAND_SENSITIVE_SOURCE_PATTERN =
+  /(?:^|[\s"'`|])(?:\.env(?:\b|[./_-])|[~/./A-Za-z0-9_-]*(?:credentials|secrets?|tokens?|private[_-]?keys?|session[_-]?files?|npm[_-]?tokens?|github[_-]?tokens?|cloud[_-]?credentials?|aws[_-]?credentials?|gcp[_-]?credentials?)(?:\b|[./_-]))/i;
+const INLINE_COMMAND_PATTERN = /`([^`\n]+)`/g;
+const COMMAND_FENCE_LANGUAGE_PATTERN = /^(?:shell|sh|bash|zsh|fish|console|terminal)$/i;
+const FENCE_MARKER_PATTERN = /^\s*(```|~~~)\s*([A-Za-z0-9_-]+)?/;
+const COMMAND_LIKE_PATTERN =
+  /^\s*(?:\$|>)?\s*(?:cat|grep|rg|awk|sed|jq|curl|wget|nc|netcat|scp|rsync|cp|mv|tee|bash|sh|zsh|python|python3|node|bun|npm|pnpm|yarn|npx|gh|git|tar|base64|openssl)\b/;
+const LOCAL_DESTINATION_PATTERN =
+  /(?:^|\s)(?:\.{1,2}\/|~\/|\/tmp\/|\/var\/tmp\/|\/dev\/null\b|[A-Za-z0-9_.-]+\/|[A-Za-z0-9_.-]+\.(?:json|txt|md|log|env|pem|key|csv)\b)/i;
+const OFFICIAL_SERVICE_DESTINATION_PATTERN =
+  /https?:\/\/(?:api\.github\.com|github\.com|registry\.npmjs\.org|npmjs\.com|api\.stripe\.com|api\.openai\.com|api\.anthropic\.com|api\.clerk\.com|[^/\s`"']+\.googleapis\.com)\b/i;
+const EXTERNAL_DESTINATION_PATTERN = /https?:\/\/[^\s`"')]+/i;
+const EXECUTION_SINK_COMMANDS = new Set([
+  "bash",
+  "sh",
+  "zsh",
+  "fish",
+  "python",
+  "python3",
+  "node",
+  "bun",
+  "npm",
+  "pnpm",
+  "yarn",
+  "npx",
+]);
+const PARSE_ONLY_SINK_COMMANDS = new Set([
+  "cat",
+  "grep",
+  "rg",
+  "awk",
+  "sed",
+  "jq",
+  "cut",
+  "sort",
+  "uniq",
+  "head",
+  "tail",
+  "wc",
+  "base64",
+  "openssl",
+]);
+const TRANSFER_COMMANDS = new Set([
+  "curl",
+  "wget",
+  "nc",
+  "netcat",
+  "scp",
+  "rsync",
+  "gh",
+  "npm",
+  "pnpm",
+  "yarn",
+]);
+const CONNECTIVE_TRANSFER_COMMANDS = new Set(["tee"]);
 
 const SECURITY_RULES: readonly SecurityRule[] = [
   {
@@ -247,21 +335,24 @@ const filterRules = (enabledRuleIds: readonly string[] | undefined): readonly Se
 const readSourceLines = (content: string): readonly SourceLine[] =>
   content.split(/\r?\n/).map((text, index) => ({ number: index + 1, text }));
 
+export const readSecurityCandidateLines = (content: string): readonly MarkdownSecurityCandidate[] =>
+  readMarkdownSecurityCandidates(readSourceLines(content));
+
 const MARKDOWN_NEARBY_LINE_RADIUS = 2;
 
 export const readMarkdownSecurityCandidates = (
   lines: readonly SourceLine[],
 ): readonly MarkdownSecurityCandidate[] => {
   let sectionHeading: string | undefined;
-  let inCodeFence = false;
+  let activeFence: { readonly marker: string; readonly isCommandFence: boolean } | undefined;
   const candidates: MarkdownSecurityCandidate[] = [];
 
   for (const [index, line] of lines.entries()) {
     const heading = readMarkdownSectionHeading(line.text);
     if (heading !== undefined) sectionHeading = heading;
 
-    const fenceDelimiter = isMarkdownCodeFenceDelimiter(line.text);
-    const candidateInCodeFence = inCodeFence;
+    const candidateInCodeFence = activeFence !== undefined;
+    const candidateInCommandFence = activeFence?.isCommandFence === true;
     const previousLines = lines.slice(Math.max(0, index - MARKDOWN_NEARBY_LINE_RADIUS), index);
     const nextLines = lines.slice(index + 1, index + 1 + MARKDOWN_NEARBY_LINE_RADIUS);
 
@@ -273,9 +364,21 @@ export const readMarkdownSecurityCandidates = (
       sectionHeading,
       inCodeFence: candidateInCodeFence,
       tableRow: readMarkdownTableRow(line.text),
+      commandContext: buildCommandLineContext(line.text, candidateInCommandFence),
     });
 
-    if (fenceDelimiter) inCodeFence = !inCodeFence;
+    const fence = FENCE_MARKER_PATTERN.exec(line.text);
+    if (fence !== null) {
+      if (activeFence?.marker === fence[1]) {
+        activeFence = undefined;
+      } else if (activeFence === undefined) {
+        const language = fence[2] ?? "";
+        activeFence = {
+          marker: fence[1] ?? "",
+          isCommandFence: COMMAND_FENCE_LANGUAGE_PATTERN.test(language),
+        };
+      }
+    }
   }
 
   return candidates;
@@ -303,7 +406,8 @@ const findProximityLine = (
   return undefined;
 };
 
-const isSecretSourceLine = (line: SourceLine): boolean => SECRET_SOURCE_PATTERN.test(line.text);
+const isSecretSourceLine = (line: MarkdownSecurityCandidate): boolean =>
+  SECRET_SOURCE_PATTERN.test(line.text);
 
 const isPreventiveLine = (text: string): boolean => PREVENTION_PATTERN.test(text);
 
@@ -311,8 +415,6 @@ const readMarkdownSectionHeading = (text: string): string | undefined => {
   const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(text.trim());
   return match?.[2]?.trim();
 };
-
-const isMarkdownCodeFenceDelimiter = (text: string): boolean => /^ {0,3}(```|~~~)/.test(text);
 
 const readMarkdownTableRow = (text: string): MarkdownTableRowContext | undefined => {
   const trimmed = text.trim();
@@ -325,6 +427,108 @@ const readMarkdownTableRow = (text: string): MarkdownTableRowContext | undefined
     .map((cell) => cell.trim());
 
   return { rowText: text, cells };
+};
+
+const buildCommandLineContext = (
+  lineText: string,
+  isCommandFenceLine: boolean,
+): CommandLineContext => {
+  const commandTexts = readCommandTexts(lineText, isCommandFenceLine);
+  const commands = commandTexts.flatMap((commandText) => readCommandSegments(commandText));
+
+  return {
+    sourceText: commandTexts[0],
+    commands,
+    hasPipeline: commands.length > 1,
+    hasSensitiveSource: commands.some((command) => command.source === "sensitive"),
+    hasLocalDestination: commands.some((command) => command.destination === "local"),
+    hasOfficialServiceDestination: commands.some(
+      (command) => command.destination === "official-service-api",
+    ),
+    hasExternalDestination: commands.some((command) => command.destination === "external"),
+    hasExecutionSink: commands.some((command) => command.sink === "execution"),
+    hasParseOnlySink: commands.some((command) => command.sink === "parse-only"),
+    hasTransferAction: commands.some(
+      (command) => command.action === "transfer" || command.action === "connective-transfer",
+    ),
+  };
+};
+
+const readCommandTexts = (lineText: string, isCommandFenceLine: boolean): readonly string[] => {
+  const inlineCommands = [...lineText.matchAll(INLINE_COMMAND_PATTERN)]
+    .map((match) => match[1]?.trim() ?? "")
+    .filter((command) => command.length > 0);
+  if (inlineCommands.length > 0) return inlineCommands;
+  if (isCommandFenceLine && COMMAND_LIKE_PATTERN.test(lineText))
+    return [stripShellPrompt(lineText)];
+  return [];
+};
+
+const readCommandSegments = (commandText: string): readonly CommandSegmentContext[] =>
+  commandText
+    .split("|")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0)
+    .map((segment, index, segments) => classifyCommandSegment(segment, index, segments.length > 1));
+
+const classifyCommandSegment = (
+  text: string,
+  position: number,
+  isPipeline: boolean,
+): CommandSegmentContext => {
+  const command = readCommandName(text);
+  return {
+    text,
+    command,
+    position,
+    source: classifyCommandSource(text),
+    destination: classifyCommandDestination(text),
+    sink: classifyCommandSink(command),
+    action: classifyCommandAction(command, position, isPipeline),
+  };
+};
+
+const stripShellPrompt = (text: string): string => text.replace(/^\s*(?:\$|>)\s*/, "").trim();
+
+const readCommandName = (segment: string): string | undefined => {
+  const cleaned = stripShellPrompt(segment);
+  const firstToken = cleaned.match(/^[A-Za-z0-9_.-]+/)?.[0];
+  return firstToken?.toLowerCase();
+};
+
+const classifyCommandSource = (segment: string): CommandSourceClassification =>
+  SECRET_SOURCE_PATTERN.test(segment) || COMMAND_SENSITIVE_SOURCE_PATTERN.test(segment)
+    ? "sensitive"
+    : "none";
+
+const classifyCommandDestination = (segment: string): CommandDestinationClassification => {
+  if (OFFICIAL_SERVICE_DESTINATION_PATTERN.test(segment)) return "official-service-api";
+  if (EXTERNAL_DESTINATION_PATTERN.test(segment)) return "external";
+  if (LOCAL_DESTINATION_PATTERN.test(segment)) return "local";
+  return "none";
+};
+
+const classifyCommandSink = (command: string | undefined): CommandSinkClassification => {
+  if (command === undefined) return "none";
+  if (EXECUTION_SINK_COMMANDS.has(command)) return "execution";
+  if (PARSE_ONLY_SINK_COMMANDS.has(command)) return "parse-only";
+  return "none";
+};
+
+const classifyCommandAction = (
+  command: string | undefined,
+  position: number,
+  isPipeline: boolean,
+): CommandActionClassification => {
+  if (command !== undefined && TRANSFER_COMMANDS.has(command)) return "transfer";
+  if (
+    isPipeline &&
+    position > 0 &&
+    command !== undefined &&
+    CONNECTIVE_TRANSFER_COMMANDS.has(command)
+  )
+    return "connective-transfer";
+  return "none";
 };
 
 const isDescriptiveLaunchPreview = (text: string): boolean =>
