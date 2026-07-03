@@ -151,6 +151,36 @@ describe("scan reports", () => {
     );
   });
 
+  it("lets P2 security hygiene affect score without default exit failure", () => {
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan: {
+        roots: [],
+        skills: [],
+        diagnostics: [],
+        findings: [
+          makeFinding({
+            ruleId: "SKILL204_UNPINNED_TOOLS",
+            severity: "warning",
+            category: "security",
+            priority: "P2",
+            confidence: "medium",
+          }),
+        ],
+      },
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.qualityFindingCount).toBe(0);
+    expect(report.securityFindingCount).toBe(1);
+    expect(report.score.value).toBeLessThan(100);
+    expect(resolveScanExitCode(report)).toBe(0);
+    expect(resolveScanExitCode(report, { failOn: "warning" })).toBe(0);
+    expect(resolveScanExitCode(report, { minScore: 100 })).toBe(1);
+  });
+
   it("renders a security findings summary when security findings exist", () => {
     const report = buildScanReport({
       version: "0.0.0-test",

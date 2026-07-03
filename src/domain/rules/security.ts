@@ -29,7 +29,13 @@ type SecurityRuleId =
   | "SKILL105_CROSS_MODAL_MISMATCH"
   | "SKILL106_SELF_MODIFYING_SKILL"
   | "SKILL107_UNTRUSTED_MCP"
-  | "SKILL108_MCP_SCOPE_EXCESS";
+  | "SKILL108_MCP_SCOPE_EXCESS"
+  | "SKILL201_NO_BOUNDARIES"
+  | "SKILL202_NO_HITL_FOR_RISKY_ACTIONS"
+  | "SKILL203_AMBIGUOUS_AUTHORITY"
+  | "SKILL204_UNPINNED_TOOLS"
+  | "SKILL205_HIDDEN_FILES"
+  | "SKILL206_LARGE_CONTEXT_BAIT";
 
 type SecurityRule = {
   readonly ruleId: SecurityRuleId;
@@ -160,6 +166,21 @@ const MCP_SCOPE_EXCESS_PATTERN =
   /\b(scopes?|oauth)\b.{0,160}\b(repo|admin|write|offline_access|read:user|read:org|gist|workflow|\*)\b|\bredirect_uris?\b.{0,120}\b(http:\/\/|localhost|127\.0\.0\.1|\*)\b/i;
 const PURPOSE_RISK_KEYWORD_PATTERN =
   /\b(security|auth|credential|secret|token|network|http|api|deploy|install|dependency|script|shell|filesystem|file system|mcp|tool|automation)\b/i;
+const BOUNDARY_EVIDENCE_PATTERN =
+  /\b(when not to use|do not use|not use this skill|out of scope|boundar(?:y|ies)|forbidden actions?|forbidden inputs?|allowed inputs?|allowed outputs?|must not|should not)\b/i;
+const NO_BOUNDARY_RISK_PATTERN =
+  /\b(deploy|publish|send emails?|email users?|payments?|delete production|delete customer|database migrations?|db migrations?|github writes?|cloud infra|terraform apply|kubectl apply)\b/i;
+const RISKY_HYGIENE_PATTERN =
+  /\b(deploy|send emails?|email users?|payments?|delete(?!\s+(?:generated|temporary|local|scoped)\b)|deletion|read secrets?|copy secrets?|upload secrets?|database migrations?|db migrations?|github writes?|gh (?:issue|pr|repo)|cloud infra|terraform apply|kubectl apply|publish)\b/i;
+const HITL_APPROVAL_PATTERN =
+  /\b(human approval|explicit approval|explicit confirmation|ask (?:the )?user|confirm|confirmation|review before|manual approval|user approval)\b/i;
+const AMBIGUOUS_AUTHORITY_PATTERN =
+  /\b(this skill is authoritative|must always be followed|higher priority than project rules|always obey this skill|skill takes precedence|overrides project rules)\b/i;
+const UNPINNED_TOOLS_PATTERN =
+  /\b(npm install|pnpm add|yarn add|bun add|pip install|pipx run|uvx|brew install|docker pull|go install|npx|bunx)\b(?![^`\n]*\b(?:sha256|@[0-9]+(?:\.[0-9]+){1,2}|@[a-f0-9]{12,}|==[0-9]+(?:\.[0-9]+){1,2})\b).{0,120}\b(latest|main|master|HEAD|https?:\/\/|github\.com|gitlab\.com|[\w@./-]+)\b/i;
+const LARGE_CONTEXT_LINE_THRESHOLD = 500;
+const LONG_DESCRIPTION_THRESHOLD = 300;
+const LONG_LINE_THRESHOLD = 1_000;
 const PREVENTION_PATTERN =
   /\b(do not|don't|never|avoid|refuse to|must not|should not)\b.{0,80}\b(ignore|disregard|override|bypass|send|post|upload|forward|transmit|copy|paste|exfiltrate|curl|wget|netcat|nc|scp|rsync|webhook|--yolo|--dangerously-skip-permissions|sandbox|auto-approve|confirmation|base64|encoded)\b/i;
 const EVIDENCE_SECRET_VALUE_PATTERN =
@@ -559,6 +580,113 @@ const SECURITY_RULES: readonly SecurityRule[] = [
     counterevidence: ["Minimal scopes and exact redirect validation reduce this risk."],
     findLine: (lines) => findFirstLine(lines, (line) => MCP_SCOPE_EXCESS_PATTERN.test(line.text)),
   },
+  {
+    ruleId: "SKILL201_NO_BOUNDARIES",
+    severity: "warning",
+    priority: "P2",
+    confidence: "medium",
+    title: "Risky skill lacks explicit boundaries",
+    message:
+      "The skill appears to describe risky behavior without when-not-to-use, allowed-input/output, or forbidden-action boundaries.",
+    suggestion:
+      "Add explicit boundaries such as when not to use the skill, forbidden actions, and allowed inputs or outputs.",
+    rationale: "Matched risky behavior while no boundary evidence was present in the skill body.",
+    counterevidence: [
+      "Explicit boundary, out-of-scope, forbidden-action, or allowed-input/output sections suppress this rule.",
+    ],
+    findLine: (lines) =>
+      lines.some((line) => BOUNDARY_EVIDENCE_PATTERN.test(line.text))
+        ? undefined
+        : findFirstLine(
+            lines,
+            (line) => !isPreventiveLine(line.text) && NO_BOUNDARY_RISK_PATTERN.test(line.text),
+          ),
+  },
+  {
+    ruleId: "SKILL202_NO_HITL_FOR_RISKY_ACTIONS",
+    severity: "warning",
+    priority: "P2",
+    confidence: "medium",
+    title: "Risky action lacks human approval guidance",
+    message:
+      "The skill describes deploys, email, payments, deletion, secrets, migrations, GitHub writes, or cloud changes without explicit human approval guidance.",
+    suggestion:
+      "Require explicit user confirmation or human review before performing risky external or irreversible actions.",
+    rationale:
+      "Matched risky action wording while no approval or confirmation guidance was present.",
+    counterevidence: [
+      "Explicit human approval, confirmation, or review-before-action wording suppresses this rule.",
+    ],
+    findLine: (lines) =>
+      lines.some((line) => HITL_APPROVAL_PATTERN.test(line.text))
+        ? undefined
+        : findFirstLine(
+            lines,
+            (line) => !isPreventiveLine(line.text) && RISKY_HYGIENE_PATTERN.test(line.text),
+          ),
+  },
+  {
+    ruleId: "SKILL203_AMBIGUOUS_AUTHORITY",
+    severity: "warning",
+    priority: "P2",
+    confidence: "medium",
+    title: "Ambiguous authority wording appears",
+    message:
+      "The skill appears to claim broad authority or precedence over project rules without clear limits.",
+    suggestion:
+      "Remove authority-precedence language and state that system, developer, user, and project instructions remain authoritative.",
+    rationale:
+      "Matched authoritative, always-follow, or higher-priority-than-project-rules wording.",
+    counterevidence: [
+      "Defensive wording that preserves higher-priority instructions is handled by the P0 prompt override filters.",
+    ],
+    findLine: (lines) =>
+      findFirstLine(lines, (line) => AMBIGUOUS_AUTHORITY_PATTERN.test(line.text)),
+  },
+  {
+    ruleId: "SKILL204_UNPINNED_TOOLS",
+    severity: "warning",
+    priority: "P2",
+    confidence: "medium",
+    title: "Unpinned tool or package install appears",
+    message:
+      "The skill appears to install or run packages, containers, or repository code without a pinned version, digest, or revision.",
+    suggestion:
+      "Pin package versions, image digests, or commit SHAs, and document how to update them safely.",
+    rationale:
+      "Matched package runner, install, clone, or pull guidance without pinned version evidence.",
+    counterevidence: ["Pinned versions, digests, and commit SHAs suppress this rule."],
+    findLine: (lines) => findFirstLine(lines, (line) => UNPINNED_TOOLS_PATTERN.test(line.text)),
+  },
+  {
+    ruleId: "SKILL205_HIDDEN_FILES",
+    severity: "warning",
+    priority: "P2",
+    confidence: "medium",
+    title: "Hidden or unusual package artifact appears",
+    message:
+      "The skill package contains hidden files, executable assets, unusual extensions, or symlinks that escape the skill root.",
+    suggestion:
+      "Keep security-relevant files visible and reviewable, avoid executable assets unless required, and remove symlink escapes.",
+    rationale:
+      "Package-level validation reports hidden-file, executable-asset, and symlink hygiene evidence.",
+    counterevidence: ["Normal visible package files inside the skill root are not reportable."],
+    findLine: () => undefined,
+  },
+  {
+    ruleId: "SKILL206_LARGE_CONTEXT_BAIT",
+    severity: "warning",
+    priority: "P2",
+    confidence: "medium",
+    title: "Large context bait appears in skill metadata or body",
+    message:
+      "The skill appears to use very long metadata, body content, or lines that can dominate agent context.",
+    suggestion:
+      "Shorten descriptions and move large reference material into scoped reference files with clear summaries.",
+    rationale: "Matched long description, very large SKILL.md content, or unusually long lines.",
+    counterevidence: ["Concise metadata and bounded references suppress this rule."],
+    findLine: (lines) => findLargeContextBaitLine(lines),
+  },
 ];
 
 export const validateSecurityRules = (
@@ -643,6 +771,18 @@ const hasDenylistEvidence = (lines: readonly MarkdownSecurityCandidate[]): boole
 
 const hasMcpAllowlistEvidence = (lines: readonly MarkdownSecurityCandidate[]): boolean =>
   lines.some((line) => MCP_ALLOWLIST_PATTERN.test(line.text));
+
+const findLargeContextBaitLine = (
+  lines: readonly MarkdownSecurityCandidate[],
+): number | undefined => {
+  if (lines.length > LARGE_CONTEXT_LINE_THRESHOLD) return lines[0]?.number;
+  const longDescription = lines.find(
+    (line) =>
+      /^\s*description\s*:/i.test(line.text) && line.text.length > LONG_DESCRIPTION_THRESHOLD,
+  );
+  if (longDescription !== undefined) return longDescription.number;
+  return lines.find((line) => line.text.length > LONG_LINE_THRESHOLD)?.number;
+};
 
 const packageHasDenylistEvidence = (skillPackage: SkillPackage): boolean =>
   skillPackage.artifacts.some(
@@ -796,6 +936,22 @@ const CAPABILITY_SECURITY_RULES = new Map<
       ],
     },
   ],
+  [
+    "hidden_artifact",
+    {
+      ruleId: "SKILL205_HIDDEN_FILES",
+      severity: "warning",
+      priority: "P2",
+      confidence: "medium",
+      title: "Hidden or unusual package artifact appears",
+      message:
+        "The skill package contains hidden files, executable assets, unusual extensions, or symlinks that escape the skill root.",
+      suggestion:
+        "Keep security-relevant files visible and reviewable, avoid executable assets unless required, and remove symlink escapes.",
+      rationale: "A package artifact produced hidden-file or symlink hygiene evidence.",
+      counterevidence: ["Normal visible package files inside the skill root are not reportable."],
+    },
+  ],
 ]);
 
 const validatePackageCapabilitySecurity = (
@@ -824,6 +980,7 @@ const validatePackageCapabilitySecurity = (
       buildCrossModalMismatchFinding(skillPackage, facts, enabled),
       buildUntrustedMcpFinding(skillPackage, facts, enabled),
       buildMcpScopeExcessFinding(skillPackage, enabled),
+      buildExecutableArtifactFinding(skillPackage, enabled),
     ].filter((finding): finding is Finding => finding !== undefined),
   ];
 };
@@ -1017,6 +1174,45 @@ const buildMcpScopeExcessFinding = (
     });
   }
   return undefined;
+};
+
+const buildExecutableArtifactFinding = (
+  skillPackage: SkillPackage,
+  enabled: ReadonlySet<string> | undefined,
+): Finding | undefined => {
+  const ruleId: SecurityRuleId = "SKILL205_HIDDEN_FILES";
+  if (enabled !== undefined && !enabled.has(ruleId)) return undefined;
+  const artifact = skillPackage.artifacts.find(
+    (candidate) =>
+      candidate.executable === true &&
+      candidate.type !== "script" &&
+      candidate.type !== "shell-script",
+  );
+  if (artifact === undefined) return undefined;
+  return buildCapabilityFinding(
+    skillPackage,
+    {
+      kind: "hidden_artifact",
+      artifactPath: artifact.path,
+      confidence: "medium",
+      description: "Artifact is executable outside the scripts or shell-script artifact class.",
+    },
+    {
+      ruleId,
+      severity: "warning",
+      priority: "P2",
+      confidence: "medium",
+      title: "Executable package artifact appears outside scripts",
+      message:
+        "The skill package contains an executable asset or non-script artifact that should be reviewed.",
+      suggestion:
+        "Move executable logic into reviewed scripts, remove the executable bit, or document why the executable artifact is required.",
+      rationale: "Package metadata marked a non-script artifact as executable.",
+      counterevidence: [
+        "Executable script artifacts are handled by command and package capability rules.",
+      ],
+    },
+  );
 };
 
 const buildCapabilityFinding = (

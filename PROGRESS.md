@@ -6,9 +6,9 @@
 - User gap summary from 2026-07-03
 
 ## Current Status
-- Status: Step 7 complete.
-- Current step: Step 8: Implement P2 Quality And Hygiene Rules.
-- Next step: Step 8: Implement P2 Quality And Hygiene Rules.
+- Status: Step 8 complete.
+- Current step: Step 9: Add Security Gates And Report Schema Output.
+- Next step: Step 9: Add Security Gates And Report Schema Output.
 
 ## Step Checklist
 - [x] Step 0: Progress and Changelog Tracking Setup
@@ -19,7 +19,7 @@
 - [x] Step 5: Migrate Security Validation To Package-Level Evaluation
 - [x] Step 6: Implement P0 Blocker Rules
 - [x] Step 7: Implement P1 High-Risk Rules
-- [ ] Step 8: Implement P2 Quality And Hygiene Rules
+- [x] Step 8: Implement P2 Quality And Hygiene Rules
 - [ ] Step 9: Add Security Gates And Report Schema Output
 - [ ] Step 10: Update Documentation And Public Rule Catalog
 - [ ] Step 11: Add End-To-End Fixture Coverage
@@ -131,7 +131,20 @@ After each completed step, update this file with:
 - Changelog: Added `Added` and `Security` entries for the P1 high-risk rule set and package-level evidence checks.
 - Commit: Step 7 commit (`feat: implement p1 high-risk security rules`).
 
+### Step 8: Implement P2 Quality And Hygiene Rules
+- Summary: Added spec-aligned P2 rules `SKILL201_*` through `SKILL206_*` for missing boundaries, missing human approval, ambiguous authority, unpinned tools, hidden/executable artifacts, and large context bait. P2 security hygiene findings now affect score through report building while remaining separate from default severity-based exit gates.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run typecheck` passed.
+  - `bun test test/security-rules.test.ts test/reporting.test.ts test/quality-rules.test.ts` passed: 101 focused security, reporting, and catalog-doc sync tests.
+  - `bun run test` passed: 21 files, 238 tests.
+  - `bun run build` passed.
+- Changelog: Added `Added` and `Changed` entries for P2 hygiene rules and score impact.
+- Commit: Step 8 commit (`feat: implement p2 security hygiene rules`).
+
 ## Update Log
+- 2026-07-03: Completed focused Step 8 validation for P2 rule IDs, package hygiene findings, score impact, and docs sync.
 - 2026-07-03: Completed focused Step 7 validation for P1 rule IDs, priorities, package capability findings, MCP checks, and docs sync.
 - 2026-07-03: Completed focused Step 6 validation for P0 rule IDs, priorities, standalone secret access, persistence, and docs sync.
 - 2026-07-03: Completed Step 5 validation and prepared the package-level security validation commit.

@@ -73,6 +73,7 @@ export type BuildScanReportUsageInput = {
 
 export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
   const qualityFindings = input.scan.findings.filter(isQualityFinding);
+  const scoreFindings = input.scan.findings.filter(isScoreFinding);
   const securityFindingCount = input.scan.findings.length - qualityFindings.length;
   const errorCount = countSeverity(qualityFindings, "error");
   const warningCount = countSeverity(qualityFindings, "warning");
@@ -96,7 +97,7 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
     errorCount,
     warningCount,
     adviceCount,
-    score: calculateScore(qualityFindings, {
+    score: calculateScore(scoreFindings, {
       diagnosticErrorCodes: input.scan.diagnostics
         .filter((diagnostic) => diagnostic.severity === "error")
         .map((diagnostic) => diagnostic.code),
@@ -144,6 +145,8 @@ const countSeverity = (findings: readonly Finding[], severity: Finding["severity
   findings.filter((finding) => finding.severity === severity).length;
 
 const isQualityFinding = (finding: Finding): boolean => finding.category !== "security";
+const isScoreFinding = (finding: Finding): boolean =>
+  finding.category !== "security" || finding.priority === "P2";
 
 const countDiagnosticSeverity = (
   diagnostics: readonly Diagnostic[],

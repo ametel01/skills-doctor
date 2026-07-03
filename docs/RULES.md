@@ -111,6 +111,12 @@ Intent is classified conservatively:
 | `SKILL106_SELF_MODIFYING_SKILL` | warning | P1 | security | Skill package instructs runtime modification of its own files or registry metadata. |
 | `SKILL107_UNTRUSTED_MCP` | warning | P1 | security | Skill package adds or exposes broad MCP tools without a clear allowlist. |
 | `SKILL108_MCP_SCOPE_EXCESS` | warning | P1 | security | MCP configuration requests broad OAuth scopes or weak redirect metadata. |
+| `SKILL201_NO_BOUNDARIES` | warning | P2 | security | Risky skill behavior lacks explicit boundaries or forbidden-action guidance. |
+| `SKILL202_NO_HITL_FOR_RISKY_ACTIONS` | warning | P2 | security | Risky skill actions lack explicit human approval guidance. |
+| `SKILL203_AMBIGUOUS_AUTHORITY` | warning | P2 | security | Skill instructions claim ambiguous authority or precedence over project rules. |
+| `SKILL204_UNPINNED_TOOLS` | warning | P2 | security | Skill instructions install or run tools without pinned versions or digests. |
+| `SKILL205_HIDDEN_FILES` | warning | P2 | security | Skill packages contain hidden files, executable assets, or symlink escapes. |
+| `SKILL206_LARGE_CONTEXT_BAIT` | warning | P2 | security | Skill metadata or body content is large enough to dominate agent context. |
 
 Evidence requirements by rule:
 
@@ -163,6 +169,20 @@ Evidence requirements by rule:
   dependencies without trusted-server or named-tool allowlist evidence.
 - `SKILL108_MCP_SCOPE_EXCESS` reports broad MCP OAuth scopes or loose redirect
   URI metadata.
+- `SKILL201_NO_BOUNDARIES` reports risky deploy, publish, deletion, migration,
+  GitHub, cloud, or secret actions when no boundary, out-of-scope, forbidden
+  action, or allowed-input/output guidance is present.
+- `SKILL202_NO_HITL_FOR_RISKY_ACTIONS` reports risky deploy, publish, deletion,
+  email, payment, migration, GitHub, cloud, or secret actions without explicit
+  human approval or confirmation guidance.
+- `SKILL203_AMBIGUOUS_AUTHORITY` reports claims that the skill is
+  authoritative, must always be followed, or outranks project rules.
+- `SKILL204_UNPINNED_TOOLS` reports package runners, installs, pulls, or clones
+  without pinned versions, digests, or commit revisions.
+- `SKILL205_HIDDEN_FILES` reports hidden package artifacts, symlink escapes, and
+  executable non-script artifacts.
+- `SKILL206_LARGE_CONTEXT_BAIT` reports very long descriptions, oversized
+  `SKILL.md` content, or unusually long lines that can dominate agent context.
 
 Security findings include optional confidence metadata:
 
@@ -175,7 +195,8 @@ Security findings include optional confidence metadata:
   built-in security rules do not emit low-confidence findings.
 
 Security findings are separate review warnings. They are counted in
-`findingCount` and `securityFindingCount`, but they are excluded from the
-quality score, per-skill quality counts, and default exit-code gates. `--fail-on
-warning`, `--fail-on advice`, and `--min-score` apply to quality findings and
-error diagnostics, not to security findings.
+`findingCount` and `securityFindingCount`, but they are excluded from per-skill
+quality counts and default exit-code gates. P0 and P1 security findings are
+excluded from the quality score; P2 security hygiene findings affect score so
+`--min-score` can gate them. `--fail-on warning` and `--fail-on advice` apply
+to quality findings and error diagnostics, not to security findings.

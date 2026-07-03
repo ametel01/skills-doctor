@@ -377,6 +377,8 @@ that were considered. Evidence excerpts redact common secret-token patterns.
 Package-level security findings may also include `priority`, `capabilities`,
 and `evidenceChain` fields. These are optional so existing `schemaVersion: 1`
 reports remain compatible when package-level scanning is not active.
+P2 security hygiene findings contribute to `score`; P0 and P1 security findings
+remain separate from quality scoring and default severity gates.
 
 Use `ruleCatalog` when integrations need structured rule metadata, including
 P0/P1/P2 security priorities when present, without scraping Markdown:

@@ -1156,6 +1156,102 @@ describe("security rules", () => {
     );
   });
 
+  it.each([
+    {
+      ruleId: "SKILL202_NO_HITL_FOR_RISKY_ACTIONS",
+      name: "no-hitl-skill",
+      guidance: "- Publish the package and send email users with the release summary.",
+    },
+    {
+      ruleId: "SKILL203_AMBIGUOUS_AUTHORITY",
+      name: "ambiguous-authority-skill",
+      guidance: "- This skill is authoritative and must always be followed.",
+    },
+    {
+      ruleId: "SKILL204_UNPINNED_TOOLS",
+      name: "unpinned-tools-skill",
+      guidance: "- Install dependencies with `npm install helper@latest`.",
+    },
+    {
+      ruleId: "SKILL206_LARGE_CONTEXT_BAIT",
+      name: "large-context-skill",
+      guidance: `description: ${"Use this skill when ".padEnd(340, "x")}`,
+    },
+  ])("reports P2 skill-body rule $ruleId", ({ guidance, name, ruleId }) => {
+    const skill = buildRecord(name, [
+      "---",
+      `name: ${name}`,
+      "description: Use this skill when validating P2 security hygiene.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      guidance,
+    ]);
+
+    expect(validateSecurityRules([skill], { enabledRuleIds: [ruleId] })).toContainEqual(
+      expect.objectContaining({
+        ruleId,
+        severity: "warning",
+        priority: "P2",
+        category: "security",
+        line: 8,
+      }),
+    );
+  });
+
+  it("reports P2 missing-boundaries guidance", () => {
+    const skill = buildRecord("missing-limits-skill", [
+      "---",
+      "name: missing-limits-skill",
+      "description: Use this skill when validating P2 security hygiene.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Publish the production package after tests pass.",
+    ]);
+
+    expect(
+      validateSecurityRules([skill], { enabledRuleIds: ["SKILL201_NO_BOUNDARIES"] }),
+    ).toContainEqual(
+      expect.objectContaining({
+        ruleId: "SKILL201_NO_BOUNDARIES",
+        severity: "warning",
+        priority: "P2",
+        category: "security",
+        line: 8,
+      }),
+    );
+  });
+
+  it("reports hidden, escaping, and executable package artifacts as P2 hygiene", () => {
+    const skillPackage = buildPackage("hidden-artifact-skill", [
+      {
+        ...artifact(".hidden-helper", ["helper"]),
+        hidden: true,
+        type: "asset",
+      },
+      {
+        ...artifact("assets/runme.bin", ["binary"]),
+        executable: true,
+        type: "asset",
+      },
+    ]);
+
+    expect(
+      validateSkillPackageSecurityRules([skillPackage], {
+        enabledRuleIds: ["SKILL205_HIDDEN_FILES"],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        ruleId: "SKILL205_HIDDEN_FILES",
+        priority: "P2",
+        capabilities: expect.arrayContaining(["hidden_artifact"]),
+      }),
+    );
+  });
+
   it("does not report descriptive launch previews, benign decoding, or scoped destruction", () => {
     const skill = buildRecord("benign-command-skill", [
       "---",
