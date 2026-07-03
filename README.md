@@ -8,6 +8,9 @@ findings-specific repair prompt to `claude` or `codex`.
 It can also analyze local Codex usage traces to surface unused skills and
 skills context-budget pressure before handing a cleanup prompt to a local agent.
 
+> ★ If Skills Doctor helps you clean up or harden your agent skills, please
+> [star the repo on GitHub](https://github.com/ametel01/skills-doctor).
+
 ## Install And Run
 
 From a repository that contains project-local skills, or from anywhere when you
