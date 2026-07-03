@@ -9,8 +9,8 @@ import {
   writeJsonReport,
 } from "../src/cli/utils/json-mode.js";
 import {
-  buildSecurityReviewIncidents,
   buildScanReport,
+  buildSecurityReviewIncidents,
   discoverSkillRoots,
   type Finding,
   renderHumanSummary,
