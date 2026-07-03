@@ -8,11 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Added durable issue-wave progress tracking for the evidence-based security scanner work.
 - Added a full-screen interactive TTY dashboard with scan progress, usage metrics, cleanup candidates, and keyboard-driven next-step actions.
-- Documented the malicious skill detector rules, report category, and public API.
 - Added a public security-rule validator API surface for future malicious skill detection rules.
-- Established progress tracking for the malicious skill detector implementation plan.
 
 ### Changed
 
@@ -31,7 +28,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Security
 
 - Surfaced security findings in the interactive CLI summary and review menu.
-- Verified malicious skill detector release readiness with full verification and package dry-run.
 - Integrated security findings into normal skill scans and report exit-code behavior.
 - Added deterministic detection for remote execution, safety-disablement, destructive, and obfuscated command patterns in skill files.
 - Added deterministic detection for instruction-subversion and secret-exfiltration patterns in skill files.

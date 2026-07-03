@@ -27,15 +27,57 @@ results, current status, and the next unblocked wave.
 
 ## Current Status
 
-Issue #1 is implemented in worktree
-`/Users/alexmetelli/source/skills-doctor-issue-1` on branch
-`fix/issue-1-progress-tracking`.
+Issue #9 final release-readiness verification is complete on branch
+`chore/issue-9-release-readiness`.
 
-Next step: checker review of issue #1.
+Implementation status: complete.
 
-Next unblocked wave: #2 and #3 after #1 is accepted.
+Next step: checker and maintainer review for the final verification PR.
 
 ## Update Log
+
+### 2026-07-03: Issue #9 Final Release-Readiness Verification
+
+- Ran final aggregate verification after #8 merged:
+  - `bun install --frozen-lockfile` passed with no source changes.
+  - `bun run verify` passed: `biome check .`, `tsc --noEmit`, Vitest 20
+    files / 201 tests, and `tsc -p tsconfig.build.json`.
+- Built a manual fixture project at
+  `/tmp/skills-doctor-issue9-fixtures.Alz6sN` with six representative skills:
+  - defensive prompt-injection guidance,
+  - webhook signing-secret setup,
+  - official GitHub API bearer-token authentication,
+  - remote docs/spec parsing through `jq`,
+  - actual `curl` to shell execution,
+  - actual `.env` upload through `curl` with a distinctive fake token.
+- Isolated manual scans with `HOME=/tmp/skills-doctor-issue9-fixtures.Alz6sN/home`
+  so only the fixture-local `.agents/skills` root was selected.
+- Manual JSON scan passed with exit code 0:
+  - command: `bun run dev -- --yes --json --json-compact --no-logs /tmp/skills-doctor-issue9-fixtures.Alz6sN`
+  - result: 6 skills, 2 findings, 0 quality findings, 2 security findings,
+    score 100.
+  - findings: `remote-code-execution-bootstrap` on `remote-shell-bootstrap`
+    and `network-exfiltration-command` on `secret-upload`.
+  - both security findings included `confidence: "high"` and non-empty
+    `counterevidence`.
+  - the distinctive fake token `sk_test_issue9_manual_secret_value` did not
+    appear in serialized JSON output.
+- Manual human scan passed with exit code 0:
+  - command: `bun run dev -- --yes --no-logs /tmp/skills-doctor-issue9-fixtures.Alz6sN`
+  - output summary remained concise: 6 skills scanned, no quality issues, and
+    `Security findings: 2 suspicious skill patterns (high: 2)`.
+  - the distinctive fake token did not appear in human output.
+- False-positive categories from the source brief are documented in
+  `docs/RULES.md`: defensive prompt-injection guidance, webhook
+  signing-secret setup, official service API authentication, and remote
+  docs/spec parsing are named as defensive or operational counterevidence.
+- Reviewed `CHANGELOG.md` against Keep a Changelog and release workflow rules.
+  Removed progress-tracking, docs-only, and validation-only entries from
+  `## [Unreleased]`; remaining entries describe functional CLI/API/reporting,
+  false-positive, and security behavior changes.
+- Current status: evidence-based security scanner implementation is complete
+  and release-readiness validation passed.
+- Next step: checker and maintainer review for issue #9 PR.
 
 ### 2026-07-03: Issue #1 Tracking Setup
 
