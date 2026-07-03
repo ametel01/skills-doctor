@@ -6,14 +6,14 @@
 - User gap summary from 2026-07-03
 
 ## Current Status
-- Status: Step 1 complete.
-- Current step: Step 2: Introduce Skill Package And Artifact Models.
-- Next step: Step 2: Introduce Skill Package And Artifact Models.
+- Status: Step 2 complete.
+- Current step: Step 3: Add Package Artifact Discovery.
+- Next step: Step 3: Add Package Artifact Discovery.
 
 ## Step Checklist
 - [x] Step 0: Progress and Changelog Tracking Setup
 - [x] Step 1: Clean Up The Security Spec Source Document
-- [ ] Step 2: Introduce Skill Package And Artifact Models
+- [x] Step 2: Introduce Skill Package And Artifact Models
 - [ ] Step 3: Add Package Artifact Discovery
 - [ ] Step 4: Build Shared Capability Detectors
 - [ ] Step 5: Migrate Security Validation To Package-Level Evaluation
@@ -58,7 +58,21 @@ After each completed step, update this file with:
 - Changelog: No changelog entry added because this step was docs-only cleanup.
 - Commit: Step 1 commit (`docs: clarify remote code execution security spec`).
 
+### Step 2: Introduce Skill Package And Artifact Models
+- Summary: Added public TypeScript types for skill packages, artifacts, symlink status, capability facts, security priorities, and cross-file evidence chains. Added optional finding fields for priority, capabilities, and evidence chains without changing current JSON output.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run typecheck` passed.
+  - `bun test test/api-fixtures.test.ts` passed: 9 tests.
+  - `bun run test` passed: 20 files, 214 tests.
+  - `bun run build` passed.
+  - `bun run pack:dry-run` passed: 118 files, unpacked size 0.35MB.
+- Changelog: Added an `Added` entry for package security model types.
+- Commit: Step 2 commit (`feat: add skill package security model`).
+
 ## Update Log
+- 2026-07-03: Completed Step 2 validation and prepared the package security model commit.
 - 2026-07-03: Completed Step 1 validation and prepared the security spec cleanup commit.
 - 2026-07-03: Completed Step 0 validation and created the Step 0 commit.
 - 2026-07-03: Started goal from `PLAN.md`; Step 0 progress tracking file created.

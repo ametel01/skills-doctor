@@ -113,6 +113,8 @@ Exported types include:
 - `CleanupDirectoryInput`
 - `CleanupDirectoryResult`
 - `CodexPressureRow`
+- `CapabilityFact`
+- `CapabilityKind`
 - `ContextBudgetPressure`
 - `ContextPressureLevel`
 - `Diagnostic`
@@ -120,6 +122,8 @@ Exported types include:
 - `FindingCategory`
 - `FindingConfidence`
 - `FindingEvidence`
+- `FindingEvidenceChain`
+- `FindingEvidenceChainItem`
 - `FindingEvidenceLine`
 - `FindingSeverity`
 - `FindingsComparison`
@@ -139,7 +143,12 @@ Exported types include:
 - `ScoreSummary`
 - `ScanExitCodeOptions`
 - `ScanGateSeverity`
+- `SecurityPriority`
 - `SkillEcosystem`
+- `SkillArtifact`
+- `SkillArtifactSymlinkStatus`
+- `SkillArtifactType`
+- `SkillPackage`
 - `SkillRecord`
 - `SkillRoot`
 - `SkillSummary`
@@ -175,6 +184,54 @@ skill directory:
 ```ts
 type ResourceStatus = "inside" | "missing" | "escapes";
 ```
+
+## Package Security Model
+
+The package security model is additive and supports integrations that need to
+reason about more than one `SKILL.md` file. Existing callers can continue to use
+`SkillRecord` and `validateSecurityRules(skills)`. Package-level scanning uses
+these types as it expands artifact discovery and cross-file evidence.
+
+```ts
+type SkillPackage = {
+  readonly skill: SkillRecord;
+  readonly artifacts: readonly SkillArtifact[];
+  readonly capabilities?: readonly CapabilityFact[];
+};
+
+type SkillArtifact = {
+  readonly type: SkillArtifactType;
+  readonly path: string;
+  readonly relativePath: string;
+  readonly readable: boolean;
+  readonly hidden: boolean;
+  readonly executable?: boolean;
+  readonly symlinkStatus: "none" | "inside" | "escapes" | "broken";
+  readonly realPath?: string;
+  readonly content?: string;
+  readonly contentHash?: string;
+  readonly diagnostic?: Diagnostic;
+};
+
+type CapabilityFact = {
+  readonly kind: CapabilityKind;
+  readonly artifactPath: string;
+  readonly confidence: "high" | "medium" | "low";
+  readonly line?: number;
+  readonly evidence?: FindingEvidence;
+  readonly description?: string;
+};
+```
+
+`CapabilityKind` values describe observed package capabilities, including
+`reads_secrets`, `network_egress`, `remote_code_exec`, `persistence`,
+`self_modifies`, `bypasses_approval`, `destructive_action`, `obfuscation`,
+`broad_tool_access`, `external_dependency`, `mcp_access`, and
+`hidden_artifact`.
+
+`SecurityPriority` values are `P0`, `P1`, and `P2`. Future package-level
+security rules populate this priority on security findings while preserving the
+existing `severity` field.
 
 ## ScanReport
 
@@ -277,6 +334,9 @@ type Finding = {
   readonly skillName?: string;
   readonly line?: number;
   readonly evidence?: FindingEvidence;
+  readonly priority?: "P0" | "P1" | "P2";
+  readonly capabilities?: readonly CapabilityKind[];
+  readonly evidenceChain?: FindingEvidenceChain;
   readonly confidence?: "high" | "medium" | "low";
   readonly rationale?: string;
   readonly counterevidence?: readonly string[];
@@ -304,6 +364,9 @@ Security findings may also include `confidence`, `rationale`, and
 `counterevidence` so callers can distinguish high-confidence source/action/sink
 stories from medium-confidence harmful-language matches and display the filters
 that were considered. Evidence excerpts redact common secret-token patterns.
+Package-level security findings may also include `priority`, `capabilities`,
+and `evidenceChain` fields. These are optional so existing `schemaVersion: 1`
+reports remain compatible when package-level scanning is not active.
 
 Use `ruleCatalog` when integrations need structured rule metadata without
 scraping Markdown:
