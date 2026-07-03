@@ -27,8 +27,7 @@ results, current status, and the next unblocked wave.
 
 ## Current Status
 
-Issue #9 final release-readiness verification is complete in worktree
-`/Users/alexmetelli/source/skills-doctor-issue-9` on branch
+Issue #9 final release-readiness verification is complete on branch
 `chore/issue-9-release-readiness`.
 
 Implementation status: complete.
