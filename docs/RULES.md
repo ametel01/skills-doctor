@@ -21,9 +21,9 @@ Rules are grouped by the scanner category. Severity and intent can be refined he
 | `invalid-name-consecutive-hyphens` | error | frontmatter | Skill name contains consecutive hyphens. |
 | `name-directory-mismatch` | error | frontmatter | `name` does not match parent directory. |
 | `invalid-license-field` | warning | frontmatter | Optional `license` field is not a string. |
-| `invalid-compatibility-field` | error | frontmatter | Optional `compatibility` field is invalid or too long. |
+| `invalid-compatibility-field` | error | frontmatter | Optional `compatibility` field is not a non-empty string. |
 | `compatibility-too-long` | error | frontmatter | Optional `compatibility` value exceeds limit. |
-| `invalid-metadata-field` | error | frontmatter | Optional `metadata` field is not a map. |
+| `invalid-metadata-field` | error | frontmatter | Optional `metadata` field is not a string-to-string map. |
 | `invalid-allowed-tools-field` | error | frontmatter | `allowed-tools` is malformed. |
 | `allowed-tools-experimental` | warning | frontmatter | `allowed-tools` support is experimental. |
 
@@ -49,6 +49,8 @@ Rules are grouped by the scanner category. Severity and intent can be refined he
 | `generic-resource-reference` | warning | progressive-disclosure | Resource directory is referenced without a specific trigger. |
 | `script-without-help-guidance` | warning | scripts | Script reference lacks usage/help documentation. |
 | `interactive-script-guidance` | warning | scripts | Script guidance appears interactive. |
+| `interactive-script-implementation` | warning | scripts | Referenced script implementation appears interactive. |
+| `risky-script-without-safety-flag` | warning | scripts | Referenced script has risky operations without safety flags. |
 | `unpinned-package-runner` | advice | scripts | Unpinned package-runner command is used. |
 
 ## Resources and portability

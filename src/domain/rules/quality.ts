@@ -1,4 +1,4 @@
-import { access, realpath } from "node:fs/promises";
+import { access, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { Finding, FindingCategory, SkillRecord } from "../types.js";
 
@@ -11,13 +11,19 @@ const IMPLEMENTATION_DESCRIPTION_PATTERN = /\b(script|function|class|module|impl
 const WORKFLOW_STEP_PATTERN = /(^|\n)(\s*[-*]\s+|\s*\d+\.\s+|##\s+)/;
 const TOOL_MENU_PATTERN = /\byou can use\b.+\b(or|,)\b.+\b(or|,)\b/i;
 const DESTRUCTIVE_PATTERN = /\b(delete|remove|rm -rf|destroy|drop table|migrate|publish|deploy)\b/i;
-const SAFETY_PATTERN = /\b(--dry-run|dry run|--confirm|confirm|validate|backup|preview)\b/i;
+const SAFETY_PATTERN =
+  /--dry-run|\bdry run\b|--confirm|\bconfirm\b|\bvalidate\b|\bbackup\b|\bpreview\b/i;
 const UNPINNED_RUNNER_PATTERN = /\b(npx|bunx|uvx|pipx run|go run)\s+([@\w./-]+)(?!@[\w.^~-])/i;
 const INTERACTIVE_SCRIPT_PATTERN =
   /\b(read -p|select menu|interactive prompt|asks? for input|prompts? the user)\b/i;
+const INTERACTIVE_SCRIPT_IMPLEMENTATION_PATTERN =
+  /\b(read\s+-p|select\s+\w+|input\s*\(|raw_input\s*\(|prompt\s*\(|confirm\s*\(|inquirer\.prompt|readline\.question|scanf\s*\()\b/i;
 const GENERIC_REFERENCE_PATTERN =
   /\b(see|read|check)\s+(the\s+)?(references\/?|scripts\/?|assets\/?)\b/i;
 const RESOURCE_REFERENCE_PATTERN = /\b(scripts|references|assets)\/[A-Za-z0-9._/-]+/g;
+const SCRIPT_RISKY_OPERATION_PATTERN =
+  /\b(rm\s+-rf|find\b.{0,80}-delete|drop\s+database|terraform\s+(?:apply|destroy)|kubectl\s+(?:apply|delete)|gh\s+(?:repo\s+delete|issue|pr)|git\s+push\s+--force|deploy|publish|send\s+email|payments?)\b/i;
+const SCRIPT_SAFETY_FLAG_PATTERN = /--dry-run|--confirm|--force|--yes|--preview/i;
 
 export type ResourceStatus = "inside" | "missing" | "escapes";
 
@@ -335,6 +341,10 @@ const validateResources = async (
         }),
       );
     }
+
+    if (referencePath.startsWith("scripts/")) {
+      findings.push(...(await validateScriptInterface(skill, referencePath, body)));
+    }
   }
 
   if (INTERACTIVE_SCRIPT_PATTERN.test(body)) {
@@ -364,6 +374,54 @@ const validateResources = async (
           "One-off package-runner commands should pin versions when reproducibility matters.",
         suggestion: "Use a versioned command such as npx eslint@9 or uvx ruff@0.8.0.",
         line: findBodyLine(frontMatterLineCount, body, UNPINNED_RUNNER_PATTERN),
+      }),
+    );
+  }
+
+  return findings;
+};
+
+const validateScriptInterface = async (
+  skill: SkillRecord,
+  referencePath: string,
+  body: string,
+): Promise<Finding[]> => {
+  const content = await readScriptContent(skill, referencePath);
+  if (content === undefined) return [];
+  const findings: Finding[] = [];
+
+  if (INTERACTIVE_SCRIPT_IMPLEMENTATION_PATTERN.test(content)) {
+    findings.push(
+      createFinding(skill, {
+        ruleId: "interactive-script-implementation",
+        severity: "warning",
+        category: "scripts",
+        title: "Referenced script appears interactive",
+        message:
+          "Referenced scripts should run non-interactively with flags, files, environment variables, or stdin.",
+        suggestion:
+          "Replace prompts with explicit flags or stdin/file inputs and clear errors for missing values.",
+        line: findReferenceLine(skill.content, referencePath),
+      }),
+    );
+  }
+
+  if (
+    SCRIPT_RISKY_OPERATION_PATTERN.test(content) &&
+    !SCRIPT_SAFETY_FLAG_PATTERN.test(content) &&
+    !SCRIPT_SAFETY_FLAG_PATTERN.test(body)
+  ) {
+    findings.push(
+      createFinding(skill, {
+        ruleId: "risky-script-without-safety-flag",
+        severity: "warning",
+        category: "scripts",
+        title: "Referenced script has risky operations without safety flags",
+        message:
+          "Referenced scripts that perform destructive, publishing, deploy, or external-write actions should expose dry-run, confirmation, force, or preview controls.",
+        suggestion:
+          "Add an explicit --dry-run, --confirm, --force, or --preview control and document when agents may use it.",
+        line: findReferenceLine(skill.content, referencePath),
       }),
     );
   }
@@ -511,6 +569,23 @@ const exists = async (targetPath: string): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+const readScriptContent = async (
+  skill: SkillRecord,
+  referencePath: string,
+): Promise<string | undefined> => {
+  const targetPath = path.resolve(skill.skillDir, referencePath);
+  let resolvedTarget: string;
+  let resolvedSkillDir: string;
+  try {
+    resolvedTarget = await realpath(targetPath);
+    resolvedSkillDir = await realpath(skill.skillDir);
+  } catch {
+    return undefined;
+  }
+  if (!isPathInside(resolvedSkillDir, resolvedTarget)) return undefined;
+  return await readFile(resolvedTarget, "utf8").catch(() => undefined);
 };
 
 const resolveResourceStatus = async (

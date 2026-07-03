@@ -94,6 +94,36 @@ describe("structural rules", () => {
     );
   });
 
+  it("reports empty compatibility and non-string metadata values", async () => {
+    const skill = buildRecord("strict-optional-fields", [
+      "---",
+      "name: strict-optional-fields",
+      "description: Use this skill when validating optional frontmatter fields.",
+      'compatibility: ""',
+      "metadata:",
+      "  owner: docs",
+      "  retries: 3",
+      "---",
+      "",
+      "Body.",
+    ]);
+
+    const findings = validateStructuralRules(skill);
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "invalid-compatibility-field",
+        message: "The optional compatibility field must contain 1 to 500 characters.",
+      }),
+    );
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "invalid-metadata-field",
+        message: "The optional metadata field must use string keys and string values.",
+      }),
+    );
+  });
+
   it("warns when allowed-tools is present because support is experimental", async () => {
     const skill = buildRecord("tool-skill", [
       "---",

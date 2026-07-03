@@ -238,6 +238,19 @@ const validateOptionalFields = (
           line: findFrontmatterKeyLine(rawFrontmatter, "compatibility"),
         }),
       );
+    } else if (data.compatibility.trim().length === 0) {
+      findings.push(
+        createFinding(skill, {
+          ruleId: "invalid-compatibility-field",
+          severity: "error",
+          category: "frontmatter",
+          title: "Compatibility field must not be empty",
+          message: "The optional compatibility field must contain 1 to 500 characters.",
+          suggestion:
+            "Remove compatibility when there are no environment requirements, or describe them briefly.",
+          line: findFrontmatterKeyLine(rawFrontmatter, "compatibility"),
+        }),
+      );
     } else if (data.compatibility.length > 500) {
       findings.push(
         createFinding(skill, {
@@ -253,18 +266,32 @@ const validateOptionalFields = (
     }
   }
 
-  if (data.metadata !== undefined && !isRecord(data.metadata)) {
-    findings.push(
-      createFinding(skill, {
-        ruleId: "invalid-metadata-field",
-        severity: "error",
-        category: "frontmatter",
-        title: "Metadata field must be a mapping",
-        message: "The optional metadata field must be a key-value mapping.",
-        suggestion: "Change metadata to a YAML mapping or remove it.",
-        line: findFrontmatterKeyLine(rawFrontmatter, "metadata"),
-      }),
-    );
+  if (data.metadata !== undefined) {
+    if (!isRecord(data.metadata)) {
+      findings.push(
+        createFinding(skill, {
+          ruleId: "invalid-metadata-field",
+          severity: "error",
+          category: "frontmatter",
+          title: "Metadata field must be a mapping",
+          message: "The optional metadata field must be a key-value mapping.",
+          suggestion: "Change metadata to a YAML mapping or remove it.",
+          line: findFrontmatterKeyLine(rawFrontmatter, "metadata"),
+        }),
+      );
+    } else if (!isStringRecord(data.metadata)) {
+      findings.push(
+        createFinding(skill, {
+          ruleId: "invalid-metadata-field",
+          severity: "error",
+          category: "frontmatter",
+          title: "Metadata values must be text",
+          message: "The optional metadata field must use string keys and string values.",
+          suggestion: "Convert metadata values to strings or remove non-text metadata.",
+          line: findFrontmatterKeyLine(rawFrontmatter, "metadata"),
+        }),
+      );
+    }
   }
 
   if (data["allowed-tools"] !== undefined) {
@@ -333,6 +360,9 @@ const readString = (value: unknown): string | undefined =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isStringRecord = (value: Record<string, unknown>): boolean =>
+  Object.values(value).every((entryValue) => typeof entryValue === "string");
 
 const findFrontmatterKeyLine = (rawFrontmatter: string, key: string): number | undefined => {
   const lines = rawFrontmatter.split(/\r?\n/);

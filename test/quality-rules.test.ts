@@ -175,6 +175,53 @@ describe("quality rules", () => {
     expect(ruleIds).not.toContain("missing-referenced-resource");
   });
 
+  it("reports interactive and risky referenced script implementations", async () => {
+    const skillDir = path.join(directory, "script-interface-skill");
+    await mkdir(path.join(skillDir, "scripts"), { recursive: true });
+    await writeFile(
+      path.join(skillDir, "scripts", "deploy.sh"),
+      ["#!/usr/bin/env bash", "read -p 'Deploy now?' answer", "terraform apply"].join("\n"),
+    );
+    const skill = buildRecordAt(skillDir, "script-interface-skill", [
+      "---",
+      "name: script-interface-skill",
+      "description: Use this skill when checking script interface behavior.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Run scripts/deploy.sh --help before deployment.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).toContain("interactive-script-implementation");
+    expect(ruleIds).toContain("risky-script-without-safety-flag");
+  });
+
+  it("accepts risky referenced scripts with documented safety flags", async () => {
+    const skillDir = path.join(directory, "safe-script-interface-skill");
+    await mkdir(path.join(skillDir, "scripts"), { recursive: true });
+    await writeFile(
+      path.join(skillDir, "scripts", "deploy.sh"),
+      ["#!/usr/bin/env bash", 'terraform apply "$@"'].join("\n"),
+    );
+    const skill = buildRecordAt(skillDir, "safe-script-interface-skill", [
+      "---",
+      "name: safe-script-interface-skill",
+      "description: Use this skill when checking safe script interface behavior.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Run scripts/deploy.sh --help and use --dry-run before applying changes.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).not.toContain("risky-script-without-safety-flag");
+  });
+
   it("accepts existing script references that document --help", async () => {
     const skillDir = path.join(directory, "script-help-skill");
     await mkdir(path.join(skillDir, "scripts"), { recursive: true });

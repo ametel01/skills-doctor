@@ -103,7 +103,7 @@ export const ruleCatalog = [
     ruleId: "invalid-compatibility-field",
     severity: "error",
     categories: ["frontmatter"],
-    description: "Optional compatibility field is invalid or too long.",
+    description: "Optional compatibility field is not a non-empty string.",
   },
   {
     ruleId: "compatibility-too-long",
@@ -115,7 +115,7 @@ export const ruleCatalog = [
     ruleId: "invalid-metadata-field",
     severity: "error",
     categories: ["frontmatter"],
-    description: "Optional metadata field is not a map.",
+    description: "Optional metadata field is not a string-to-string map.",
   },
   {
     ruleId: "invalid-allowed-tools-field",
@@ -206,6 +206,18 @@ export const ruleCatalog = [
     severity: "warning",
     categories: ["scripts"],
     description: "Script guidance appears interactive.",
+  },
+  {
+    ruleId: "interactive-script-implementation",
+    severity: "warning",
+    categories: ["scripts"],
+    description: "Referenced script implementation appears interactive.",
+  },
+  {
+    ruleId: "risky-script-without-safety-flag",
+    severity: "warning",
+    categories: ["scripts"],
+    description: "Referenced script has risky operations without safety flags.",
   },
   {
     ruleId: "unpinned-package-runner",

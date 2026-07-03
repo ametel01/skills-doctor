@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Enforced non-empty compatibility metadata, string-only metadata maps, and deterministic checks for interactive or unsafe referenced scripts.
 - Reported package-level secret reads and persistence capabilities as their required P0 security findings, and included both secret and network evidence in package exfiltration chains.
 - Reduced prompt-injection false positives for ask-first admin flows and verified confirmation-skip CLI examples.
 - Reduced exfiltration-rule false positives for webhook troubleshooting table rows and notification webhook destinations.
