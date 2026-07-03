@@ -1,36 +1,62 @@
-# Malicious Skill Detector Implementation Progress
+# Evidence-Based Security Scanner Progress
 
 ## Source Summary
 
-This tracker follows `PLAN.md`, which adds a deterministic security rule family
-for suspicious or malicious Agent Skill content. The first implementation slice
-scans only `SKILL.md`, avoids LLM classification, reports suspicious
-instructions and capabilities without claiming intent, exposes
-`validateSecurityRules()`, and wires security findings into the existing scan
-and report pipeline.
+This tracker records the current issue wave for the evidence-based security
+scanner work. It is the durable handoff log for setup status, validation
+results, current status, and the next unblocked wave.
 
-`PROGRESS.md` must be updated after every completed step with completion notes,
-validation results, commit reference when available, current status, and the
-next step.
+## Issue Set
 
-## Step Checklist
+- Wave 0: #1 progress and changelog tracking.
+- Wave 1: #2 and #3 after #1.
+- Wave 2: #4 after #2; #5 after #2 and #3; #6 after #3.
+- Wave 3: #7 after #4, #5, and #6.
+- Wave 4: #8 after #7.
+- Wave 5: #9 after #8.
 
-- [x] Step 0: Progress and Changelog Tracking Setup
-- [x] Step 1: Baseline Verification
-- [x] Step 2: Add Security Category and Validator Skeleton
-- [x] Step 3: Implement Instruction Subversion and Exfiltration Rules
-- [x] Step 4: Implement Execution, Destruction, Safety-Disablement, and Obfuscation Rules
-- [x] Step 5: Wire Security Rules Into Scanning and Reports
-- [x] Step 6: Document Rule Catalog and Public API
-- [x] Step 7: Final Verification and Packaging Check
+## Update Rules
+
+- Update this file after every completed issue wave or meaningful handoff.
+- Record the completed setup or implementation step, validation commands and
+  results, current status, commit reference when available, and next step.
+- Keep `CHANGELOG.md` current under `## [Unreleased]` for user-visible or
+  release-note-worthy changes.
+- Preserve older progress entries as historical context unless they become
+  archived by the coordinator.
 
 ## Current Status
 
-Step 7 is complete.
+Issue #1 is implemented in worktree
+`/Users/alexmetelli/source/skills-doctor-issue-1` on branch
+`fix/issue-1-progress-tracking`.
 
-Next step: none.
+Next step: checker review of issue #1.
+
+Next unblocked wave: #2 and #3 after #1 is accepted.
 
 ## Update Log
+
+### 2026-07-03: Issue #1 Tracking Setup
+
+- Set up the current issue-wave progress tracker with issue set, update rules,
+  current status, and next unblocked wave.
+- Verified `CHANGELOG.md` exists, preserves existing release history, and
+  contains `## [Unreleased]`.
+- Validation:
+  - `bun run format:check` initially failed because dependencies were missing
+    from the worktree:
+    `/opt/homebrew/bin/bash: line 1: biome: command not found`
+  - `bun install --frozen-lockfile` passed and installed the locked toolchain
+    without source changes.
+  - `bun run format:check` passed after install:
+    `Checked 65 files in 18ms. No fixes applied.`
+- Current status: issue #1 implementation is complete and ready for checker
+  review.
+- Next step: checker review of issue #1.
+- Next unblocked wave after #1: #2 and #3.
+
+## Historical Implementation Log
 
 ### 2026-06-30: Post-plan CLI Visibility Fix
 
