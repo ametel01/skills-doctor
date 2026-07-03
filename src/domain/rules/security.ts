@@ -1,4 +1,4 @@
-import type { Finding, FindingSeverity, SkillRecord } from "../types.js";
+import type { Finding, FindingConfidence, FindingSeverity, SkillRecord } from "../types.js";
 
 export type SecurityRuleOptions = {
   readonly enabledRuleIds?: readonly string[] | undefined;
@@ -16,9 +16,12 @@ type SecurityRuleId =
 type SecurityRule = {
   readonly ruleId: SecurityRuleId;
   readonly severity: FindingSeverity;
+  readonly confidence: FindingConfidence;
   readonly title: string;
   readonly message: string;
   readonly suggestion: string;
+  readonly rationale: string;
+  readonly counterevidence: readonly string[];
   readonly findLine: (candidates: readonly MarkdownSecurityCandidate[]) => number | undefined;
 };
 
@@ -196,11 +199,17 @@ const SECURITY_RULES: readonly SecurityRule[] = [
   {
     ruleId: "prompt-injection-instruction",
     severity: "warning",
+    confidence: "medium",
     title: "Instruction subversion appears in skill body",
     message:
       "The skill appears to instruct an agent to override higher-priority instructions, conceal behavior, or avoid telling the user about its actions.",
     suggestion:
       "Remove instruction-subversion language and make the skill respect system, developer, and user instructions.",
+    rationale:
+      "Matched explicit instruction-subversion or concealment wording after defensive prompt-handling counterevidence was filtered out.",
+    counterevidence: [
+      "Defensive guidance that refuses prompt injection, preserves higher-priority instructions, protects secrets, or requires user confirmation is suppressed.",
+    ],
     findLine: (lines) =>
       findFirstLine(lines, (line) => {
         if (isHarmfulPromptIntentLine(line.text)) return true;
@@ -211,31 +220,49 @@ const SECURITY_RULES: readonly SecurityRule[] = [
   {
     ruleId: "secret-exfiltration-instruction",
     severity: "warning",
+    confidence: "high",
     title: "Secret exfiltration instruction appears in skill body",
     message:
       "The skill appears to combine secret-reading guidance with instructions to transmit that data outside the local task context.",
     suggestion:
       "Remove any guidance that sends credentials, tokens, keys, sessions, or secret file contents to external destinations.",
+    rationale:
+      "Found sensitive-source wording, a connective transfer action, and a suspicious external destination in bounded Markdown context.",
+    counterevidence: [
+      "Local webhook signing-secret setup, local signature verification, and destination-only documentation are not reportable without the full source/action/destination story.",
+    ],
     findLine: (lines) => findSecretExfiltrationInstructionLine(lines),
   },
   {
     ruleId: "network-exfiltration-command",
     severity: "warning",
+    confidence: "high",
     title: "Network transfer appears near secret-reading guidance",
     message:
       "The skill appears to combine network transfer tooling with secret or sensitive file-reading guidance.",
     suggestion:
       "Remove network-transfer guidance around secrets or sensitive files, and keep security review workflows local unless the user explicitly provides a safe destination.",
+    rationale:
+      "Found network transfer tooling or command context that connects sensitive sources to a non-local external destination.",
+    counterevidence: [
+      "Official service API authentication, parse-only local commands, and local destinations are ignored unless secret material is also sent to an unrelated external sink.",
+    ],
     findLine: (lines) => findNetworkExfiltrationCommandLine(lines),
   },
   {
     ruleId: "remote-code-execution-bootstrap",
     severity: "warning",
+    confidence: "high",
     title: "Remote code execution bootstrap appears in skill body",
     message:
       "The skill appears to instruct an agent to fetch remote content and execute it through a shell or interpreter.",
     suggestion:
       "Remove execute-from-network guidance. Require pinned, inspectable local scripts or documented package commands instead.",
+    rationale:
+      "Found remote fetch evidence and downstream shell or interpreter execution in the same command flow or explicit fetched-content execution prose.",
+    counterevidence: [
+      "Remote docs/spec parsing, parse-only pipelines, local static parsers, and unrelated inline command snippets are not reportable.",
+    ],
     findLine: (lines) =>
       findFirstLine(
         lines,
@@ -245,11 +272,17 @@ const SECURITY_RULES: readonly SecurityRule[] = [
   {
     ruleId: "destructive-command-high-risk",
     severity: "warning",
+    confidence: "medium",
     title: "High-risk destructive instruction appears in skill body",
     message:
       "The skill appears to describe broad deletion, trace removal, or permission weakening that could damage user files or hide activity.",
     suggestion:
       "Remove broad destructive guidance, avoid trace-hiding instructions, and require scoped dry-runs or explicit user confirmation for risky changes.",
+    rationale:
+      "Matched broad destructive, trace-removal, or permission-weakening language without a defensive framing.",
+    counterevidence: [
+      "Preventive wording and scoped confirmation guidance are filtered before reporting this rule.",
+    ],
     findLine: (lines) =>
       findFirstLine(
         lines,
@@ -262,11 +295,17 @@ const SECURITY_RULES: readonly SecurityRule[] = [
   {
     ruleId: "agent-safety-disablement",
     severity: "warning",
+    confidence: "medium",
     title: "Agent safety disablement appears in skill body",
     message:
       "The skill appears to instruct an agent to disable sandboxing, skip permissions, auto-approve prompts, or avoid confirmation.",
     suggestion:
       "Remove safety-bypass instructions unless they are part of a documented user-approved handoff flow with explicit confirmation.",
+    rationale:
+      "Matched agent safety-bypass wording outside a descriptive launch preview or defensive context.",
+    counterevidence: [
+      "Descriptive examples and documented launch previews are suppressed when they do not instruct bypass behavior.",
+    ],
     findLine: (lines) =>
       findFirstLine(
         lines,
@@ -279,11 +318,17 @@ const SECURITY_RULES: readonly SecurityRule[] = [
   {
     ruleId: "external-resource-obfuscation",
     severity: "warning",
+    confidence: "medium",
     title: "Obfuscated external execution appears in skill body",
     message:
       "The skill appears to instruct an agent to decode or stage obscured content and execute it.",
     suggestion:
       "Replace obfuscated execution guidance with transparent, reviewable files and explicit validation steps.",
+    rationale:
+      "Matched decode-or-stage wording for obfuscated external content combined with shell or interpreter execution.",
+    counterevidence: [
+      "Defensive warnings and decode-only fixture handling without execution are suppressed.",
+    ],
     findLine: (lines) =>
       findFirstLine(
         lines,
@@ -316,6 +361,9 @@ const validateSkillSecurity = (skill: SkillRecord, rules: readonly SecurityRule[
         title: rule.title,
         message: rule.message,
         suggestion: rule.suggestion,
+        confidence: rule.confidence,
+        rationale: rule.rationale,
+        counterevidence: rule.counterevidence,
         ecosystem: skill.ecosystem,
         rootPath: skill.rootPath,
         skillDir: skill.skillDir,

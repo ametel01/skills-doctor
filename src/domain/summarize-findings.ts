@@ -1,5 +1,5 @@
 import type { ScanReport } from "./build-report.js";
-import type { Finding } from "./types.js";
+import type { Finding, FindingConfidence } from "./types.js";
 
 export type ScanGateSeverity = Finding["severity"];
 
@@ -13,6 +13,7 @@ export type FindingSummary = {
   readonly warningCount: number;
   readonly adviceCount: number;
   readonly securityCount: number;
+  readonly securityConfidenceCounts: Readonly<Record<FindingConfidence, number>>;
   readonly topSkills: readonly SummaryGroup[];
   readonly topCategories: readonly SummaryGroup[];
 };
@@ -32,6 +33,7 @@ export const summarizeFindings = (findings: readonly Finding[]): FindingSummary 
   warningCount: countSeverity(qualityFindings(findings), "warning"),
   adviceCount: countSeverity(qualityFindings(findings), "advice"),
   securityCount: findings.filter((finding) => finding.category === "security").length,
+  securityConfidenceCounts: countSecurityConfidence(findings),
   topSkills: topGroups(
     qualityFindings(findings).map((finding) => finding.skillName ?? finding.skillPath),
     5,
@@ -79,8 +81,9 @@ export const renderHumanSummary = (
     );
   }
   if (summary.securityCount > 0) {
+    const confidence = formatSecurityConfidence(summary.securityConfidenceCounts);
     lines.push(
-      `${label("Security findings", shouldColor)}: ${warning(String(summary.securityCount), shouldColor)} suspicious skill patterns`,
+      `${label("Security findings", shouldColor)}: ${warning(String(summary.securityCount), shouldColor)} suspicious skill patterns${confidence === "" ? "" : ` (${confidence})`}`,
     );
   }
   if (report.usage !== undefined) {
@@ -114,6 +117,24 @@ const countSeverity = (findings: readonly Finding[], severity: Finding["severity
 
 const qualityFindings = (findings: readonly Finding[]): readonly Finding[] =>
   findings.filter((finding) => finding.category !== "security");
+
+const countSecurityConfidence = (
+  findings: readonly Finding[],
+): Readonly<Record<FindingConfidence, number>> => ({
+  high: countConfidence(findings, "high"),
+  medium: countConfidence(findings, "medium"),
+  low: countConfidence(findings, "low"),
+});
+
+const countConfidence = (findings: readonly Finding[], confidence: FindingConfidence): number =>
+  findings.filter((finding) => finding.category === "security" && finding.confidence === confidence)
+    .length;
+
+const formatSecurityConfidence = (counts: Readonly<Record<FindingConfidence, number>>): string =>
+  (["high", "medium", "low"] as const)
+    .filter((confidence) => counts[confidence] > 0)
+    .map((confidence) => `${confidence}: ${counts[confidence]}`)
+    .join(", ");
 
 const severityRank = (severity: ScanGateSeverity): number => {
   if (severity === "error") return 3;

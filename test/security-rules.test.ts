@@ -58,6 +58,9 @@ describe("security rules", () => {
         ruleId: "prompt-injection-instruction",
         severity: "warning",
         category: "security",
+        confidence: "medium",
+        rationale: expect.stringContaining("instruction-subversion"),
+        counterevidence: expect.arrayContaining([expect.stringContaining("Defensive guidance")]),
         line: 9,
         evidence: expect.objectContaining({
           startLine: 8,
@@ -225,6 +228,11 @@ describe("security rules", () => {
       ruleId: "secret-exfiltration-instruction",
       severity: "warning",
       category: "security",
+      confidence: "high",
+      rationale: expect.stringContaining("sensitive-source"),
+      counterevidence: expect.arrayContaining([
+        expect.stringContaining("Local webhook signing-secret setup"),
+      ]),
       line: 9,
       evidence: expect.objectContaining({
         excerpt: expect.arrayContaining([

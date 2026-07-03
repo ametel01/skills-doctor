@@ -75,6 +75,7 @@ export type {
   Diagnostic,
   Finding,
   FindingCategory,
+  FindingConfidence,
   FindingEvidence,
   FindingEvidenceLine,
   FindingSeverity,

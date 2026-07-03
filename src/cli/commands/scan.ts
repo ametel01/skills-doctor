@@ -966,6 +966,7 @@ const renderSecurityFindings = (
       `${colorizeSeverity(`[${finding.severity}]`, finding.severity, shouldColor)} ${accent(finding.ruleId, shouldColor)} ${dim(location, shouldColor)}`,
       formatFindingLocation(finding),
       finding.message,
+      ...formatSecurityMetadataLines(finding, shouldColor),
       `${usageLabel("Suggestion", shouldColor)}: ${finding.suggestion}`,
     );
     if (finding.evidence !== undefined) {
@@ -1005,6 +1006,23 @@ const renderFindingsBySkill = (
 
 const formatFindingLocation = (finding: Finding): string =>
   `Location: ${finding.skillPath}${finding.line === undefined ? "" : `:${finding.line}`}`;
+
+const formatSecurityMetadataLines = (finding: Finding, shouldColor: boolean): readonly string[] => {
+  const lines: string[] = [];
+  if (finding.confidence !== undefined) {
+    lines.push(`${usageLabel("Confidence", shouldColor)}: ${finding.confidence}`);
+  }
+  if (finding.rationale !== undefined) {
+    lines.push(`${usageLabel("Rationale", shouldColor)}: ${finding.rationale}`);
+  }
+  if (finding.counterevidence !== undefined && finding.counterevidence.length > 0) {
+    lines.push(`${usageLabel("Counterevidence", shouldColor)}:`);
+    for (const item of finding.counterevidence) {
+      lines.push(`- ${item}`);
+    }
+  }
+  return lines;
+};
 
 const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions = {}): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";
