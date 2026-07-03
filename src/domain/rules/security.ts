@@ -19,12 +19,26 @@ type SecurityRule = {
   readonly title: string;
   readonly message: string;
   readonly suggestion: string;
-  readonly findLine: (lines: readonly SourceLine[]) => number | undefined;
+  readonly findLine: (candidates: readonly MarkdownSecurityCandidate[]) => number | undefined;
 };
 
 type SourceLine = {
   readonly number: number;
   readonly text: string;
+};
+
+export type MarkdownSecurityCandidate = SourceLine & {
+  readonly previousLines: readonly SourceLine[];
+  readonly nextLines: readonly SourceLine[];
+  readonly nearbyLines: readonly SourceLine[];
+  readonly sectionHeading: string | undefined;
+  readonly inCodeFence: boolean;
+  readonly tableRow: MarkdownTableRowContext | undefined;
+};
+
+export type MarkdownTableRowContext = {
+  readonly rowText: string;
+  readonly cells: readonly string[];
 };
 
 const PROMPT_OVERRIDE_PATTERN =
@@ -175,8 +189,9 @@ export const validateSecurityRules = (
 const validateSkillSecurity = (skill: SkillRecord, rules: readonly SecurityRule[]): Finding[] => {
   if (!skill.parseResult.ok) return [];
   const lines = readSourceLines(skill.content);
+  const candidates = readMarkdownSecurityCandidates(lines);
   return rules.flatMap((rule) => {
-    const line = rule.findLine(lines);
+    const line = rule.findLine(candidates);
     if (line === undefined) return [];
     return [
       {
@@ -232,19 +247,53 @@ const filterRules = (enabledRuleIds: readonly string[] | undefined): readonly Se
 const readSourceLines = (content: string): readonly SourceLine[] =>
   content.split(/\r?\n/).map((text, index) => ({ number: index + 1, text }));
 
-const findFirstLine = (
+const MARKDOWN_NEARBY_LINE_RADIUS = 2;
+
+export const readMarkdownSecurityCandidates = (
   lines: readonly SourceLine[],
-  predicate: (line: SourceLine) => boolean,
-): number | undefined => lines.find(predicate)?.number;
+): readonly MarkdownSecurityCandidate[] => {
+  let sectionHeading: string | undefined;
+  let inCodeFence = false;
+  const candidates: MarkdownSecurityCandidate[] = [];
+
+  for (const [index, line] of lines.entries()) {
+    const heading = readMarkdownSectionHeading(line.text);
+    if (heading !== undefined) sectionHeading = heading;
+
+    const fenceDelimiter = isMarkdownCodeFenceDelimiter(line.text);
+    const candidateInCodeFence = inCodeFence;
+    const previousLines = lines.slice(Math.max(0, index - MARKDOWN_NEARBY_LINE_RADIUS), index);
+    const nextLines = lines.slice(index + 1, index + 1 + MARKDOWN_NEARBY_LINE_RADIUS);
+
+    candidates.push({
+      ...line,
+      previousLines,
+      nextLines,
+      nearbyLines: [...previousLines, line, ...nextLines],
+      sectionHeading,
+      inCodeFence: candidateInCodeFence,
+      tableRow: readMarkdownTableRow(line.text),
+    });
+
+    if (fenceDelimiter) inCodeFence = !inCodeFence;
+  }
+
+  return candidates;
+};
+
+const findFirstLine = (
+  candidates: readonly MarkdownSecurityCandidate[],
+  predicate: (candidate: MarkdownSecurityCandidate) => boolean,
+): number | undefined => candidates.find(predicate)?.number;
 
 const findProximityLine = (
-  lines: readonly SourceLine[],
-  leftPredicate: (line: SourceLine) => boolean,
-  rightPredicate: (line: SourceLine) => boolean,
+  candidates: readonly MarkdownSecurityCandidate[],
+  leftPredicate: (candidate: MarkdownSecurityCandidate) => boolean,
+  rightPredicate: (candidate: MarkdownSecurityCandidate) => boolean,
 ): number | undefined => {
-  for (const [index, line] of lines.entries()) {
-    if (!leftPredicate(line) || isPreventiveLine(line.text)) continue;
-    const nearby = lines.slice(index, index + 3);
+  for (const [index, candidate] of candidates.entries()) {
+    if (!leftPredicate(candidate) || isPreventiveLine(candidate.text)) continue;
+    const nearby = candidates.slice(index, index + 1 + MARKDOWN_NEARBY_LINE_RADIUS);
     const transferLine = nearby.find(
       (candidate) => !isPreventiveLine(candidate.text) && rightPredicate(candidate),
     );
@@ -257,6 +306,26 @@ const findProximityLine = (
 const isSecretSourceLine = (line: SourceLine): boolean => SECRET_SOURCE_PATTERN.test(line.text);
 
 const isPreventiveLine = (text: string): boolean => PREVENTION_PATTERN.test(text);
+
+const readMarkdownSectionHeading = (text: string): string | undefined => {
+  const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(text.trim());
+  return match?.[2]?.trim();
+};
+
+const isMarkdownCodeFenceDelimiter = (text: string): boolean => /^ {0,3}(```|~~~)/.test(text);
+
+const readMarkdownTableRow = (text: string): MarkdownTableRowContext | undefined => {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return undefined;
+  if (/^\|(?:\s*:?-{3,}:?\s*\|)+$/.test(trimmed)) return undefined;
+
+  const cells = trimmed
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => cell.trim());
+
+  return { rowText: text, cells };
+};
 
 const isDescriptiveLaunchPreview = (text: string): boolean =>
   /\b(launch preview|example|documentation|documented)\b/i.test(text) &&
