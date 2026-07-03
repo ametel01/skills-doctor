@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Suppressed prompt-injection false positives for defensive guidance about untrusted content, refusals, secret handling, signatures, and confirmations.
 - Reduced false-positive remote-execution warnings for remote specs piped into local Node or shell parser scripts.
 - Reduced false-positive remote-execution warnings for skills that fetch remote docs or specs for static parsing without executing the fetched content.
+- Suppressed the reported real-world false positives for defensive untrusted-content handling and explicit public-issue confirmation guidance.
 - Made `bun run dev` rebuild ignored `dist/` output before launching the packaged bin so local CLI runs reflect source changes.
 
 ### Security

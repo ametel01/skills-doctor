@@ -141,6 +141,8 @@ const VERIFIED_CONFIRMATION_FLAG_PATTERN =
   /\b(skip|bypass|avoid|override)\b.{0,80}\b(confirmations?|approvals?|permissions?)\b.{0,80}\b(once|after|when)\b.{0,40}\b(verif(?:y|ied|ication)|preview|dry-run)\b/i;
 const ASK_FIRST_OPERATIONAL_BYPASS_PATTERN =
   /\b(--admin|scope restrictions?|required write permission|current scopes?)\b.{0,120}\bbypass\b.{0,120}\b(ask first|ask the user|do not attempt|don't attempt)\b|\bbypass\b.{0,120}\b(--admin|scope restrictions?|required write permission|current scopes?)\b.{0,120}\b(ask first|ask the user|do not attempt|don't attempt)\b/i;
+const DEFENSIVE_UNTRUSTED_INSTRUCTION_CONTENT_PATTERN =
+  /\b(treat|all content|content read|repo instructions?|repository|pr text|pull request text|generated files?)\b.{0,180}\b(untrusted input|data,? not instructions?|not instructions?|do not follow|don't follow)\b|\b(untrusted input|data,? not instructions?|not instructions?|do not follow|don't follow)\b.{0,180}\b(override|ignore previous instructions|instructions to you|repo instructions?|repository|pr text|pull request text|generated files?)\b/i;
 
 const COMMAND_SENSITIVE_SOURCE_PATTERN =
   /(?:^|[\s"'`|])(?:\.env(?:\b|[./_-])|[~/./A-Za-z0-9_-]*(?:credentials|secrets?|tokens?|private[_-]?keys?|session[_-]?files?|npm[_-]?tokens?|github[_-]?tokens?|cloud[_-]?credentials?|aws[_-]?credentials?|gcp[_-]?credentials?)(?:\b|[./_-]))/i;
@@ -148,6 +150,8 @@ const LOCAL_WEBHOOK_SECRET_SETUP_PATTERN =
   /\b(webhook signing secret|signing secret|CLERK_WEBHOOK_SIGNING_SECRET)\b.{0,120}\b(dashboard|local|\.env|env var|verify|verification|signature|mismatch|middleware|route)\b|\b(dashboard|local|\.env|env var|verify|verification|signature|mismatch|middleware|route)\b.{0,120}\b(webhook signing secret|signing secret|CLERK_WEBHOOK_SIGNING_SECRET)\b/i;
 const DESTINATION_CREDENTIAL_PATTERN =
   /\b[A-Z0-9_]*WEBHOOK_URL\b|\bprocess\.env\.[A-Z0-9_]*WEBHOOK_URL\b/i;
+const PUBLIC_ISSUE_CONFIRMATION_PATTERN =
+  /\b(public|publicly visible)\b.{0,180}\b(confirm|confirmation|explicit flag|warn the user)\b|\b(confirm|confirmation|explicit flag|warn the user)\b.{0,180}\b(public|publicly visible)\b/i;
 const INLINE_COMMAND_PATTERN = /`([^`\n]+)`/g;
 const COMMAND_FENCE_LANGUAGE_PATTERN = /^(?:shell|sh|bash|zsh|fish|console|terminal)$/i;
 const FENCE_MARKER_PATTERN = /^\s*(```|~~~)\s*([A-Za-z0-9_-]+)?/;
@@ -492,6 +496,7 @@ const findNetworkExfiltrationCommandLine = (
 const hasBoundedExfiltrationEvidence = (candidate: MarkdownSecurityCandidate): boolean => {
   if (isPreventiveLine(candidate.text)) return false;
   if (isLocalSecretSetupOrVerificationLine(candidate.text)) return false;
+  if (isPublicIssueConfirmationLine(candidate.text)) return false;
   if (!hasExfiltrationTransferAction(candidate)) return false;
   if (!hasSuspiciousExfiltrationDestination(candidate)) return false;
   return candidate.nearbyLines.some((line) => isTransferableSecretSourceLine(line.text));
@@ -530,6 +535,9 @@ const isDestinationCredentialOnlyLine = (text: string): boolean =>
   !/\b(cat|read|load|collect|print|echo|dump|upload|send|post|forward|transmit|exfiltrate)\b/i.test(
     text,
   );
+
+const isPublicIssueConfirmationLine = (text: string): boolean =>
+  PUBLIC_ISSUE_CONFIRMATION_PATTERN.test(text) && /\bissues?\b/i.test(text);
 
 const hasExfiltrationTransferAction = (candidate: MarkdownSecurityCandidate): boolean =>
   TRANSFER_PATTERN.test(candidate.text) ||
@@ -593,6 +601,7 @@ const isPreventiveLine = (text: string): boolean => PREVENTION_PATTERN.test(text
 
 const isHarmfulPromptIntentLine = (text: string): boolean =>
   !isOperationalConfirmationFlagLine(text) &&
+  !isDefensiveUntrustedInstructionContentLine(text) &&
   ((PROMPT_CONFIRMATION_BYPASS_PATTERN.test(text) &&
     !DEFENSIVE_NEGATED_PROMPT_BYPASS_PATTERN.test(text)) ||
     PROMPT_CONTINUE_AFTER_DENIAL_PATTERN.test(text) ||
@@ -612,6 +621,7 @@ const isDefensivePromptInjectionLine = (text: string): boolean =>
 const isDefensivePromptIntentLine = (text: string): boolean =>
   isPreventiveLine(text) ||
   isOperationalConfirmationFlagLine(text) ||
+  isDefensiveUntrustedInstructionContentLine(text) ||
   isDefensivePromptInjectionLine(text) ||
   DEFENSIVE_SECRET_DISCLOSURE_PATTERN.test(text) ||
   DEFENSIVE_CONFIRMATION_PATTERN.test(text) ||
@@ -619,6 +629,9 @@ const isDefensivePromptIntentLine = (text: string): boolean =>
 
 const isOperationalConfirmationFlagLine = (text: string): boolean =>
   VERIFIED_CONFIRMATION_FLAG_PATTERN.test(text) || ASK_FIRST_OPERATIONAL_BYPASS_PATTERN.test(text);
+
+const isDefensiveUntrustedInstructionContentLine = (text: string): boolean =>
+  DEFENSIVE_UNTRUSTED_INSTRUCTION_CONTENT_PATTERN.test(text);
 
 const readMarkdownSectionHeading = (text: string): string | undefined => {
   const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(text.trim());
