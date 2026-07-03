@@ -79,6 +79,16 @@ const PROMPT_CONCEALMENT_PATTERN =
   /\b(do not|don't|never)\b.{0,60}\b(tell|inform|show|mention|disclose|reveal)\b.{0,60}\b(user|operator|reviewer)\b/i;
 const HIDE_BEHAVIOR_PATTERN =
   /\b(hide|conceal|mask)\b.{0,80}\b(actions?|behavior|instructions?|changes?|activity)\b/i;
+const PROMPT_CONFIRMATION_BYPASS_PATTERN =
+  /\b(bypass|skip|avoid|ignore|override)(?:\s+|\s+[\w-]+\s+)(confirmations?|approvals?|denials?|refusals?|permissions?)\b/i;
+const PROMPT_CONTINUE_AFTER_DENIAL_PATTERN =
+  /\b(continue|proceed|keep going|carry on)\b.{0,80}\b(after|if|when)\b.{0,80}\b(user|operator|reviewer)\b.{0,60}\b(denies|denied|says no|refuses|declines|rejects)\b/i;
+const HIDE_LOGS_OUTPUT_PATTERN =
+  /\b(hide|conceal|suppress|omit|remove)\b.{0,80}\b(logs?|outputs?|transcripts?|audit trails?)\b/i;
+const DEFENSIVE_NEGATED_PROMPT_BYPASS_PATTERN =
+  /\b(do not|don't|never|must not|should not|refuse to)\b.{0,40}\b(bypass|skip|ignore|override)\b.{0,80}\b(confirmations?|approvals?|denials?|refusals?|permissions?)\b/i;
+const DEFENSIVE_NEGATED_LOG_CONCEALMENT_PATTERN =
+  /\b(do not|don't|never|must not|should not|refuse to)\b.{0,40}\b(hide|conceal|suppress|omit|remove)\b.{0,80}\b(logs?|outputs?|transcripts?|audit trails?)\b/i;
 const SECRET_SOURCE_PATTERN =
   /\b(\.env|credentials?|secrets?|tokens?|ssh keys?|private keys?|browser sessions?|session files?|npm tokens?|github tokens?|cloud credentials?|aws credentials?|gcp credentials?)\b/i;
 const TRANSFER_PATTERN =
@@ -104,6 +114,18 @@ const PREVENTION_PATTERN =
 const EVIDENCE_SECRET_VALUE_PATTERN =
   /(\b[A-Za-z0-9_-]*(?:secret|token|credential|password|private[_-]?key)[A-Za-z0-9_-]*\s*[:=]\s*)(["']?)[^\s"']+(\2)/gi;
 const EVIDENCE_BEARER_VALUE_PATTERN = /(\bAuthorization\s*:\s*Bearer\s+)([A-Za-z0-9._~+/-]+)/gi;
+const PROMPT_UNTRUSTED_CONTENT_PATTERN =
+  /\b(untrusted|attacker-controlled|malicious|external|repo|repository|pr|pull request|user|model)\b/i;
+const PROMPT_INJECTION_TERM_PATTERN =
+  /\b(prompt injection|instruction injection|injected instructions?)\b/i;
+const DEFENSIVE_PROMPT_ACTION_PATTERN =
+  /\b(refuse|reject|ignore|neutralize|treat as data|do not follow|don't follow|preserve|respect|verify|ask|require)\b/i;
+const DEFENSIVE_SECRET_DISCLOSURE_PATTERN =
+  /\b(never|do not|don't|must not|should not|refuse to)\b.{0,80}\b(reveal|disclose|print|show|share|expose)\b.{0,80}\b(secrets?|credentials?|tokens?|keys?)\b/i;
+const DEFENSIVE_CONFIRMATION_PATTERN =
+  /\b(ask for|request|require|obtain|get)\b.{0,80}\b(explicit )?(user )?(confirmation|approval|permission)\b/i;
+const HIGHER_PRIORITY_INSTRUCTION_PRESERVATION_PATTERN =
+  /\b(preserve|respect|follow|keep)\b.{0,80}\b(system|developer|user|higher-priority)\b.{0,80}\binstructions?\b/i;
 
 const COMMAND_SENSITIVE_SOURCE_PATTERN =
   /(?:^|[\s"'`|])(?:\.env(?:\b|[./_-])|[~/./A-Za-z0-9_-]*(?:credentials|secrets?|tokens?|private[_-]?keys?|session[_-]?files?|npm[_-]?tokens?|github[_-]?tokens?|cloud[_-]?credentials?|aws[_-]?credentials?|gcp[_-]?credentials?)(?:\b|[./_-]))/i;
@@ -172,12 +194,9 @@ const SECURITY_RULES: readonly SecurityRule[] = [
       "Remove instruction-subversion language and make the skill respect system, developer, and user instructions.",
     findLine: (lines) =>
       findFirstLine(lines, (line) => {
-        if (isPreventiveLine(line.text)) return false;
-        return (
-          PROMPT_OVERRIDE_PATTERN.test(line.text) ||
-          PROMPT_CONCEALMENT_PATTERN.test(line.text) ||
-          HIDE_BEHAVIOR_PATTERN.test(line.text)
-        );
+        if (isHarmfulPromptIntentLine(line.text)) return true;
+        if (isDefensivePromptIntentLine(line.text)) return false;
+        return false;
       }),
   },
   {
@@ -446,6 +465,29 @@ const redactEvidenceText = (text: string): string =>
     .replace(EVIDENCE_BEARER_VALUE_PATTERN, "$1[REDACTED]");
 
 const isPreventiveLine = (text: string): boolean => PREVENTION_PATTERN.test(text);
+
+const isHarmfulPromptIntentLine = (text: string): boolean =>
+  (PROMPT_CONFIRMATION_BYPASS_PATTERN.test(text) &&
+    !DEFENSIVE_NEGATED_PROMPT_BYPASS_PATTERN.test(text)) ||
+  PROMPT_CONTINUE_AFTER_DENIAL_PATTERN.test(text) ||
+  (HIDE_LOGS_OUTPUT_PATTERN.test(text) && !DEFENSIVE_NEGATED_LOG_CONCEALMENT_PATTERN.test(text)) ||
+  (PROMPT_OVERRIDE_PATTERN.test(text) &&
+    !DEFENSIVE_NEGATED_PROMPT_BYPASS_PATTERN.test(text) &&
+    !isDefensivePromptInjectionLine(text)) ||
+  (PROMPT_CONCEALMENT_PATTERN.test(text) && !DEFENSIVE_SECRET_DISCLOSURE_PATTERN.test(text)) ||
+  HIDE_BEHAVIOR_PATTERN.test(text);
+
+const isDefensivePromptInjectionLine = (text: string): boolean =>
+  PROMPT_UNTRUSTED_CONTENT_PATTERN.test(text) &&
+  PROMPT_INJECTION_TERM_PATTERN.test(text) &&
+  DEFENSIVE_PROMPT_ACTION_PATTERN.test(text);
+
+const isDefensivePromptIntentLine = (text: string): boolean =>
+  isPreventiveLine(text) ||
+  isDefensivePromptInjectionLine(text) ||
+  DEFENSIVE_SECRET_DISCLOSURE_PATTERN.test(text) ||
+  DEFENSIVE_CONFIRMATION_PATTERN.test(text) ||
+  HIGHER_PRIORITY_INSTRUCTION_PRESERVATION_PATTERN.test(text);
 
 const readMarkdownSectionHeading = (text: string): string | undefined => {
   const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(text.trim());
