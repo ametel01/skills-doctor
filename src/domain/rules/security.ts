@@ -134,9 +134,13 @@ const DEFENSIVE_PROMPT_ACTION_PATTERN =
 const DEFENSIVE_SECRET_DISCLOSURE_PATTERN =
   /\b(never|do not|don't|must not|should not|refuse to)\b.{0,80}\b(reveal|disclose|print|show|share|expose)\b.{0,80}\b(secrets?|credentials?|tokens?|keys?)\b/i;
 const DEFENSIVE_CONFIRMATION_PATTERN =
-  /\b(ask for|request|require|obtain|get)\b.{0,80}\b(explicit )?(user )?(confirmation|approval|permission)\b/i;
+  /\bask first\b|\b(ask for|request|require|obtain|get)\b.{0,80}\b(explicit )?(user )?(confirmation|approval|permission)\b/i;
 const HIGHER_PRIORITY_INSTRUCTION_PRESERVATION_PATTERN =
   /\b(preserve|respect|follow|keep)\b.{0,80}\b(system|developer|user|higher-priority)\b.{0,80}\binstructions?\b/i;
+const VERIFIED_CONFIRMATION_FLAG_PATTERN =
+  /\b(skip|bypass|avoid|override)\b.{0,80}\b(confirmations?|approvals?|permissions?)\b.{0,80}\b(once|after|when)\b.{0,40}\b(verif(?:y|ied|ication)|preview|dry-run)\b/i;
+const ASK_FIRST_OPERATIONAL_BYPASS_PATTERN =
+  /\b(--admin|scope restrictions?|required write permission|current scopes?)\b.{0,120}\bbypass\b.{0,120}\b(ask first|ask the user|do not attempt|don't attempt)\b|\bbypass\b.{0,120}\b(--admin|scope restrictions?|required write permission|current scopes?)\b.{0,120}\b(ask first|ask the user|do not attempt|don't attempt)\b/i;
 
 const COMMAND_SENSITIVE_SOURCE_PATTERN =
   /(?:^|[\s"'`|])(?:\.env(?:\b|[./_-])|[~/./A-Za-z0-9_-]*(?:credentials|secrets?|tokens?|private[_-]?keys?|session[_-]?files?|npm[_-]?tokens?|github[_-]?tokens?|cloud[_-]?credentials?|aws[_-]?credentials?|gcp[_-]?credentials?)(?:\b|[./_-]))/i;
@@ -545,15 +549,17 @@ const hasFetchedContentExecutionInstruction = (text: string): boolean =>
 const isPreventiveLine = (text: string): boolean => PREVENTION_PATTERN.test(text);
 
 const isHarmfulPromptIntentLine = (text: string): boolean =>
-  (PROMPT_CONFIRMATION_BYPASS_PATTERN.test(text) &&
+  !isOperationalConfirmationFlagLine(text) &&
+  ((PROMPT_CONFIRMATION_BYPASS_PATTERN.test(text) &&
     !DEFENSIVE_NEGATED_PROMPT_BYPASS_PATTERN.test(text)) ||
-  PROMPT_CONTINUE_AFTER_DENIAL_PATTERN.test(text) ||
-  (HIDE_LOGS_OUTPUT_PATTERN.test(text) && !DEFENSIVE_NEGATED_LOG_CONCEALMENT_PATTERN.test(text)) ||
-  (PROMPT_OVERRIDE_PATTERN.test(text) &&
-    !DEFENSIVE_NEGATED_PROMPT_BYPASS_PATTERN.test(text) &&
-    !isDefensivePromptInjectionLine(text)) ||
-  (PROMPT_CONCEALMENT_PATTERN.test(text) && !DEFENSIVE_SECRET_DISCLOSURE_PATTERN.test(text)) ||
-  HIDE_BEHAVIOR_PATTERN.test(text);
+    PROMPT_CONTINUE_AFTER_DENIAL_PATTERN.test(text) ||
+    (HIDE_LOGS_OUTPUT_PATTERN.test(text) &&
+      !DEFENSIVE_NEGATED_LOG_CONCEALMENT_PATTERN.test(text)) ||
+    (PROMPT_OVERRIDE_PATTERN.test(text) &&
+      !DEFENSIVE_NEGATED_PROMPT_BYPASS_PATTERN.test(text) &&
+      !isDefensivePromptInjectionLine(text)) ||
+    (PROMPT_CONCEALMENT_PATTERN.test(text) && !DEFENSIVE_SECRET_DISCLOSURE_PATTERN.test(text)) ||
+    HIDE_BEHAVIOR_PATTERN.test(text));
 
 const isDefensivePromptInjectionLine = (text: string): boolean =>
   PROMPT_UNTRUSTED_CONTENT_PATTERN.test(text) &&
@@ -562,10 +568,14 @@ const isDefensivePromptInjectionLine = (text: string): boolean =>
 
 const isDefensivePromptIntentLine = (text: string): boolean =>
   isPreventiveLine(text) ||
+  isOperationalConfirmationFlagLine(text) ||
   isDefensivePromptInjectionLine(text) ||
   DEFENSIVE_SECRET_DISCLOSURE_PATTERN.test(text) ||
   DEFENSIVE_CONFIRMATION_PATTERN.test(text) ||
   HIGHER_PRIORITY_INSTRUCTION_PRESERVATION_PATTERN.test(text);
+
+const isOperationalConfirmationFlagLine = (text: string): boolean =>
+  VERIFIED_CONFIRMATION_FLAG_PATTERN.test(text) || ASK_FIRST_OPERATIONAL_BYPASS_PATTERN.test(text);
 
 const readMarkdownSectionHeading = (text: string): string | undefined => {
   const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(text.trim());

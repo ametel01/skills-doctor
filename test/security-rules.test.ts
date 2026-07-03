@@ -103,6 +103,28 @@ describe("security rules", () => {
     ).toEqual([]);
   });
 
+  it("does not report verified or ask-first confirmation flag guidance", () => {
+    const skill = buildRecord("operational-confirmation-flag-skill", [
+      "---",
+      "name: operational-confirmation-flag-skill",
+      "description: Use this skill when validating operational confirmation flags.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      '- If scopes are missing, tell the user: "Rerun with --admin to bypass?" Do NOT attempt the request and fail - ask first.',
+      "- Preview mutations before confirming:",
+      "```sh",
+      "clerk api /users/user_abc123 -X DELETE --dry-run",
+      "clerk api /users/user_abc123 -X DELETE --yes # skip confirmation once you've verified",
+      "```",
+    ]);
+
+    expect(
+      validateSecurityRules([skill], { enabledRuleIds: ["prompt-injection-instruction"] }),
+    ).toEqual([]);
+  });
+
   it.each([
     {
       id: "one",

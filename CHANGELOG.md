@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Reduced prompt-injection false positives for ask-first admin flows and verified confirmation-skip CLI examples.
 - Reduced exfiltration-rule false positives for webhook signing-secret setup and official API bearer-token examples while preserving arbitrary external secret-transfer findings.
 - Suppressed prompt-injection false positives for defensive guidance about untrusted content, refusals, secret handling, signatures, and confirmations.
 - Reduced false-positive remote-execution warnings for skills that fetch remote docs or specs for static parsing without executing the fetched content.
