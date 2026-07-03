@@ -4,6 +4,7 @@ import type {
   Finding,
   FindingConfidence,
   FindingSeverity,
+  SecurityPriority,
   SkillPackage,
   SkillRecord,
 } from "../types.js";
@@ -13,17 +14,19 @@ export type SecurityRuleOptions = {
 };
 
 type SecurityRuleId =
-  | "prompt-injection-instruction"
-  | "secret-exfiltration-instruction"
-  | "network-exfiltration-command"
-  | "remote-code-execution-bootstrap"
-  | "destructive-command-high-risk"
-  | "agent-safety-disablement"
-  | "external-resource-obfuscation";
+  | "SKILL001_PROMPT_OVERRIDE"
+  | "SKILL002_PERMISSION_BYPASS"
+  | "SKILL003_SECRET_ACCESS"
+  | "SKILL004_EXFIL_CHAIN"
+  | "SKILL005_DESTRUCTIVE_COMMANDS"
+  | "SKILL006_PERSISTENCE"
+  | "SKILL007_REMOTE_CODE_EXEC"
+  | "SKILL008_OBFUSCATION";
 
 type SecurityRule = {
   readonly ruleId: SecurityRuleId;
   readonly severity: FindingSeverity;
+  readonly priority: SecurityPriority;
   readonly confidence: FindingConfidence;
   readonly title: string;
   readonly message: string;
@@ -108,6 +111,8 @@ const DEFENSIVE_NEGATED_LOG_CONCEALMENT_PATTERN =
   /\b(do not|don't|never|must not|should not|refuse to)\b.{0,40}\b(hide|conceal|suppress|omit|remove)\b.{0,80}\b(logs?|outputs?|transcripts?|audit trails?)\b/i;
 const SECRET_SOURCE_PATTERN =
   /\b(\.env|credentials?|secrets?|tokens?|ssh keys?|private keys?|browser sessions?|session files?|npm tokens?|github tokens?|cloud credentials?|aws credentials?|gcp credentials?)\b/i;
+const SECRET_ACCESS_READ_PATTERN =
+  /\b(cat|read|load|open|print|dump|copy|collect|grep|rg)\b.{0,120}(?:^|[^\w])(\.env(?:\b|[._-])|secrets?\/|credentials\.json|~\/\.ssh(?:\/[\w.-]+)?|\.aws\b|\.gcloud\b|keychains?|browser profiles?|npm tokens?|github tokens?|openai api keys?|anthropic api keys?|private keys?|session files?)\b|(?:^|[^\w])(\.env(?:\b|[._-])|secrets?\/|credentials\.json|~\/\.ssh(?:\/[\w.-]+)?|\.aws\b|\.gcloud\b|keychains?|browser profiles?|npm tokens?|github tokens?|openai api keys?|anthropic api keys?|private keys?|session files?)\b.{0,120}\b(cat|read|load|open|print|dump|copy|collect|grep|rg)\b/i;
 const TRANSFER_PATTERN =
   /\b(send|post|upload|forward|transmit|copy|paste|exfiltrate)\b.{0,100}\b(remote|external|webhooks?(?!\s+(?:signing\s+)?secrets?\b|\s+signatures?\b)|server|endpoint|url|site|gist|paste|chat|slack|discord)\b/i;
 const NETWORK_TRANSFER_PATTERN =
@@ -128,6 +133,8 @@ const SAFETY_DISABLEMENT_PATTERN =
   /\b(--yolo|--dangerously-skip-permissions|skip permissions|disable sandbox|without sandbox|approve all prompts|auto-approve|bypass review|avoid confirmation|without confirmation)\b/i;
 const OBFUSCATED_EXECUTION_PATTERN =
   /\b((base64|encoded|obfuscated|hidden remote)\b.{0,100}\b(decode|decode it|decoded|stage)|\b(decode|decode it|decoded|stage)\b.{0,100}\b(base64|encoded|obfuscated|hidden remote))\b.{0,100}\b(execute|run|shell|bash|sh|zsh|interpreter)\b/i;
+const PERSISTENCE_PATTERN =
+  /\b(write|append|install|create|modify|add|register)\b.{0,120}(?:^|[^\w])(\.bashrc|\.zshrc|\.profile|\.bash_profile|crontab|cron\.d|launch agents?|launchd|systemd|git hooks?|\.git\/hooks|npm postinstall|postinstall|setup\.py|vscode tasks?|\.vscode\/tasks\.json|auto-?start)\b|(?:^|[^\w])(\.bashrc|\.zshrc|\.profile|\.bash_profile|crontab|cron\.d|launch agents?|launchd|systemd|git hooks?|\.git\/hooks|npm postinstall|postinstall|setup\.py|vscode tasks?|\.vscode\/tasks\.json|auto-?start)\b.{0,120}\b(write|append|install|create|modify|add|register)\b/i;
 const PREVENTION_PATTERN =
   /\b(do not|don't|never|avoid|refuse to|must not|should not)\b.{0,80}\b(ignore|disregard|override|bypass|send|post|upload|forward|transmit|copy|paste|exfiltrate|curl|wget|netcat|nc|scp|rsync|webhook|--yolo|--dangerously-skip-permissions|sandbox|auto-approve|confirmation|base64|encoded)\b/i;
 const EVIDENCE_SECRET_VALUE_PATTERN =
@@ -219,8 +226,9 @@ const LOCAL_SCRIPT_OPERAND_PATTERN =
 
 const SECURITY_RULES: readonly SecurityRule[] = [
   {
-    ruleId: "prompt-injection-instruction",
+    ruleId: "SKILL001_PROMPT_OVERRIDE",
     severity: "warning",
+    priority: "P0",
     confidence: "medium",
     title: "Instruction subversion appears in skill body",
     message:
@@ -240,83 +248,9 @@ const SECURITY_RULES: readonly SecurityRule[] = [
       }),
   },
   {
-    ruleId: "secret-exfiltration-instruction",
+    ruleId: "SKILL002_PERMISSION_BYPASS",
     severity: "warning",
-    confidence: "high",
-    title: "Secret exfiltration instruction appears in skill body",
-    message:
-      "The skill appears to combine secret-reading guidance with instructions to transmit that data outside the local task context.",
-    suggestion:
-      "Remove any guidance that sends credentials, tokens, keys, sessions, or secret file contents to external destinations.",
-    rationale:
-      "Found sensitive-source wording, a connective transfer action, and a suspicious external destination in bounded Markdown context.",
-    counterevidence: [
-      "Local webhook signing-secret setup, local signature verification, and destination-only documentation are not reportable without the full source/action/destination story.",
-    ],
-    findLine: (lines) => findSecretExfiltrationInstructionLine(lines),
-  },
-  {
-    ruleId: "network-exfiltration-command",
-    severity: "warning",
-    confidence: "high",
-    title: "Network transfer appears near secret-reading guidance",
-    message:
-      "The skill appears to combine network transfer tooling with secret or sensitive file-reading guidance.",
-    suggestion:
-      "Remove network-transfer guidance around secrets or sensitive files, and keep security review workflows local unless the user explicitly provides a safe destination.",
-    rationale:
-      "Found network transfer tooling or command context that connects sensitive sources to a non-local external destination.",
-    counterevidence: [
-      "Official service API authentication, parse-only local commands, and local destinations are ignored unless secret material is also sent to an unrelated external sink.",
-    ],
-    findLine: (lines) => findNetworkExfiltrationCommandLine(lines),
-  },
-  {
-    ruleId: "remote-code-execution-bootstrap",
-    severity: "warning",
-    confidence: "high",
-    title: "Remote code execution bootstrap appears in skill body",
-    message:
-      "The skill appears to instruct an agent to fetch remote content and execute it through a shell or interpreter.",
-    suggestion:
-      "Remove execute-from-network guidance. Require pinned, inspectable local scripts or documented package commands instead.",
-    rationale:
-      "Found remote fetch evidence and downstream shell or interpreter execution in the same command flow or explicit fetched-content execution prose.",
-    counterevidence: [
-      "Remote docs/spec parsing, parse-only pipelines, local static parsers, and unrelated inline command snippets are not reportable.",
-    ],
-    findLine: (lines) =>
-      findFirstLine(
-        lines,
-        (line) => !isPreventiveLine(line.text) && isRemoteExecutionBootstrapLine(line),
-      ),
-  },
-  {
-    ruleId: "destructive-command-high-risk",
-    severity: "warning",
-    confidence: "medium",
-    title: "High-risk destructive instruction appears in skill body",
-    message:
-      "The skill appears to describe broad deletion, trace removal, or permission weakening that could damage user files or hide activity.",
-    suggestion:
-      "Remove broad destructive guidance, avoid trace-hiding instructions, and require scoped dry-runs or explicit user confirmation for risky changes.",
-    rationale:
-      "Matched broad destructive, trace-removal, or permission-weakening language without a defensive framing.",
-    counterevidence: [
-      "Preventive wording and scoped confirmation guidance are filtered before reporting this rule.",
-    ],
-    findLine: (lines) =>
-      findFirstLine(
-        lines,
-        (line) =>
-          !isPreventiveLine(line.text) &&
-          (BROAD_DESTRUCTIVE_PATTERN.test(line.text) ||
-            PERMISSION_WEAKENING_PATTERN.test(line.text)),
-      ),
-  },
-  {
-    ruleId: "agent-safety-disablement",
-    severity: "warning",
+    priority: "P0",
     confidence: "medium",
     title: "Agent safety disablement appears in skill body",
     message:
@@ -338,8 +272,115 @@ const SECURITY_RULES: readonly SecurityRule[] = [
       ),
   },
   {
-    ruleId: "external-resource-obfuscation",
+    ruleId: "SKILL003_SECRET_ACCESS",
     severity: "warning",
+    priority: "P0",
+    confidence: "medium",
+    title: "Secret access instruction appears in skill body",
+    message:
+      "The skill appears to instruct an agent to read local secret-bearing files, credentials, sessions, or token stores.",
+    suggestion:
+      "Remove secret-reading guidance unless it is explicitly scoped to local verification and protected by clear user approval.",
+    rationale:
+      "Matched secret-reading action and sensitive source wording after local setup counterevidence was filtered out.",
+    counterevidence: [
+      "Local webhook signing-secret setup, local signature verification, destination-only documentation, and defensive secret-handling guidance are suppressed.",
+    ],
+    findLine: (lines) =>
+      findFirstLine(
+        lines,
+        (line) =>
+          !isPreventiveLine(line.text) &&
+          !isLocalSecretSetupOrVerificationLine(line.text) &&
+          !isDestinationCredentialOnlyLine(line.text) &&
+          SECRET_ACCESS_READ_PATTERN.test(line.text),
+      ),
+  },
+  {
+    ruleId: "SKILL004_EXFIL_CHAIN",
+    severity: "warning",
+    priority: "P0",
+    confidence: "high",
+    title: "Secret exfiltration chain appears in skill body",
+    message:
+      "The skill appears to combine secret-reading guidance with network or external transfer behavior.",
+    suggestion:
+      "Remove any guidance that sends credentials, tokens, keys, sessions, or secret file contents to external destinations.",
+    rationale:
+      "Found sensitive-source wording, a connective transfer action, and a suspicious external destination or network-transfer command in bounded Markdown context.",
+    counterevidence: [
+      "Local webhook signing-secret setup, local signature verification, destination-only documentation, official service API authentication, parse-only local commands, and local destinations are counterevidence unless secret material is sent to an unrelated external sink.",
+    ],
+    findLine: (lines) => findExfiltrationChainLine(lines),
+  },
+  {
+    ruleId: "SKILL005_DESTRUCTIVE_COMMANDS",
+    severity: "warning",
+    priority: "P0",
+    confidence: "medium",
+    title: "High-risk destructive instruction appears in skill body",
+    message:
+      "The skill appears to describe broad deletion, trace removal, or permission weakening that could damage user files or hide activity.",
+    suggestion:
+      "Remove broad destructive guidance, avoid trace-hiding instructions, and require scoped dry-runs or explicit user confirmation for risky changes.",
+    rationale:
+      "Matched broad destructive, trace-removal, or permission-weakening language without a defensive framing.",
+    counterevidence: [
+      "Preventive wording and scoped confirmation guidance are filtered before reporting this rule.",
+    ],
+    findLine: (lines) =>
+      findFirstLine(
+        lines,
+        (line) =>
+          !isPreventiveLine(line.text) &&
+          (BROAD_DESTRUCTIVE_PATTERN.test(line.text) ||
+            PERMISSION_WEAKENING_PATTERN.test(line.text)),
+      ),
+  },
+  {
+    ruleId: "SKILL006_PERSISTENCE",
+    severity: "warning",
+    priority: "P0",
+    confidence: "medium",
+    title: "Persistence instruction appears in skill body",
+    message:
+      "The skill appears to write or register persistence through shell startup files, scheduled jobs, hooks, service managers, or autostart locations.",
+    suggestion:
+      "Remove persistence guidance unless it is clearly required, scoped, reversible, and approved.",
+    rationale:
+      "Matched persistence location wording with write, install, register, or modify actions.",
+    counterevidence: ["Preventive or defensive wording is filtered before reporting this rule."],
+    findLine: (lines) =>
+      findFirstLine(
+        lines,
+        (line) => !isPreventiveLine(line.text) && PERSISTENCE_PATTERN.test(line.text),
+      ),
+  },
+  {
+    ruleId: "SKILL007_REMOTE_CODE_EXEC",
+    severity: "warning",
+    priority: "P0",
+    confidence: "high",
+    title: "Remote code execution bootstrap appears in skill body",
+    message:
+      "The skill appears to instruct an agent to fetch remote content and execute it through a shell or interpreter.",
+    suggestion:
+      "Remove execute-from-network guidance. Require pinned, inspectable local scripts or documented package commands instead.",
+    rationale:
+      "Found remote fetch evidence and downstream shell or interpreter execution in the same command flow or explicit fetched-content execution prose.",
+    counterevidence: [
+      "Remote docs/spec parsing, parse-only pipelines, local static parsers, and unrelated inline command snippets are not reportable.",
+    ],
+    findLine: (lines) =>
+      findFirstLine(
+        lines,
+        (line) => !isPreventiveLine(line.text) && isRemoteExecutionBootstrapLine(line),
+      ),
+  },
+  {
+    ruleId: "SKILL008_OBFUSCATION",
+    severity: "warning",
+    priority: "P0",
     confidence: "medium",
     title: "Obfuscated external execution appears in skill body",
     message:
@@ -392,6 +433,7 @@ const validateSkillSecurity = (skill: SkillRecord, rules: readonly SecurityRule[
         ruleId: rule.ruleId,
         severity: rule.severity,
         category: "security",
+        priority: rule.priority,
         title: rule.title,
         message: rule.message,
         suggestion: rule.suggestion,
@@ -441,6 +483,7 @@ const CAPABILITY_SECURITY_RULES = new Map<
     SecurityRule,
     | "ruleId"
     | "severity"
+    | "priority"
     | "confidence"
     | "title"
     | "message"
@@ -452,8 +495,9 @@ const CAPABILITY_SECURITY_RULES = new Map<
   [
     "remote_code_exec",
     {
-      ruleId: "remote-code-execution-bootstrap",
+      ruleId: "SKILL007_REMOTE_CODE_EXEC",
       severity: "warning",
+      priority: "P0",
       confidence: "high",
       title: "Remote code execution bootstrap appears in skill package",
       message:
@@ -470,8 +514,9 @@ const CAPABILITY_SECURITY_RULES = new Map<
   [
     "destructive_action",
     {
-      ruleId: "destructive-command-high-risk",
+      ruleId: "SKILL005_DESTRUCTIVE_COMMANDS",
       severity: "warning",
+      priority: "P0",
       confidence: "medium",
       title: "High-risk destructive instruction appears in skill package",
       message:
@@ -487,8 +532,9 @@ const CAPABILITY_SECURITY_RULES = new Map<
   [
     "bypasses_approval",
     {
-      ruleId: "agent-safety-disablement",
+      ruleId: "SKILL002_PERMISSION_BYPASS",
       severity: "warning",
+      priority: "P0",
       confidence: "medium",
       title: "Agent safety disablement appears in skill package",
       message:
@@ -504,8 +550,9 @@ const CAPABILITY_SECURITY_RULES = new Map<
   [
     "obfuscation",
     {
-      ruleId: "external-resource-obfuscation",
+      ruleId: "SKILL008_OBFUSCATION",
       severity: "warning",
+      priority: "P0",
       confidence: "medium",
       title: "Obfuscated external execution appears in skill package",
       message:
@@ -546,7 +593,7 @@ const buildPackageExfiltrationFinding = (
   facts: readonly CapabilityFact[],
   enabled: ReadonlySet<string> | undefined,
 ): Finding | undefined => {
-  const ruleId: SecurityRuleId = "network-exfiltration-command";
+  const ruleId: SecurityRuleId = "SKILL004_EXFIL_CHAIN";
   if (enabled !== undefined && !enabled.has(ruleId)) return undefined;
   const secretFact = facts.find(
     (fact) => fact.artifactPath !== skillPackage.skill.skillPath && fact.kind === "reads_secrets",
@@ -558,6 +605,7 @@ const buildPackageExfiltrationFinding = (
   return buildCapabilityFinding(skillPackage, networkFact, {
     ruleId,
     severity: "warning",
+    priority: "P0",
     confidence: "high",
     title: "Network transfer appears near secret-reading package capability",
     message:
@@ -579,6 +627,7 @@ const buildCapabilityFinding = (
     SecurityRule,
     | "ruleId"
     | "severity"
+    | "priority"
     | "confidence"
     | "title"
     | "message"
@@ -590,6 +639,7 @@ const buildCapabilityFinding = (
   ruleId: rule.ruleId,
   severity: rule.severity,
   category: "security",
+  priority: rule.priority,
   title: rule.title,
   message: rule.message,
   suggestion: rule.suggestion,
@@ -622,9 +672,23 @@ const buildCapabilityFinding = (
 
 const filterRules = (enabledRuleIds: readonly string[] | undefined): readonly SecurityRule[] => {
   if (enabledRuleIds === undefined) return SECURITY_RULES;
-  const enabled = new Set(enabledRuleIds);
+  const enabled = new Set(enabledRuleIds.flatMap(resolveRuleIdAlias));
   return SECURITY_RULES.filter((rule) => enabled.has(rule.ruleId));
 };
+
+const RULE_ID_ALIASES = new Map<string, SecurityRuleId>([
+  ["prompt-injection-instruction", "SKILL001_PROMPT_OVERRIDE"],
+  ["agent-safety-disablement", "SKILL002_PERMISSION_BYPASS"],
+  ["secret-exfiltration-instruction", "SKILL004_EXFIL_CHAIN"],
+  ["network-exfiltration-command", "SKILL004_EXFIL_CHAIN"],
+  ["destructive-command-high-risk", "SKILL005_DESTRUCTIVE_COMMANDS"],
+  ["remote-code-execution-bootstrap", "SKILL007_REMOTE_CODE_EXEC"],
+  ["external-resource-obfuscation", "SKILL008_OBFUSCATION"],
+]);
+
+const resolveRuleIdAlias = (ruleId: string): readonly string[] => [
+  RULE_ID_ALIASES.get(ruleId) ?? ruleId,
+];
 
 const readSourceLines = (content: string): readonly SourceLine[] =>
   content.split(/\r?\n/).map((text, index) => ({ number: index + 1, text }));
@@ -697,6 +761,12 @@ const findNetworkExfiltrationCommandLine = (
     if (!NETWORK_TRANSFER_PATTERN.test(candidate.text)) return false;
     return hasBoundedExfiltrationEvidence(candidate);
   });
+
+const findExfiltrationChainLine = (
+  candidates: readonly MarkdownSecurityCandidate[],
+): number | undefined =>
+  findSecretExfiltrationInstructionLine(candidates) ??
+  findNetworkExfiltrationCommandLine(candidates);
 
 const hasBoundedExfiltrationEvidence = (candidate: MarkdownSecurityCandidate): boolean => {
   if (isPreventiveLine(candidate.text)) return false;

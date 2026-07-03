@@ -93,43 +93,49 @@ Intent is classified conservatively:
   transfer destination or a remote URL with no execution sink. Ambiguous
   candidates remain unreported until a rule-specific evidence story is present.
 
-| Rule ID | Severity | Category | What it checks |
-| --- | --- | --- | --- |
-| `prompt-injection-instruction` | warning | security | Skill instructions appear to subvert higher-priority instructions. |
-| `secret-exfiltration-instruction` | warning | security | Skill instructions appear to send secrets outside the local task context. |
-| `network-exfiltration-command` | warning | security | Network transfer guidance appears near secret or sensitive file reading. |
-| `remote-code-execution-bootstrap` | warning | security | Skill instructions appear to fetch remote content and execute it. |
-| `destructive-command-high-risk` | warning | security | Skill instructions describe broad destructive or trace-hiding actions. |
-| `agent-safety-disablement` | warning | security | Skill instructions appear to disable sandboxing, permissions, or confirmation. |
-| `external-resource-obfuscation` | warning | security | Skill instructions appear to decode or stage obscured content for execution. |
+| Rule ID | Severity | Priority | Category | What it checks |
+| --- | --- | --- | --- | --- |
+| `SKILL001_PROMPT_OVERRIDE` | warning | P0 | security | Skill instructions appear to subvert higher-priority instructions. |
+| `SKILL002_PERMISSION_BYPASS` | warning | P0 | security | Skill instructions appear to disable sandboxing, permissions, or confirmation. |
+| `SKILL003_SECRET_ACCESS` | warning | P0 | security | Skill instructions appear to read local secrets or credential stores. |
+| `SKILL004_EXFIL_CHAIN` | warning | P0 | security | Skill instructions combine secret access with external transfer. |
+| `SKILL005_DESTRUCTIVE_COMMANDS` | warning | P0 | security | Skill instructions describe broad destructive or trace-hiding actions. |
+| `SKILL006_PERSISTENCE` | warning | P0 | security | Skill instructions appear to install persistence through startup, hooks, or services. |
+| `SKILL007_REMOTE_CODE_EXEC` | warning | P0 | security | Skill instructions appear to fetch remote content and execute it. |
+| `SKILL008_OBFUSCATION` | warning | P0 | security | Skill instructions appear to decode or stage obscured content for execution. |
 
 Evidence requirements by rule:
 
-- `prompt-injection-instruction` reports explicit instruction subversion,
+- `SKILL001_PROMPT_OVERRIDE` reports explicit instruction subversion,
   concealment, confirmation bypass, or continuing after denial. Defensive prompt
   injection guidance, secret-protection guidance, and confirmation requirements
   are counterevidence and are filtered before reporting.
-- `secret-exfiltration-instruction` reports only when bounded Markdown context
-  contains a sensitive source, a connective transfer action, and a suspicious
-  external destination. Local webhook signing-secret setup, local signature
-  verification, and destination-only documentation are counterevidence.
-- `network-exfiltration-command` reports network or transfer commands when they
-  connect sensitive sources to a non-local external destination. Local
-  destinations, parse-only commands, and official service API authentication are
-  counterevidence unless secret material is also sent to an unrelated external
-  sink.
-- `remote-code-execution-bootstrap` reports remote fetch evidence paired with a
+- `SKILL002_PERMISSION_BYPASS` reports sandbox, permission, review, or
+  confirmation bypass instructions when they are not merely descriptive launch
+  previews or defensive examples.
+- `SKILL003_SECRET_ACCESS` reports secret-reading actions targeting `.env`,
+  credential files, SSH/cloud credentials, browser profiles, tokens, sessions,
+  keychains, or private keys. Local webhook signing-secret setup, local
+  signature verification, destination-only documentation, and defensive
+  secret-handling guidance are counterevidence.
+- `SKILL004_EXFIL_CHAIN` reports when bounded Markdown context connects secret
+  or sensitive sources to a connective transfer action and suspicious external
+  destination, or when package capabilities combine secret access with network
+  egress. Local webhook setup, local verification, local destinations,
+  parse-only commands, and official API authentication are counterevidence
+  unless secret material is sent to an unrelated external sink.
+- `SKILL005_DESTRUCTIVE_COMMANDS` reports broad deletion, trace removal, or
+  permission weakening when not framed as prevention or scoped confirmation
+  guidance.
+- `SKILL006_PERSISTENCE` reports writes or registration through shell startup
+  files, cron, launch agents, systemd, git hooks, postinstall hooks, VS Code
+  tasks, or autostart locations.
+- `SKILL007_REMOTE_CODE_EXEC` reports remote fetch evidence paired with a
   shell or interpreter execution sink in the same command flow, or prose that
   explicitly says to execute fetched content. Remote docs/spec parsing,
   parse-only pipelines, local static parsers, and unrelated inline snippets are
   counterevidence.
-- `destructive-command-high-risk` reports broad deletion, trace removal, or
-  permission weakening when not framed as prevention or scoped confirmation
-  guidance.
-- `agent-safety-disablement` reports sandbox, permission, review, or
-  confirmation bypass instructions when they are not merely descriptive launch
-  previews or defensive examples.
-- `external-resource-obfuscation` reports decode-or-stage guidance for
+- `SKILL008_OBFUSCATION` reports decode-or-stage guidance for
   obfuscated external content when paired with shell or interpreter execution.
   Defensive warnings and decode-only fixture handling are counterevidence.
 

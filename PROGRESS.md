@@ -6,9 +6,9 @@
 - User gap summary from 2026-07-03
 
 ## Current Status
-- Status: Step 5 complete.
-- Current step: Step 6: Implement P0 Blocker Rules.
-- Next step: Step 6: Implement P0 Blocker Rules.
+- Status: Step 6 complete.
+- Current step: Step 7: Implement P1 High-Risk Rules.
+- Next step: Step 7: Implement P1 High-Risk Rules.
 
 ## Step Checklist
 - [x] Step 0: Progress and Changelog Tracking Setup
@@ -17,7 +17,7 @@
 - [x] Step 3: Add Package Artifact Discovery
 - [x] Step 4: Build Shared Capability Detectors
 - [x] Step 5: Migrate Security Validation To Package-Level Evaluation
-- [ ] Step 6: Implement P0 Blocker Rules
+- [x] Step 6: Implement P0 Blocker Rules
 - [ ] Step 7: Implement P1 High-Risk Rules
 - [ ] Step 8: Implement P2 Quality And Hygiene Rules
 - [ ] Step 9: Add Security Gates And Report Schema Output
@@ -107,7 +107,20 @@ After each completed step, update this file with:
 - Changelog: Added a `Changed` entry for package-level security validation.
 - Commit: Step 5 commit (`feat: evaluate security rules at package scope`).
 
+### Step 6: Implement P0 Blocker Rules
+- Summary: Replaced legacy security rule IDs with spec-aligned `SKILL001_*` through `SKILL008_*` P0 blocker IDs, added finding and catalog priority metadata, added standalone secret-access and persistence detections, preserved legacy rule ID aliases for filters, and updated rule docs/tests for P0 metadata.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run typecheck` passed.
+  - `bun test test/security-rules.test.ts test/domain-scan.test.ts test/quality-rules.test.ts` passed: 87 focused security, package-scan, and catalog-doc sync tests.
+  - `bun run test` passed: 21 files, 221 tests.
+  - `bun run build` passed.
+- Changelog: Added `Added` and `Security` entries for spec-aligned P0 rules, priorities, secret access, and persistence detection.
+- Commit: Step 6 commit (`feat: implement p0 security blocker rules`).
+
 ## Update Log
+- 2026-07-03: Completed focused Step 6 validation for P0 rule IDs, priorities, standalone secret access, persistence, and docs sync.
 - 2026-07-03: Completed Step 5 validation and prepared the package-level security validation commit.
 - 2026-07-03: Completed Step 4 validation and prepared the capability detector commit.
 - 2026-07-03: Completed Step 3 validation and prepared the package artifact discovery commit.

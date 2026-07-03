@@ -455,7 +455,7 @@ describe("skill discovery and parsing", () => {
 
     expect(scan.findings).toContainEqual(
       expect.objectContaining({
-        ruleId: "prompt-injection-instruction",
+        ruleId: "SKILL001_PROMPT_OVERRIDE",
         severity: "warning",
         category: "security",
         skillName: "subversion-skill",
@@ -500,7 +500,7 @@ describe("skill discovery and parsing", () => {
 
     expect(scan.findings).toContainEqual(
       expect.objectContaining({
-        ruleId: "remote-code-execution-bootstrap",
+        ruleId: "SKILL007_REMOTE_CODE_EXEC",
         category: "security",
         skillName: "script-security-skill",
         evidence: expect.objectContaining({

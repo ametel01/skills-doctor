@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added P0 security priorities and spec-aligned `SKILL001_*` through `SKILL008_*` rule IDs for blocker security detections.
 - Added derived security capability facts for package artifacts, including secret access, network egress, remote execution, persistence, approval bypass, destructive actions, broad tools, MCP access, and obfuscation indicators.
 - Added package artifact discovery metadata to scan results, including script/resource/config files and symlink status.
 - Added package security model types for future artifact, capability, priority, and cross-file evidence reporting.
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Security
 
+- Added standalone local secret-access and persistence-installation blocker detections, including path-like sources such as `~/.ssh`, `.aws`, and shell startup files.
 - Surfaced security findings in the interactive CLI summary and review menu.
 - Integrated security findings into normal skill scans and report exit-code behavior.
 - Added deterministic detection for remote execution, safety-disablement, destructive, and obfuscated command patterns in skill files.

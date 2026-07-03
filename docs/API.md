@@ -91,7 +91,7 @@ Reports and rendering:
 
 - `buildScanReport(input)`: builds the machine-readable `ScanReport`.
 - `ruleCatalog`: structured metadata for emitted rule IDs, severities,
-  categories, and descriptions.
+  optional security priorities, categories, and descriptions.
 - `summarizeFindings(findings)`: groups counts by severity, skill, and category.
 - `renderHumanSummary(report, options?)`: renders a short text summary.
 - `resolveScanExitCode(report)`: returns `1` when blocking findings or error
@@ -378,8 +378,8 @@ Package-level security findings may also include `priority`, `capabilities`,
 and `evidenceChain` fields. These are optional so existing `schemaVersion: 1`
 reports remain compatible when package-level scanning is not active.
 
-Use `ruleCatalog` when integrations need structured rule metadata without
-scraping Markdown:
+Use `ruleCatalog` when integrations need structured rule metadata, including
+P0/P1/P2 security priorities when present, without scraping Markdown:
 
 ```ts
 import { ruleCatalog } from "skills-doctor";

@@ -162,7 +162,7 @@ describe("CLI bin", () => {
     expect(result.exitCode).toBe(0);
     expect(report.findings).toContainEqual(
       expect.objectContaining({
-        ruleId: "prompt-injection-instruction",
+        ruleId: "SKILL001_PROMPT_OVERRIDE",
         confidence: "medium",
         rationale: expect.stringContaining("instruction-subversion"),
         counterevidence: expect.arrayContaining([expect.stringContaining("Defensive guidance")]),

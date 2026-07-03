@@ -102,7 +102,7 @@ describe("scan reports", () => {
     expect(report.warningCount).toBe(0);
     expect(report.findings).toContainEqual(
       expect.objectContaining({
-        ruleId: "prompt-injection-instruction",
+        ruleId: "SKILL001_PROMPT_OVERRIDE",
         severity: "warning",
         category: "security",
         confidence: "medium",
@@ -162,7 +162,7 @@ describe("scan reports", () => {
         diagnostics: [],
         findings: [
           makeFinding({
-            ruleId: "prompt-injection-instruction",
+            ruleId: "SKILL001_PROMPT_OVERRIDE",
             severity: "warning",
             category: "security",
             confidence: "medium",

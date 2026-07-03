@@ -1,8 +1,9 @@
-import type { FindingCategory, FindingSeverity } from "./types.js";
+import type { FindingCategory, FindingSeverity, SecurityPriority } from "./types.js";
 
 export type RuleCatalogEntry = {
   readonly ruleId: string;
   readonly severity: FindingSeverity;
+  readonly priority?: SecurityPriority | undefined;
   readonly categories: readonly FindingCategory[];
   readonly description: string;
 };
@@ -231,44 +232,59 @@ export const ruleCatalog = [
     description: "Non-trivial skill lacks evals/evals.json.",
   },
   {
-    ruleId: "prompt-injection-instruction",
+    ruleId: "SKILL001_PROMPT_OVERRIDE",
     severity: "warning",
+    priority: "P0",
     categories: ["security"],
     description: "Skill instructions appear to subvert higher-priority instructions.",
   },
   {
-    ruleId: "secret-exfiltration-instruction",
+    ruleId: "SKILL002_PERMISSION_BYPASS",
     severity: "warning",
-    categories: ["security"],
-    description: "Skill instructions appear to send secrets outside the local task context.",
-  },
-  {
-    ruleId: "network-exfiltration-command",
-    severity: "warning",
-    categories: ["security"],
-    description: "Network transfer guidance appears near secret or sensitive file reading.",
-  },
-  {
-    ruleId: "remote-code-execution-bootstrap",
-    severity: "warning",
-    categories: ["security"],
-    description: "Skill instructions appear to fetch remote content and execute it.",
-  },
-  {
-    ruleId: "destructive-command-high-risk",
-    severity: "warning",
-    categories: ["security"],
-    description: "Skill instructions describe broad destructive or trace-hiding actions.",
-  },
-  {
-    ruleId: "agent-safety-disablement",
-    severity: "warning",
+    priority: "P0",
     categories: ["security"],
     description: "Skill instructions appear to disable sandboxing, permissions, or confirmation.",
   },
   {
-    ruleId: "external-resource-obfuscation",
+    ruleId: "SKILL003_SECRET_ACCESS",
     severity: "warning",
+    priority: "P0",
+    categories: ["security"],
+    description: "Skill instructions appear to read local secrets or credential stores.",
+  },
+  {
+    ruleId: "SKILL004_EXFIL_CHAIN",
+    severity: "warning",
+    priority: "P0",
+    categories: ["security"],
+    description: "Skill instructions combine secret access with external transfer.",
+  },
+  {
+    ruleId: "SKILL005_DESTRUCTIVE_COMMANDS",
+    severity: "warning",
+    priority: "P0",
+    categories: ["security"],
+    description: "Skill instructions describe broad destructive or trace-hiding actions.",
+  },
+  {
+    ruleId: "SKILL006_PERSISTENCE",
+    severity: "warning",
+    priority: "P0",
+    categories: ["security"],
+    description:
+      "Skill instructions appear to install persistence through startup, hooks, or services.",
+  },
+  {
+    ruleId: "SKILL007_REMOTE_CODE_EXEC",
+    severity: "warning",
+    priority: "P0",
+    categories: ["security"],
+    description: "Skill instructions appear to fetch remote content and execute it.",
+  },
+  {
+    ruleId: "SKILL008_OBFUSCATION",
+    severity: "warning",
+    priority: "P0",
     categories: ["security"],
     description: "Skill instructions appear to decode or stage obscured content for execution.",
   },

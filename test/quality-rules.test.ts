@@ -458,6 +458,7 @@ describe("quality rules", () => {
       const docsEntry = docsByRuleId.get(entry.ruleId);
       expect(docsEntry).toEqual({
         severity: entry.severity,
+        priority: "priority" in entry ? entry.priority : undefined,
         categories: entry.categories.join("/"),
       });
     }
@@ -466,12 +467,36 @@ describe("quality rules", () => {
 
 const parseRuleCatalogMarkdown = (
   markdown: string,
-): Map<string, { readonly severity: string; readonly categories: string }> => {
-  const rows = new Map<string, { readonly severity: string; readonly categories: string }>();
-  for (const match of markdown.matchAll(/^\| `([^`]+)` \| ([^|]+) \| ([^|]+) \| .* \|$/gm)) {
-    const [, ruleId, severity, categories] = match;
-    if (ruleId !== undefined && severity !== undefined && categories !== undefined) {
-      rows.set(ruleId, { severity: severity.trim(), categories: categories.trim() });
+): Map<
+  string,
+  {
+    readonly severity: string;
+    readonly priority: string | undefined;
+    readonly categories: string;
+  }
+> => {
+  const rows = new Map<
+    string,
+    {
+      readonly severity: string;
+      readonly priority: string | undefined;
+      readonly categories: string;
+    }
+  >();
+  for (const line of markdown.split(/\r?\n/)) {
+    const cells = line
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+    const [ruleIdCell, severity, maybePriority, maybeCategories] = cells;
+    const ruleId = /^`([^`]+)`$/.exec(ruleIdCell ?? "")?.[1];
+    if (ruleId === undefined || severity === undefined || maybePriority === undefined) continue;
+
+    const hasPriorityColumn = /^(?:P[0-2]|-)$/.test(maybePriority);
+    const priority = hasPriorityColumn && maybePriority !== "-" ? maybePriority : undefined;
+    const categories = hasPriorityColumn ? maybeCategories : maybePriority;
+    if (categories !== undefined) {
+      rows.set(ruleId, { severity, priority, categories });
     }
   }
   return rows;

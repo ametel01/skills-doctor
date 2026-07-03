@@ -1071,7 +1071,7 @@ describe("scanAction", () => {
 
     expect(report.findings).toContainEqual(
       expect.objectContaining({
-        ruleId: "prompt-injection-instruction",
+        ruleId: "SKILL001_PROMPT_OVERRIDE",
         category: "security",
         confidence: "medium",
       }),
@@ -1080,7 +1080,7 @@ describe("scanAction", () => {
     expect(nextStepChoices.at(-1)).toContain("Review security findings");
     expect(nextStepChoices.at(-1)).toContain("Fix selected security findings with Claude or Codex");
     expect(stdout.join("")).toContain("Security report: 1 suspicious skill pattern");
-    expect(stdout.join("")).toContain("prompt-injection-instruction");
+    expect(stdout.join("")).toContain("SKILL001_PROMPT_OVERRIDE");
     expect(stdout.join("")).toContain("Confidence: medium");
     expect(stdout.join("")).toContain("Rationale:");
     expect(stdout.join("")).toContain("Counterevidence:");
@@ -1150,14 +1150,12 @@ describe("scanAction", () => {
       },
     );
 
-    expect(checkboxChoices.at(-1)).toContain("first-security-skill: prompt-injection-instruction");
-    expect(checkboxChoices.at(-1)).toContain(
-      "second-security-skill: remote-code-execution-bootstrap",
-    );
+    expect(checkboxChoices.at(-1)).toContain("first-security-skill: SKILL001_PROMPT_OVERRIDE");
+    expect(checkboxChoices.at(-1)).toContain("second-security-skill: SKILL007_REMOTE_CODE_EXEC");
     expect(launches).toHaveLength(1);
     expect(launches[0]).toContain("first-security-skill");
-    expect(launches[0]).toContain("prompt-injection-instruction");
-    expect(launches[0]).not.toContain("remote-code-execution-bootstrap");
+    expect(launches[0]).toContain("SKILL001_PROMPT_OVERRIDE");
+    expect(launches[0]).not.toContain("SKILL007_REMOTE_CODE_EXEC");
     expect(stdout.join("")).toContain("Repair prompt:");
   });
 });
