@@ -44,6 +44,7 @@ export type MarkdownTableRowContext = {
 
 export type CommandLineContext = {
   readonly sourceText: string | undefined;
+  readonly commandGroups: readonly CommandGroupContext[];
   readonly commands: readonly CommandSegmentContext[];
   readonly hasPipeline: boolean;
   readonly hasSensitiveSource: boolean;
@@ -53,6 +54,11 @@ export type CommandLineContext = {
   readonly hasExecutionSink: boolean;
   readonly hasParseOnlySink: boolean;
   readonly hasTransferAction: boolean;
+};
+
+export type CommandGroupContext = {
+  readonly sourceText: string;
+  readonly commands: readonly CommandSegmentContext[];
 };
 
 export type CommandSegmentContext = {
@@ -99,8 +105,10 @@ const EXFILTRATION_TRANSFER_ACTION_PATTERN =
   /\b(send|post|upload|forward|transmit|copy|paste|exfiltrate|move)\b/i;
 const EXFILTRATION_SUSPICIOUS_DESTINATION_PATTERN =
   /\b(remote|external|webhooks?(?!\s+(?:signing\s+)?secrets?\b|\s+signatures?\b)|server|endpoint|url|site|gist|paste|chat|slack|discord)\b|https?:\/\/(?!api\.github\.com\b|github\.com\b|registry\.npmjs\.org\b|npmjs\.com\b|api\.stripe\.com\b|api\.openai\.com\b|api\.anthropic\.com\b|api\.clerk\.com\b|[^/\s`"']+\.googleapis\.com\b)[^\s`"')]+/i;
-const REMOTE_EXECUTION_PATTERN =
-  /\b(download|fetch|retrieve|remote|installer|curl|wget)\b.{0,100}\b(pipe|execute|run|shell|bash|sh|zsh|python|node|interpreter)\b/i;
+const REMOTE_FETCH_TEXT_PATTERN =
+  /\b(download|fetch|retrieve|curl|wget)\b.{0,120}\b(remote|https?:\/\/|url|installer|script|content|file)\b|\b(remote|https?:\/\/|url|installer|script|content|file)\b.{0,120}\b(download|fetch|retrieve|curl|wget)\b/i;
+const FETCHED_CONTENT_EXECUTION_TEXT_PATTERN =
+  /\b(pipe|piped)\b.{0,80}\b(shell|bash|sh|zsh|python|node|eval|interpreter)\b|\b(execute|run)\b.{0,80}\b(fetched|downloaded|retrieved|content|installer|script)\b|\b(fetched|downloaded|retrieved|content|installer|script)\b.{0,80}\b(execute|run|shell|bash|sh|zsh|python|node|eval|interpreter)\b|\bremote\b.{0,40}\b(installer|script|code|content)\b.{0,80}\b(execute|run|shell|bash|sh|zsh|python|node|eval|interpreter)\b/i;
 const BROAD_DESTRUCTIVE_PATTERN =
   /\b(delete|remove|wipe|destroy|erase)\b.{0,100}\b(home directory|root directory|entire project|all files|everything|shell history|audit trail|logs?)\b/i;
 const PERMISSION_WEAKENING_PATTERN =
@@ -147,6 +155,7 @@ const EXECUTION_SINK_COMMANDS = new Set([
   "python",
   "python3",
   "node",
+  "eval",
   "bun",
   "npm",
   "pnpm",
@@ -230,7 +239,7 @@ const SECURITY_RULES: readonly SecurityRule[] = [
     findLine: (lines) =>
       findFirstLine(
         lines,
-        (line) => !isPreventiveLine(line.text) && REMOTE_EXECUTION_PATTERN.test(line.text),
+        (line) => !isPreventiveLine(line.text) && isRemoteExecutionBootstrapLine(line),
       ),
   },
   {
@@ -464,6 +473,27 @@ const redactEvidenceText = (text: string): string =>
     .replace(EVIDENCE_SECRET_VALUE_PATTERN, "$1[REDACTED]")
     .replace(EVIDENCE_BEARER_VALUE_PATTERN, "$1[REDACTED]");
 
+const isRemoteExecutionBootstrapLine = (line: MarkdownSecurityCandidate): boolean =>
+  hasRemoteFetchToExecutionPipeline(line.commandContext) ||
+  hasFetchedContentExecutionInstruction(line.text);
+
+const hasRemoteFetchToExecutionPipeline = (context: CommandLineContext): boolean => {
+  return context.commandGroups.some((group) => {
+    const fetchSegment = group.commands.find(
+      (command) =>
+        command.action === "transfer" &&
+        (command.destination === "external" || command.destination === "official-service-api"),
+    );
+    if (fetchSegment === undefined) return false;
+    return group.commands.some(
+      (command) => command.sink === "execution" && command.position > fetchSegment.position,
+    );
+  });
+};
+
+const hasFetchedContentExecutionInstruction = (text: string): boolean =>
+  REMOTE_FETCH_TEXT_PATTERN.test(text) && FETCHED_CONTENT_EXECUTION_TEXT_PATTERN.test(text);
+
 const isPreventiveLine = (text: string): boolean => PREVENTION_PATTERN.test(text);
 
 const isHarmfulPromptIntentLine = (text: string): boolean =>
@@ -512,12 +542,17 @@ const buildCommandLineContext = (
   isCommandFenceLine: boolean,
 ): CommandLineContext => {
   const commandTexts = readCommandTexts(lineText, isCommandFenceLine);
-  const commands = commandTexts.flatMap((commandText) => readCommandSegments(commandText));
+  const commandGroups = commandTexts.map((commandText) => ({
+    sourceText: commandText,
+    commands: readCommandSegments(commandText),
+  }));
+  const commands = commandGroups.flatMap((group) => group.commands);
 
   return {
     sourceText: commandTexts[0],
+    commandGroups,
     commands,
-    hasPipeline: commands.length > 1,
+    hasPipeline: commandGroups.some((group) => group.commands.length > 1),
     hasSensitiveSource: commands.some((command) => command.source === "sensitive"),
     hasLocalDestination: commands.some((command) => command.destination === "local"),
     hasOfficialServiceDestination: commands.some(
@@ -544,7 +579,7 @@ const readCommandTexts = (lineText: string, isCommandFenceLine: boolean): readon
 
 const readCommandSegments = (commandText: string): readonly CommandSegmentContext[] =>
   commandText
-    .split("|")
+    .split(/\s*(?:\||&&|;)\s*/)
     .map((segment) => segment.trim())
     .filter((segment) => segment.length > 0)
     .map((segment, index, segments) => classifyCommandSegment(segment, index, segments.length > 1));
