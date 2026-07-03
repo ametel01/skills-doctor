@@ -2,7 +2,6 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { discoverSkillArtifacts } from "./discover-skill-artifacts.js";
 import { parseSkillContent } from "./parse-skill.js";
-import { deriveCapabilityFacts } from "./security/capabilities.js";
 import {
   type DisabledSkillSelectors,
   normalizeSkillPath,
@@ -10,6 +9,7 @@ import {
 import { validateQualityRules } from "./rules/quality.js";
 import { validateSkillPackageSecurityRules } from "./rules/security.js";
 import { buildMissingSkillFinding, validateStructuralRules } from "./rules/structural.js";
+import { deriveCapabilityFacts } from "./security/capabilities.js";
 import type {
   Diagnostic,
   Finding,

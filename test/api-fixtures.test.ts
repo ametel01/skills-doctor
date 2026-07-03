@@ -7,11 +7,11 @@ import {
   type Finding,
   type FindingEvidenceChain,
   type ScanReport,
-  scanSkillRoots,
   type SecurityPriority,
   type SkillArtifact,
   type SkillPackage,
   type SkillRecord,
+  scanSkillRoots,
 } from "../src/index.js";
 
 describe("public API facade", () => {

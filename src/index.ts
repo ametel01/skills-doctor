@@ -73,6 +73,8 @@ export {
   summarizeFindings,
 } from "./domain/summarize-findings.js";
 export type {
+  CapabilityFact,
+  CapabilityKind,
   Diagnostic,
   Finding,
   FindingCategory,
@@ -86,16 +88,14 @@ export type {
   ParseFailure,
   ParseResult,
   ScanResult,
-  SkillEcosystem,
+  SecurityPriority,
   SkillArtifact,
   SkillArtifactSymlinkStatus,
   SkillArtifactType,
+  SkillEcosystem,
   SkillPackage,
   SkillRecord,
   SkillRoot,
-  CapabilityFact,
-  CapabilityKind,
-  SecurityPriority,
 } from "./domain/types.js";
 export {
   type CleanupDirectoryInput,
