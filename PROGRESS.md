@@ -6,15 +6,15 @@
 - User gap summary from 2026-07-03
 
 ## Current Status
-- Status: Step 2 complete.
-- Current step: Step 3: Add Package Artifact Discovery.
-- Next step: Step 3: Add Package Artifact Discovery.
+- Status: Step 3 complete.
+- Current step: Step 4: Build Shared Capability Detectors.
+- Next step: Step 4: Build Shared Capability Detectors.
 
 ## Step Checklist
 - [x] Step 0: Progress and Changelog Tracking Setup
 - [x] Step 1: Clean Up The Security Spec Source Document
 - [x] Step 2: Introduce Skill Package And Artifact Models
-- [ ] Step 3: Add Package Artifact Discovery
+- [x] Step 3: Add Package Artifact Discovery
 - [ ] Step 4: Build Shared Capability Detectors
 - [ ] Step 5: Migrate Security Validation To Package-Level Evaluation
 - [ ] Step 6: Implement P0 Blocker Rules
@@ -71,7 +71,20 @@ After each completed step, update this file with:
 - Changelog: Added an `Added` entry for package security model types.
 - Commit: Step 2 commit (`feat: add skill package security model`).
 
+### Step 3: Add Package Artifact Discovery
+- Summary: Added deterministic artifact discovery for skill packages, including `SKILL.md`, scripts, references, assets, agent configs, Claude/MCP configs, package manifests, CI files, hidden files, executable metadata, and symlink metadata. `scanSkillRoots()` now returns optional package records while preserving existing skills/findings behavior.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run typecheck` passed.
+  - `bun test test/domain-scan.test.ts` passed: 16 tests.
+  - `bun run test` passed: 20 files, 216 tests.
+  - `bun run build` passed.
+- Changelog: Added an `Added` entry for package artifact discovery metadata.
+- Commit: Step 3 commit (`feat: discover security artifacts in skill packages`).
+
 ## Update Log
+- 2026-07-03: Completed Step 3 validation and prepared the package artifact discovery commit.
 - 2026-07-03: Completed Step 2 validation and prepared the package security model commit.
 - 2026-07-03: Completed Step 1 validation and prepared the security spec cleanup commit.
 - 2026-07-03: Completed Step 0 validation and created the Step 0 commit.

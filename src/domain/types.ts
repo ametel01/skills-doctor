@@ -180,6 +180,7 @@ export type SkillPackage = {
 export type ScanResult = {
   readonly roots: readonly SkillRoot[];
   readonly skills: readonly SkillRecord[];
+  readonly packages?: readonly SkillPackage[] | undefined;
   readonly diagnostics: readonly Diagnostic[];
   readonly findings: readonly Finding[];
 };

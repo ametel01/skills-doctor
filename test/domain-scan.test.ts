@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -172,6 +172,108 @@ describe("skill discovery and parsing", () => {
 
     expect(firstScan.skills.map((skill) => skill.skillPath)).toEqual(expected);
     expect(secondScan.skills.map((skill) => skill.skillPath)).toEqual(expected);
+  });
+
+  it("includes package artifact metadata in scan results", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "artifact-skill");
+    await mkdir(path.join(skillDir, "agents"), { recursive: true });
+    await mkdir(path.join(skillDir, "scripts"), { recursive: true });
+    await mkdir(path.join(skillDir, "references"), { recursive: true });
+    await mkdir(path.join(skillDir, "assets"), { recursive: true });
+    await mkdir(path.join(skillDir, ".claude"), { recursive: true });
+    await mkdir(path.join(skillDir, ".github", "workflows"), { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      [
+        "---",
+        "name: artifact-skill",
+        "description: Use this skill when validating artifact discovery.",
+        "---",
+        "",
+        "## Workflow",
+        "",
+        "- Run scripts/run.sh.",
+      ].join("\n"),
+    );
+    const scriptPath = path.join(skillDir, "scripts", "run.sh");
+    await writeFile(scriptPath, "#!/usr/bin/env bash\necho ok\n");
+    await chmod(scriptPath, 0o755);
+    await writeFile(path.join(skillDir, "references", "spec.md"), "# Spec\n");
+    await writeFile(path.join(skillDir, "assets", "template.txt"), "template\n");
+    await writeFile(path.join(skillDir, "agents", "openai.yaml"), "name: artifact-skill\n");
+    await writeFile(path.join(skillDir, "AGENTS.md"), "Agent notes\n");
+    await writeFile(path.join(skillDir, ".claude", "settings.local.json"), "{}\n");
+    await writeFile(path.join(skillDir, ".mcp.json"), "{}\n");
+    await writeFile(path.join(skillDir, "package.json"), '{ "scripts": {} }\n');
+    await writeFile(path.join(skillDir, ".github", "workflows", "ci.yml"), "name: CI\n");
+    const externalTarget = path.join(directory, "external-secret.txt");
+    await writeFile(externalTarget, "secret\n");
+    await symlink(externalTarget, path.join(skillDir, "assets", "external-secret.txt"));
+
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
+    const scan = await scanSkillRoots({ roots: discovered.roots });
+    const skillPackage = scan.packages?.[0];
+    const artifactByPath = new Map(
+      skillPackage?.artifacts.map((artifact) => [artifact.relativePath, artifact]),
+    );
+
+    expect(skillPackage?.skill.directoryName).toBe("artifact-skill");
+    expect(artifactByPath.get("SKILL.md")).toMatchObject({
+      type: "skill-md",
+      readable: true,
+      hidden: false,
+      symlinkStatus: "none",
+      contentHash: expect.any(String),
+    });
+    expect(artifactByPath.get("scripts/run.sh")).toMatchObject({
+      type: "script",
+      executable: true,
+      content: expect.stringContaining("echo ok"),
+    });
+    expect(artifactByPath.get("agents/openai.yaml")?.type).toBe("openai-agent-config");
+    expect(artifactByPath.get("AGENTS.md")?.type).toBe("agent-instructions");
+    expect(artifactByPath.get(".claude/settings.local.json")).toMatchObject({
+      type: "claude-settings",
+      hidden: true,
+    });
+    expect(artifactByPath.get(".mcp.json")?.type).toBe("mcp-config");
+    expect(artifactByPath.get("package.json")?.type).toBe("package-manifest");
+    expect(artifactByPath.get(".github/workflows/ci.yml")?.type).toBe("ci-config");
+    expect(artifactByPath.get("assets/external-secret.txt")).toMatchObject({
+      type: "asset",
+      readable: false,
+      symlinkStatus: "escapes",
+      realPath: expect.stringContaining("external-secret.txt"),
+    });
+  });
+
+  it("follows symlinked skill folders and records root symlink metadata", async () => {
+    const skillsRoot = path.join(directory, ".agents", "skills");
+    const targetSkillDir = path.join(directory, "outside-skills", "linked-skill-target");
+    await writeFixtureSkill(targetSkillDir, "linked-skill");
+    await mkdir(skillsRoot, { recursive: true });
+    await symlink(targetSkillDir, path.join(skillsRoot, "linked-skill"));
+
+    const discovered = await discoverSkillRoots({
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+    });
+    const scan = await scanSkillRoots({ roots: discovered.roots });
+    const skillPackage = scan.packages?.find(
+      (candidate) => candidate.skill.directoryName === "linked-skill",
+    );
+
+    expect(scan.skills.map((skill) => skill.directoryName)).toContain("linked-skill");
+    expect(skillPackage?.artifacts).toContainEqual(
+      expect.objectContaining({
+        relativePath: ".",
+        symlinkStatus: "escapes",
+        realPath: expect.stringContaining("linked-skill-target"),
+      }),
+    );
   });
 
   it("ignores disabled Codex skills by path and name", async () => {

@@ -59,7 +59,8 @@ Discovery and scanning:
 - `discoverUsageSources(input?)`: finds bounded local Codex usage sources under
   known `~/.codex` paths and detects context-budget pressure.
 - `scanSkillRoots(input)`: reads skills from selected roots, parses `SKILL.md`,
-  and returns skills, diagnostics, and findings.
+  discovers package artifact metadata, and returns skills, optional package
+  records, diagnostics, and findings.
 - `parseSkillContent(content)`: parses one `SKILL.md` string into frontmatter
   and body data.
 - `analyzeSkillUsage(input)`: ranks scanned skills by detected local Codex

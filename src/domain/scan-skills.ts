@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { discoverSkillArtifacts } from "./discover-skill-artifacts.js";
 import { parseSkillContent } from "./parse-skill.js";
 import {
   type DisabledSkillSelectors,
@@ -8,7 +9,14 @@ import {
 import { validateQualityRules } from "./rules/quality.js";
 import { validateSecurityRules } from "./rules/security.js";
 import { buildMissingSkillFinding, validateStructuralRules } from "./rules/structural.js";
-import type { Diagnostic, Finding, ScanResult, SkillRecord, SkillRoot } from "./types.js";
+import type {
+  Diagnostic,
+  Finding,
+  ScanResult,
+  SkillPackage,
+  SkillRecord,
+  SkillRoot,
+} from "./types.js";
 
 const SKILL_FILE_READ_CONCURRENCY = 16;
 
@@ -20,6 +28,7 @@ export type ScanSkillRootsInput = {
 
 export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanResult> => {
   const skills: SkillRecord[] = [];
+  const packages: SkillPackage[] = [];
   const diagnostics: Diagnostic[] = [...(input.diagnostics ?? [])];
   const findings: Finding[] = [];
   const rootPlans: RootReadPlan[] = [];
@@ -46,7 +55,9 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
     if (entries.length === 0) continue;
 
     const tasks = entries
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .filter(
+        (entry) => (entry.isDirectory() || entry.isSymbolicLink()) && !entry.name.startsWith("."),
+      )
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((entry, entryIndex) => {
         const skillDir = path.join(root.rootPath, entry.name);
@@ -87,10 +98,14 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
   findings.push(...skills.flatMap(validateStructuralRules));
   findings.push(...(await validateQualityRules(skills)));
   findings.push(...validateSecurityRules(skills));
+  packages.push(
+    ...(await mapWithConcurrency(skills, SKILL_FILE_READ_CONCURRENCY, buildSkillPackage)),
+  );
 
   return {
     roots: input.roots,
     skills,
+    packages,
     diagnostics,
     findings,
   };
@@ -163,6 +178,11 @@ const readSkillTask = async (task: SkillReadTask): Promise<SkillReadResult> => {
     },
   };
 };
+
+const buildSkillPackage = async (skill: SkillRecord): Promise<SkillPackage> => ({
+  skill,
+  artifacts: await discoverSkillArtifacts(skill),
+});
 
 const buildDisabledSkillFilter = (
   disabledSkills: DisabledSkillSelectors | undefined,

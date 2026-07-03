@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added package artifact discovery metadata to scan results, including script/resource/config files and symlink status.
 - Added package security model types for future artifact, capability, priority, and cross-file evidence reporting.
 - Added a full-screen interactive TTY dashboard with scan progress, usage metrics, cleanup candidates, and keyboard-driven next-step actions.
 - Added a public security-rule validator API surface for future malicious skill detection rules.
