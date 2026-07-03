@@ -9,6 +9,7 @@ import {
   writeJsonReport,
 } from "../src/cli/utils/json-mode.js";
 import {
+  buildSecurityReviewIncidents,
   buildScanReport,
   discoverSkillRoots,
   type Finding,
@@ -147,7 +148,7 @@ describe("scan reports", () => {
     expect(resolveScanExitCode(report)).toBe(0);
     expect(resolveScanExitCode(report, { failOn: "warning" })).toBe(0);
     expect(renderHumanSummary(report)).toContain(
-      "Security findings: 1 suspicious skill patterns (low: 1)",
+      "Security review: 1 incident from 1 suspicious pattern (low: 1)",
     );
   });
 
@@ -207,7 +208,7 @@ describe("scan reports", () => {
     expect(resolveScanExitCode(report, { failOnSecurity: "P2" })).toBe(1);
   });
 
-  it("renders a security findings summary when security findings exist", () => {
+  it("renders a security review summary when security findings exist", () => {
     const report = buildScanReport({
       version: "0.0.0-test",
       directory,
@@ -230,11 +231,82 @@ describe("scan reports", () => {
     });
 
     expect(renderHumanSummary(report)).toContain(
-      "Security findings: 1 suspicious skill patterns (medium: 1); priorities P0: 1; capabilities bypasses_approval: 1",
+      "Security review: 1 incident from 1 suspicious pattern (medium: 1); priorities P0: 1; capabilities bypasses_approval: 1",
     );
     expect(report.securityPriorityCounts).toEqual({ P0: 1, P1: 0, P2: 0 });
     expect(report.securityCapabilityCounts).toEqual({ bypasses_approval: 1 });
     expect(renderHumanSummary(report)).toContain("Issues: none");
+  });
+
+  it("groups related security findings into review incidents", () => {
+    const findings = [
+      makeFinding({
+        ruleId: "SKILL003_SECRET_ACCESS",
+        severity: "warning",
+        category: "security",
+        priority: "P0",
+        capabilities: ["reads_secrets"],
+        evidenceChain: {
+          summary: "Reads credentials.",
+          items: [
+            {
+              path: "/repo/.agents/skills/example/scripts/sync.sh",
+              capability: "reads_secrets",
+            },
+          ],
+        },
+      }),
+      makeFinding({
+        ruleId: "SKILL004_EXFIL_CHAIN",
+        severity: "warning",
+        category: "security",
+        priority: "P0",
+        capabilities: ["network_egress"],
+        evidenceChain: {
+          summary: "Uploads credentials.",
+          items: [
+            {
+              path: "/repo/.agents/skills/example/scripts/sync.sh",
+              capability: "reads_secrets",
+            },
+            {
+              path: "/repo/.agents/skills/example/scripts/sync.sh",
+              capability: "network_egress",
+            },
+          ],
+        },
+      }),
+      makeFinding({
+        ruleId: "SKILL102_MISSING_DENYLIST",
+        severity: "warning",
+        category: "security",
+        priority: "P1",
+        capabilities: ["reads_secrets"],
+        evidenceChain: {
+          summary: "Missing deny rules.",
+          items: [
+            {
+              path: "/repo/.agents/skills/example/scripts/sync.sh",
+              capability: "reads_secrets",
+            },
+          ],
+        },
+      }),
+    ];
+
+    const incidents = buildSecurityReviewIncidents(findings);
+
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]).toMatchObject({
+      primaryFinding: expect.objectContaining({ ruleId: "SKILL004_EXFIL_CHAIN" }),
+      relatedRuleIds: [
+        "SKILL004_EXFIL_CHAIN",
+        "SKILL003_SECRET_ACCESS",
+        "SKILL102_MISSING_DENYLIST",
+      ],
+      capabilities: ["network_egress", "reads_secrets"],
+      artifactPath: "/repo/.agents/skills/example/scripts/sync.sh",
+    });
   });
 
   it("fails when diagnostics include blocking errors", async () => {

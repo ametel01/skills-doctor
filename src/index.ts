@@ -66,10 +66,12 @@ export {
 export { buildMissingSkillFinding, validateStructuralRules } from "./domain/rules/structural.js";
 export { scanSkillRoots } from "./domain/scan-skills.js";
 export {
+  buildSecurityReviewIncidents,
   renderHumanSummary,
   resolveScanExitCode,
   type ScanExitCodeOptions,
   type ScanGateSeverity,
+  type SecurityReviewIncident,
   summarizeFindings,
 } from "./domain/summarize-findings.js";
 export type {

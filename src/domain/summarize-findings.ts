@@ -24,6 +24,17 @@ export type SummaryGroup = {
   readonly count: number;
 };
 
+export type SecurityReviewIncident = {
+  readonly primaryFinding: Finding;
+  readonly findings: readonly Finding[];
+  readonly priority: SecurityPriority | undefined;
+  readonly skillName: string | undefined;
+  readonly skillPath: string;
+  readonly artifactPath: string;
+  readonly relatedRuleIds: readonly string[];
+  readonly capabilities: readonly CapabilityKind[];
+};
+
 export type RenderHumanSummaryOptions = {
   readonly includeScore?: boolean | undefined;
   readonly color?: boolean | undefined;
@@ -93,11 +104,12 @@ export const renderHumanSummary = (
     );
   }
   if (summary.securityCount > 0) {
+    const incidents = buildSecurityReviewIncidents(report.findings);
     const confidence = formatSecurityConfidence(summary.securityConfidenceCounts);
     const priorities = formatSecurityPriorities(report.securityPriorityCounts);
     const capabilities = formatSecurityCapabilities(report.securityCapabilityCounts);
     lines.push(
-      `${label("Security findings", shouldColor)}: ${warning(String(summary.securityCount), shouldColor)} suspicious skill patterns${confidence === "" ? "" : ` (${confidence})`}${priorities === "" ? "" : `; ${priorities}`}${capabilities === "" ? "" : `; ${capabilities}`}`,
+      `${label("Security review", shouldColor)}: ${warning(String(incidents.length), shouldColor)} incident${incidents.length === 1 ? "" : "s"} from ${warning(String(summary.securityCount), shouldColor)} suspicious pattern${summary.securityCount === 1 ? "" : "s"}${confidence === "" ? "" : ` (${confidence})`}${priorities === "" ? "" : `; ${priorities}`}${capabilities === "" ? "" : `; ${capabilities}`}`,
     );
   }
   if (report.usage !== undefined) {
@@ -131,6 +143,105 @@ const countSeverity = (findings: readonly Finding[], severity: Finding["severity
 
 const qualityFindings = (findings: readonly Finding[]): readonly Finding[] =>
   findings.filter((finding) => finding.category !== "security");
+
+export const buildSecurityReviewIncidents = (
+  findings: readonly Finding[],
+): readonly SecurityReviewIncident[] => {
+  const groups = new Map<string, Finding[]>();
+  for (const finding of findings.filter((candidate) => candidate.category === "security")) {
+    const key = securityIncidentKey(finding);
+    groups.set(key, [...(groups.get(key) ?? []), finding]);
+  }
+
+  return [...groups.values()]
+    .map((groupFindings) => {
+      const sortedFindings = [...groupFindings].sort(compareSecurityFindingsForReview);
+      const primaryFinding = sortedFindings[0] ?? groupFindings[0];
+      if (primaryFinding === undefined) {
+        throw new Error("Security incident group must contain at least one finding.");
+      }
+      return {
+        primaryFinding,
+        findings: sortedFindings,
+        priority: primaryFinding.priority,
+        skillName: primaryFinding.skillName,
+        skillPath: primaryFinding.skillPath,
+        artifactPath: findingArtifactPath(primaryFinding),
+        relatedRuleIds: [...new Set(sortedFindings.map((finding) => finding.ruleId))],
+        capabilities: [
+          ...new Set(sortedFindings.flatMap((finding) => finding.capabilities ?? [])),
+        ].sort(),
+      };
+    })
+    .sort(compareSecurityIncidentsForReview);
+};
+
+const securityIncidentKey = (finding: Finding): string =>
+  [finding.skillPath, findingArtifactPath(finding), classifySecurityIncident(finding)].join("\0");
+
+const findingArtifactPath = (finding: Finding): string =>
+  finding.evidenceChain?.items[0]?.path ?? finding.evidence?.path ?? finding.skillPath;
+
+const classifySecurityIncident = (finding: Finding): string => {
+  const capabilities = new Set(finding.capabilities ?? []);
+  if (
+    finding.ruleId === "SKILL004_EXFIL_CHAIN" ||
+    ((finding.ruleId === "SKILL003_SECRET_ACCESS" ||
+      finding.ruleId === "SKILL102_MISSING_DENYLIST" ||
+      finding.ruleId === "SKILL105_CROSS_MODAL_MISMATCH") &&
+      (capabilities.has("reads_secrets") || capabilities.has("network_egress")))
+  ) {
+    return "data-exfiltration";
+  }
+  if (
+    finding.ruleId === "SKILL002_PERMISSION_BYPASS" ||
+    finding.ruleId === "SKILL101_BROAD_ALLOWED_TOOLS" ||
+    finding.ruleId === "SKILL107_UNTRUSTED_MCP" ||
+    finding.ruleId === "SKILL108_MCP_SCOPE_EXCESS" ||
+    capabilities.has("broad_tool_access") ||
+    capabilities.has("mcp_access") ||
+    capabilities.has("bypasses_approval")
+  ) {
+    return "permissions";
+  }
+  if (finding.priority === "P2") return "hygiene";
+  return finding.ruleId;
+};
+
+const compareSecurityIncidentsForReview = (
+  left: SecurityReviewIncident,
+  right: SecurityReviewIncident,
+): number =>
+  securityPriorityRank(right.priority ?? "P2") - securityPriorityRank(left.priority ?? "P2") ||
+  compareSecurityFindingsForReview(left.primaryFinding, right.primaryFinding) ||
+  left.artifactPath.localeCompare(right.artifactPath);
+
+const compareSecurityFindingsForReview = (left: Finding, right: Finding): number =>
+  securityPriorityRank(right.priority ?? "P2") - securityPriorityRank(left.priority ?? "P2") ||
+  securityRuleRank(left.ruleId) - securityRuleRank(right.ruleId) ||
+  left.ruleId.localeCompare(right.ruleId);
+
+const SECURITY_RULE_REVIEW_ORDER = [
+  "SKILL004_EXFIL_CHAIN",
+  "SKILL007_REMOTE_CODE_EXEC",
+  "SKILL003_SECRET_ACCESS",
+  "SKILL006_PERSISTENCE",
+  "SKILL005_DESTRUCTIVE_COMMANDS",
+  "SKILL002_PERMISSION_BYPASS",
+  "SKILL008_OBFUSCATION",
+  "SKILL107_UNTRUSTED_MCP",
+  "SKILL108_MCP_SCOPE_EXCESS",
+  "SKILL101_BROAD_ALLOWED_TOOLS",
+  "SKILL102_MISSING_DENYLIST",
+  "SKILL105_CROSS_MODAL_MISMATCH",
+  "SKILL104_EXTERNAL_DEPENDENCY",
+  "SKILL106_SELF_MODIFYING_SKILL",
+] as const;
+
+const securityRuleRank = (ruleId: string): number => {
+  const index = (SECURITY_RULE_REVIEW_ORDER as readonly string[]).indexOf(ruleId);
+  return index === -1 ? SECURITY_RULE_REVIEW_ORDER.length : index;
+};
 
 const countSecurityConfidence = (
   findings: readonly Finding[],

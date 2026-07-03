@@ -17,10 +17,12 @@ import { groupFindingsByKey } from "../../domain/group-findings.js";
 import { readCodexDisabledSkillConfig } from "../../domain/read-codex-disabled-skill-config.js";
 import { scanSkillRoots } from "../../domain/scan-skills.js";
 import {
+  buildSecurityReviewIncidents,
   renderHumanSummary,
   resolveScanExitCode,
   type ScanExitCodeOptions,
   type ScanGateSeverity,
+  type SecurityReviewIncident,
 } from "../../domain/summarize-findings.js";
 import type { Diagnostic, Finding, SecurityPriority, SkillRoot } from "../../domain/types.js";
 import { prepareCleanupHandoff } from "../utils/cleanup-handoff-to-agent.js";
@@ -965,22 +967,30 @@ const renderSecurityFindings = (
   options: RenderTerminalOptions = {},
 ): string => {
   const shouldColor = Boolean(options.color);
+  const incidents = buildSecurityReviewIncidents(findings);
   const lines = [
-    `${usageLabel("Security report", shouldColor)}: ${warning(String(findings.length), shouldColor)} suspicious skill pattern${findings.length === 1 ? "" : "s"}`,
+    `${usageLabel("Security review", shouldColor)}: ${warning(String(incidents.length), shouldColor)} incident${incidents.length === 1 ? "" : "s"} from ${warning(String(findings.length), shouldColor)} suspicious pattern${findings.length === 1 ? "" : "s"}`,
     "",
   ];
-  for (const finding of findings) {
-    const location = finding.skillName ?? finding.skillPath;
+  for (const incident of incidents) {
+    const finding = incident.primaryFinding;
+    const priority = finding.priority ?? "security";
+    const location = incident.skillName ?? incident.skillPath;
     lines.push(
-      `${colorizeSeverity(`[${finding.severity}]`, finding.severity, shouldColor)} ${accent(finding.ruleId, shouldColor)} ${dim(location, shouldColor)}`,
-      formatFindingLocation(finding),
+      `${colorizeSeverity(`[${priority}]`, finding.severity, shouldColor)} ${accent(finding.title, shouldColor)}`,
+      `${usageLabel("Skill", shouldColor)}: ${dim(location, shouldColor)}`,
+      `${usageLabel("Artifact", shouldColor)}: ${dim(formatIncidentArtifact(incident), shouldColor)}`,
       finding.message,
-      ...formatSecurityMetadataLines(finding, shouldColor),
+      `${usageLabel("Related signals", shouldColor)}: ${incident.relatedRuleIds.join(", ")}`,
+      ...(incident.capabilities.length === 0
+        ? []
+        : [`${usageLabel("Capabilities", shouldColor)}: ${incident.capabilities.join(", ")}`]),
       `${usageLabel("Suggestion", shouldColor)}: ${finding.suggestion}`,
     );
-    if (finding.evidence !== undefined) {
+    const evidence = finding.evidence ?? incident.findings.find((item) => item.evidence)?.evidence;
+    if (evidence !== undefined) {
       lines.push(`${usageLabel("Evidence", shouldColor)}:`);
-      for (const line of finding.evidence.excerpt) {
+      for (const line of evidence.excerpt.slice(0, 2)) {
         const marker = line.highlighted ? ">" : " ";
         const renderedLine = `${marker} ${String(line.line).padStart(4, " ")} | ${line.text}`;
         lines.push(
@@ -1013,25 +1023,13 @@ const renderFindingsBySkill = (
     .concat("\n");
 };
 
+const formatIncidentArtifact = (incident: SecurityReviewIncident): string => {
+  const line = incident.primaryFinding.evidence?.startLine ?? incident.primaryFinding.line;
+  return `${incident.artifactPath}${line === undefined ? "" : `:${line}`}`;
+};
+
 const formatFindingLocation = (finding: Finding): string =>
   `Location: ${finding.skillPath}${finding.line === undefined ? "" : `:${finding.line}`}`;
-
-const formatSecurityMetadataLines = (finding: Finding, shouldColor: boolean): readonly string[] => {
-  const lines: string[] = [];
-  if (finding.confidence !== undefined) {
-    lines.push(`${usageLabel("Confidence", shouldColor)}: ${finding.confidence}`);
-  }
-  if (finding.rationale !== undefined) {
-    lines.push(`${usageLabel("Rationale", shouldColor)}: ${finding.rationale}`);
-  }
-  if (finding.counterevidence !== undefined && finding.counterevidence.length > 0) {
-    lines.push(`${usageLabel("Counterevidence", shouldColor)}:`);
-    for (const item of finding.counterevidence) {
-      lines.push(`- ${item}`);
-    }
-  }
-  return lines;
-};
 
 const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions = {}): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";

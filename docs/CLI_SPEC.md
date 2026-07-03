@@ -204,7 +204,8 @@ Responsibilities:
 - `build-report.ts`: build the stable scan report object.
 - `calculate-score.ts`: compute the score from distinct blocking and warning
   rules.
-- `summarize-findings.ts`: group findings for human output.
+- `summarize-findings.ts`: group findings for human output, including compact
+  security review incidents built from related raw security findings.
 - `write-findings-directory.ts`: write `findings.json`, `findings.md`, and
   per-skill report files.
 - `write-cleanup-directory.ts`: write `usage.json` and `usage.md` cleanup
@@ -243,10 +244,13 @@ Security findings remain in `findings` and count toward `findingCount` and
 `warningCount`, `adviceCount`, or per-skill quality counts. P0 findings fail by
 default; `--fail-on-security P1` or `--fail-on-security P2` opts into stricter
 security gates. P2 security hygiene findings contribute to score, so
-`--min-score` can gate them. Human summary output includes security confidence,
-priority, and capability counts when present; JSON mode exposes the same
-optional `priority`, `capabilities`, `confidence`, `rationale`, and
-`counterevidence` fields on findings.
+`--min-score` can gate them. Human summary output shows security review incident
+counts, raw suspicious-pattern counts, security confidence, priority, and
+capability counts when present. Interactive security review groups related
+signals by skill, artifact, and risk chain and hides rationale/counterevidence
+noise by default. JSON mode exposes the raw rule findings with optional
+`priority`, `capabilities`, `confidence`, `rationale`, and `counterevidence`
+fields.
 
 Report files written for repair handoff are local artifacts under the OS temp
 directory, for example `/tmp/skills-doctor-<uid>/reports/<timestamp>/` on

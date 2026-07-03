@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added security review incident grouping for human output while preserving raw security findings in JSON reports.
 - Added security priority and capability aggregate counts to JSON reports, plus `--fail-on-security` for stricter P1/P2 security gates.
 - Added P2 security hygiene rules for missing boundaries, missing human approval, ambiguous authority, unpinned tools, hidden artifacts, and large context bait.
 - Added P1 high-risk security rules for broad tool grants, missing denylists, broad implicit invocation, external dependencies, cross-modal mismatch, self-modifying skills, MCP exposure, and MCP OAuth scope excess.
@@ -20,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Human security review output now groups related rule hits into concise incidents and omits rationale/counterevidence noise by default.
 - P0 security findings now fail scan exit-code gates by default.
 - P2 security hygiene findings now contribute to scan score while remaining separate from default severity-based exit gates.
 - Security validation now evaluates package records and can report risky non-`SKILL.md` artifacts while preserving the existing `validateSecurityRules()` API.

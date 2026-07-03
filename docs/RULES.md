@@ -201,3 +201,10 @@ can be made blocking with `--fail-on-security`. P0 and P1 security findings are
 excluded from the quality score; P2 security hygiene findings affect score so
 `--min-score` can gate them. `--fail-on warning` and `--fail-on advice` apply to
 quality findings and error diagnostics, not to security findings.
+
+Human review output groups related raw security findings into incidents by
+skill, artifact, and risk chain. For example, a package script that reads
+credentials and posts them to a collector is shown as one exfiltration incident
+with related rule IDs instead of separate secret-access, network-transfer,
+missing-denylist, and cross-modal-mismatch cards. JSON reports keep every raw
+finding for automation and detailed repair workflows.

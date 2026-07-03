@@ -93,6 +93,8 @@ Reports and rendering:
 - `ruleCatalog`: structured metadata for emitted rule IDs, severities,
   optional security priorities, categories, and descriptions.
 - `summarizeFindings(findings)`: groups counts by severity, skill, and category.
+- `buildSecurityReviewIncidents(findings)`: groups related raw security findings
+  into human-review incidents by skill, artifact, and risk chain.
 - `renderHumanSummary(report, options?)`: renders a short text summary.
 - `resolveScanExitCode(report)`: returns `1` when blocking findings or error
   diagnostics remain, otherwise `0`. Pass `ScanExitCodeOptions` for stricter
@@ -383,6 +385,9 @@ and `evidenceChain` fields. These are optional so existing `schemaVersion: 1`
 reports remain compatible when package-level scanning is not active.
 P2 security hygiene findings contribute to `score`; P0 and P1 security findings
 remain separate from quality scoring and default severity gates.
+Use `buildSecurityReviewIncidents()` for human review surfaces that should
+collapse related findings into one incident while keeping raw JSON findings
+available for automation and repair agents.
 
 Use `ruleCatalog` when integrations need structured rule metadata, including
 P0/P1/P2 security priorities when present, without scraping Markdown:

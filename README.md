@@ -99,9 +99,12 @@ instructions or capabilities such as `reads_secrets`, `network_egress`,
 are not proof that a skill author intended harm.
 
 Quality findings are grouped as blocking errors, warnings, and advisory improvements.
-Security findings are reported separately as suspicious skill patterns with
-source excerpts, priority, capabilities, confidence, rationale, and
-counterevidence for false-positive review when that metadata is available.
+Security findings stay rule-by-rule in JSON, but human output groups related
+signals into review incidents so a secret read, network transfer, missing
+denylist, and cross-modal mismatch can be reviewed as one issue. Incident cards
+show the primary risk, source excerpt, priority, related rule IDs, and
+capabilities; detailed rationale and counterevidence remain available in JSON
+and repair report files.
 The human summary opens with a score header showing a face, `0` to `100` score,
 label, and proportional terminal bar. The score starts at 100 and deducts 1.5
 points for each distinct error rule and 0.75 points for each distinct warning
