@@ -1,0 +1,505 @@
+/* Hallmark · pre-emit critique: P5 H4 E4 S5 R4 V4
+ * Hallmark · genre: modern-minimal · macrostructure: Workbench · theme: Terminal · enrichment: none · nav: N8 · footer: Ft4
+ */
+import readline from "node:readline";
+import type { ScanReport } from "../../domain/build-report.js";
+import type { Choice } from "./prompts.js";
+import { PromptCancelledError } from "./prompts.js";
+
+export type TuiDashboardOptions = {
+  readonly columns?: number | undefined;
+  readonly color?: boolean | undefined;
+  readonly selectedIndex?: number | undefined;
+};
+
+export type TuiSelectOptions = TuiDashboardOptions & {
+  readonly write: (message: string) => void;
+  readonly stdin?: NodeJS.ReadStream | undefined;
+};
+
+const MIN_COLUMNS = 76;
+const DEFAULT_COLUMNS = 120;
+const MAX_COLUMNS = 150;
+const HEADER_GAP = 4;
+const BRAND_WIDTH = 40;
+const ESC = "\x1b[";
+export const TUI_CLEAR_SCREEN = `${ESC}?25l${ESC}3J${ESC}2J${ESC}H`;
+// biome-ignore lint/complexity/useRegexLiterals: literal ESC triggers noControlCharactersInRegex.
+const ANSI_PATTERN = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
+
+export const renderTuiDashboard = <Value extends string>(
+  report: ScanReport,
+  choices: readonly Choice<Value>[],
+  options: TuiDashboardOptions = {},
+): string => {
+  const width = normalizeColumns(options.columns);
+  const selectedIndex = options.selectedIndex ?? 0;
+  const shouldColor = Boolean(options.color);
+  const leftWidth = getHeaderLeftWidth(width);
+  const lines: string[] = [
+    ...renderHeader(report, width, shouldColor),
+    "",
+    ...renderProgress(report, leftWidth, shouldColor),
+    "",
+    ...renderMetricStrip(report, width, shouldColor),
+  ];
+
+  if (choices.length > 0) {
+    lines.push("", ...renderNextStepPanel(choices, selectedIndex, width, shouldColor));
+  }
+
+  lines.push("", renderControls(shouldColor));
+  return `${lines.map((line) => paintScreenLine(line, width, shouldColor)).join("\n")}\n`;
+};
+
+export const selectTuiAction = async <Value extends string>(
+  report: ScanReport,
+  choices: readonly Choice<Value>[],
+  options: TuiSelectOptions,
+): Promise<Value> => {
+  if (choices.length === 0) {
+    throw new Error("TUI select requires at least one choice.");
+  }
+
+  const stdin = options.stdin ?? process.stdin;
+  if (stdin.setRawMode === undefined) {
+    throw new Error("TUI select requires a raw-mode TTY.");
+  }
+
+  let selectedIndex = 0;
+  const render = () => {
+    options.write(
+      `${TUI_CLEAR_SCREEN}${renderTuiDashboard(report, choices, {
+        columns: options.columns,
+        color: options.color,
+        selectedIndex,
+      })}`,
+    );
+  };
+
+  return await new Promise<Value>((resolve, reject) => {
+    const wasRaw = stdin.isRaw;
+
+    const cleanup = () => {
+      stdin.off("keypress", onKeypress);
+      stdin.setRawMode?.(wasRaw === true);
+      stdin.pause();
+      options.write(`${ESC}?25h`);
+    };
+
+    const finish = (value: Value) => {
+      cleanup();
+      resolve(value);
+    };
+
+    const cancel = () => {
+      cleanup();
+      reject(new PromptCancelledError());
+    };
+
+    const onKeypress = (character: string | undefined, key: readline.Key) => {
+      if (key.ctrl && key.name === "c") {
+        cancel();
+        return;
+      }
+      if (key.name === "up" || key.name === "k") {
+        selectedIndex = (selectedIndex - 1 + choices.length) % choices.length;
+        render();
+        return;
+      }
+      if (key.name === "down" || key.name === "j") {
+        selectedIndex = (selectedIndex + 1) % choices.length;
+        render();
+        return;
+      }
+      if (key.name === "home") {
+        selectedIndex = 0;
+        render();
+        return;
+      }
+      if (key.name === "end") {
+        selectedIndex = choices.length - 1;
+        render();
+        return;
+      }
+      if (key.name === "return" || key.name === "enter") {
+        const choice = choices[selectedIndex];
+        if (choice !== undefined) finish(choice.value);
+        return;
+      }
+      if (character === "q") {
+        const exitChoice = choices.find((choice) => choice.value === "exit");
+        const fallbackChoice = exitChoice ?? choices[selectedIndex] ?? choices[0];
+        if (fallbackChoice !== undefined) finish(fallbackChoice.value);
+        return;
+      }
+
+      const shortcutIndex = resolveShortcutIndex(character, choices);
+      if (shortcutIndex !== undefined) {
+        selectedIndex = shortcutIndex;
+        render();
+        const choice = choices[selectedIndex];
+        if (choice !== undefined) finish(choice.value);
+      }
+    };
+
+    readline.emitKeypressEvents(stdin);
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.on("keypress", onKeypress);
+    render();
+  });
+};
+
+export const waitForTuiContinue = async (input: {
+  readonly write: (message: string) => void;
+  readonly color?: boolean | undefined;
+  readonly stdin?: NodeJS.ReadStream | undefined;
+}): Promise<void> => {
+  const stdin = input.stdin ?? process.stdin;
+  if (stdin.setRawMode === undefined) return;
+
+  input.write(`\n${dim("Press any key to return to the dashboard.", Boolean(input.color))}`);
+  await new Promise<void>((resolve, reject) => {
+    const wasRaw = stdin.isRaw;
+    const cleanup = () => {
+      stdin.off("keypress", onKeypress);
+      stdin.setRawMode?.(wasRaw === true);
+      stdin.pause();
+      input.write("\n");
+    };
+    const onKeypress = (_character: string | undefined, key: readline.Key) => {
+      cleanup();
+      if (key.ctrl && key.name === "c") {
+        reject(new PromptCancelledError());
+        return;
+      }
+      resolve();
+    };
+
+    readline.emitKeypressEvents(stdin);
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.on("keypress", onKeypress);
+  });
+};
+
+const renderHeader = (
+  report: ScanReport,
+  width: number,
+  shouldColor: boolean,
+): readonly string[] => {
+  const brand = renderBrandBox(BRAND_WIDTH, shouldColor);
+  const leftWidth = getHeaderLeftWidth(width);
+  const statusLines = [
+    `${green("›", shouldColor)}  ${success("npx", shouldColor)} ${bright("skills-doctor@latest", shouldColor)}`,
+    `${success("✓", shouldColor)}  Scanning scope: ${formatScanScope(report)}`,
+    `${success("✓", shouldColor)}  Skill source: ${formatSkillSource(report)}`,
+    `${info("ⓘ", shouldColor)}  Reading Codex skill settings...`,
+    `${info("ⓘ", shouldColor)}  Scanning skills...`,
+    "",
+  ].map((line) => padRight(line, leftWidth));
+
+  return statusLines.map(
+    (line, index) => `${line}${" ".repeat(HEADER_GAP)}${brand[index] ?? " ".repeat(BRAND_WIDTH)}`,
+  );
+};
+
+const renderBrandBox = (width: number, shouldColor: boolean): readonly string[] => {
+  const art = [
+    `${violet("╭────╮", shouldColor)}  ${strong("skills-doctor", shouldColor)}`,
+    `${blue("│ ◠◠ │", shouldColor)}  ${muted("Diagnose. Optimize. Focus.", shouldColor)}`,
+    `${blue("╰─┬──╯", shouldColor)}  ${subtleBadge(" v1.0.0 ", shouldColor)}`,
+    `${blue("  ╰─", shouldColor)}${info("●", shouldColor)}${green("●", shouldColor)}${amber("●", shouldColor)}`,
+  ];
+  return box("", art, width, shouldColor);
+};
+
+const renderProgress = (
+  report: ScanReport,
+  width: number,
+  shouldColor: boolean,
+): readonly string[] => {
+  const innerWidth = width - 4;
+  const label = blue("Progress", shouldColor);
+  const count = `${report.skillCount} / ${report.skillCount}`;
+  const status = `${success("◉", shouldColor)} ${success("Complete", shouldColor)}`;
+  const barWidth = Math.max(16, innerWidth);
+  const bar = success("━".repeat(barWidth), shouldColor);
+
+  return box(
+    `${label}${" ".repeat(Math.max(1, innerWidth - visibleLength(label) - count.length - 12))}${dim(count, shouldColor)}  ${status}`,
+    [bar],
+    width,
+    shouldColor,
+  );
+};
+
+const renderMetricStrip = (
+  report: ScanReport,
+  width: number,
+  shouldColor: boolean,
+): readonly string[] => {
+  const metrics = buildMetrics(report, shouldColor);
+  const count = metrics.length;
+  const columnWidth = Math.max(15, Math.floor((width - 2 - (count - 1)) / count));
+  const top = `${border("╭", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("╮", shouldColor)}`;
+  const bottom = `${border("╰", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("╯", shouldColor)}`;
+  const rows = [0, 1, 2, 3, 4].map((rowIndex) => {
+    const cells = metrics.map((metric) => padRight(` ${metric[rowIndex] ?? ""}`, columnWidth));
+    return `${border("│", shouldColor)}${cells.join(border("│", shouldColor))}${border("│", shouldColor)}`;
+  });
+  return [top, ...rows, bottom];
+};
+
+const buildMetrics = (report: ScanReport, shouldColor: boolean): readonly (readonly string[])[] => {
+  const usage = report.usage;
+  const cleanupCandidateCount =
+    usage?.recommendations.filter((recommendation) => recommendation.action === "disable-candidate")
+      .length ?? 0;
+  const pressure = usage?.contextPressure.level ?? "unknown";
+  return [
+    [
+      `${blue("⌕", shouldColor)} ${blue("Skills", shouldColor)}`,
+      "",
+      strong(String(report.skillCount), shouldColor),
+      muted("scanned", shouldColor),
+      "",
+    ],
+    [
+      `${green("◇", shouldColor)} ${green("Issues", shouldColor)}`,
+      "",
+      report.qualityFindingCount === 0
+        ? strong("none", shouldColor)
+        : danger(String(report.qualityFindingCount), shouldColor),
+      report.qualityFindingCount === 0
+        ? muted("detected", shouldColor)
+        : muted(
+            `${report.errorCount} error · ${report.warningCount} warning · ${report.adviceCount} tip`,
+            shouldColor,
+          ),
+    ],
+    [
+      `${violet("◷", shouldColor)} ${violet("Usage analysis", shouldColor)}`,
+      "",
+      usage === undefined
+        ? dim("not run", shouldColor)
+        : `${success(String(usage.usedSkillCount), shouldColor)} ${dim("used", shouldColor)}`,
+      usage === undefined
+        ? ""
+        : `${amber(String(usage.unusedSkillCount), shouldColor)} ${dim("unused", shouldColor)}`,
+      usage === undefined
+        ? ""
+        : `${dim(String(usage.unknownSkillCount), shouldColor)} ${dim("unknown", shouldColor)}`,
+    ],
+    [
+      `${orange("◌", shouldColor)} ${orange("Context budget", shouldColor)}`,
+      "",
+      strong(pressure, shouldColor),
+      muted("pressure", shouldColor),
+      renderPressureDots(pressure, shouldColor),
+    ],
+    [
+      `${amber("✧", shouldColor)} ${amber("Cleanup candidates", shouldColor)}`,
+      "",
+      cleanupCandidateCount === 0
+        ? strong("none", shouldColor)
+        : strong(String(cleanupCandidateCount), shouldColor),
+      muted("enabled unused skills", shouldColor),
+    ],
+  ];
+};
+
+const renderNextStepPanel = <Value extends string>(
+  choices: readonly Choice<Value>[],
+  selectedIndex: number,
+  width: number,
+  shouldColor: boolean,
+): readonly string[] => {
+  const title = `${blue("⚑", shouldColor)} ${blue("Next step", shouldColor)}`;
+  const lines = choices.map((choice, index) =>
+    renderChoiceRow(choice, index, selectedIndex === index, width - 6, shouldColor),
+  );
+  return framedPanel([title, ...lines], width, selectedBorder, shouldColor);
+};
+
+const renderChoiceRow = <Value extends string>(
+  choice: Choice<Value>,
+  index: number,
+  selected: boolean,
+  width: number,
+  shouldColor: boolean,
+): string => {
+  const shortcut = choice.value === "exit" ? "0" : String(index + 1);
+  const shortcutBadge = selected
+    ? selectedBadge(` ${shortcut} `, shouldColor)
+    : subtleBadge(` ${shortcut} `, shouldColor);
+  const displayName = formatDashboardChoiceName(choice.name);
+  const name = selected ? bright(displayName, shouldColor) : displayName;
+  const description = choice.description === undefined ? "" : dim(choice.description, shouldColor);
+  const arrow = dim("→", shouldColor);
+  const left = `${shortcutBadge}  ${name}`;
+  const descriptionColumn = Math.max(28, Math.floor(width * 0.28));
+  const content = `${padRight(left, descriptionColumn)} ${description}`;
+  const row = `${padRight(content, width - visibleLength(arrow) - 1)} ${arrow}`;
+  return selected
+    ? `${selectedBorder("╭", shouldColor)}${selectedRow(row, shouldColor)}${selectedBorder("╮", shouldColor)}`
+    : ` ${row} `;
+};
+
+const formatDashboardChoiceName = (name: string): string => {
+  if (name === "Choose unused skills to disable") return "Disable unused skills";
+  if (name === "Fix selected security findings with Claude or Codex") {
+    return "Fix selected security findings";
+  }
+  return name;
+};
+
+const renderControls = (shouldColor: boolean): string =>
+  [
+    subtleBadge("↑", shouldColor),
+    subtleBadge("↓", shouldColor),
+    dim(" navigate   ", shouldColor),
+    subtleBadge("↵", shouldColor),
+    dim(" select   ", shouldColor),
+    subtleBadge("q", shouldColor),
+    dim(" quit", shouldColor),
+  ].join(" ");
+
+const box = (
+  title: string,
+  bodyLines: readonly string[],
+  width: number,
+  shouldColor: boolean,
+): readonly string[] => {
+  const titleSegment = title.length === 0 ? "" : ` ${title} `;
+  const topRuleWidth = Math.max(0, width - 2 - visibleLength(titleSegment));
+  return [
+    `${border("╭", shouldColor)}${titleSegment}${border("─".repeat(topRuleWidth), shouldColor)}${border("╮", shouldColor)}`,
+    ...bodyLines.map((line) => {
+      const content = padRight(line, width - 4);
+      return `${border("│", shouldColor)} ${content} ${border("│", shouldColor)}`;
+    }),
+    `${border("╰", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("╯", shouldColor)}`,
+  ];
+};
+
+const framedPanel = (
+  bodyLines: readonly string[],
+  width: number,
+  panelBorder: (text: string, shouldColor: boolean) => string,
+  shouldColor: boolean,
+): readonly string[] => [
+  `${panelBorder("╭", shouldColor)}${panelBorder("─".repeat(width - 2), shouldColor)}${panelBorder("╮", shouldColor)}`,
+  ...bodyLines.map((line) => {
+    const content = padRight(line, width - 4);
+    return `${panelBorder("│", shouldColor)} ${content} ${panelBorder("│", shouldColor)}`;
+  }),
+  `${panelBorder("╰", shouldColor)}${panelBorder("─".repeat(width - 2), shouldColor)}${panelBorder("╯", shouldColor)}`,
+];
+
+const getHeaderLeftWidth = (width: number): number =>
+  Math.max(32, width - BRAND_WIDTH - HEADER_GAP);
+
+const normalizeColumns = (columns: number | undefined): number => {
+  if (columns === undefined || !Number.isFinite(columns)) return DEFAULT_COLUMNS;
+  return Math.max(MIN_COLUMNS, Math.min(MAX_COLUMNS, Math.floor(columns)));
+};
+
+const formatScanScope = (report: ScanReport): string => {
+  const sources = new Set(report.scannedRoots.map((root) => root.source));
+  if (sources.has("global") && sources.has("local")) {
+    return "Global/root and local project skills";
+  }
+  if (sources.has("global")) return "Global/root skills (~/.claude/skills, ~/.agents/skills)";
+  if (sources.has("local")) return "Local project skills (./.claude/skills, ./.agents/skills)";
+  if (sources.has("custom")) return "Custom skills path";
+  return "Selected skills";
+};
+
+const formatSkillSource = (report: ScanReport): string => {
+  const ecosystems = new Set(report.scannedRoots.map((root) => root.ecosystem));
+  if (ecosystems.has("claude") && ecosystems.has("codex")) {
+    return "Claude and Codex/agents skills";
+  }
+  if (ecosystems.has("codex")) return "Codex/agents (.agents/skills)";
+  if (ecosystems.has("claude")) return "Claude (.claude/skills)";
+  return "Custom skills";
+};
+
+const renderPressureDots = (level: string, shouldColor: boolean): string => {
+  if (level === "low") return `${success("●", shouldColor)} ${dim("● ●", shouldColor)}`;
+  if (level === "medium") return `${amber("● ●", shouldColor)} ${dim("●", shouldColor)}`;
+  if (level === "high") return danger("● ● ●", shouldColor);
+  return dim("● ● ●", shouldColor);
+};
+
+const resolveShortcutIndex = <Value extends string>(
+  character: string | undefined,
+  choices: readonly Choice<Value>[],
+): number | undefined => {
+  if (character === undefined) return undefined;
+  if (character === "0") {
+    const exitIndex = choices.findIndex((choice) => choice.value === "exit");
+    return exitIndex >= 0 ? exitIndex : undefined;
+  }
+  const numeric = Number(character);
+  if (!Number.isInteger(numeric) || numeric < 1) return undefined;
+  const index = numeric - 1;
+  return index < choices.length ? index : undefined;
+};
+
+const padRight = (text: string, width: number): string =>
+  `${text}${" ".repeat(Math.max(0, width - visibleLength(text)))}`;
+
+const visibleLength = (text: string): number => stripAnsi(text).length;
+
+const stripAnsi = (text: string): string => text.replace(ANSI_PATTERN, "");
+
+const selectedRow = (text: string, shouldColor: boolean): string =>
+  shouldColor ? `\x1b[48;2;19;38;79m${text}\x1b[49m` : `> ${text}`;
+
+const selectedBadge = (text: string, shouldColor: boolean): string =>
+  shouldColor
+    ? `\x1b[38;2;238;245;255m\x1b[48;2;57;105;215m${text}\x1b[49m\x1b[39m`
+    : `[${text.trim()}]`;
+
+const subtleBadge = (text: string, shouldColor: boolean): string =>
+  shouldColor
+    ? `\x1b[38;2;224;234;255m\x1b[48;2;38;49;65m${text}\x1b[49m\x1b[39m`
+    : `[${text.trim()}]`;
+
+const paintScreenLine = (line: string, width: number, shouldColor: boolean): string => {
+  const padded = padRight(line, width);
+  return shouldColor ? `\x1b[48;2;3;10;18m${padded}\x1b[49m` : padded;
+};
+
+const strong = (text: string, shouldColor: boolean): string =>
+  shouldColor ? `\x1b[1m${fg(text, 238, 245, 255)}\x1b[22m` : text;
+const bright = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 238, 245, 255) : text;
+const muted = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 145, 154, 170) : text;
+const dim = (text: string, shouldColor: boolean): string =>
+  shouldColor && text.length > 0 ? `\x1b[2m${muted(text, shouldColor)}\x1b[22m` : text;
+const success = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 88, 218, 112) : text;
+const green = success;
+const danger = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 255, 93, 102) : text;
+const amber = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 244, 204, 89) : text;
+const blue = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 83, 134, 255) : text;
+const violet = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 182, 94, 255) : text;
+const orange = amber;
+const info = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 90, 230, 212) : text;
+const border = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 48, 59, 76) : text;
+const selectedBorder = (text: string, shouldColor: boolean): string =>
+  shouldColor ? fg(text, 83, 134, 255) : text;
+
+const fg = (text: string, red: number, greenValue: number, blueValue: number): string =>
+  text.length > 0 ? `\x1b[38;2;${red};${greenValue};${blueValue}m${text}\x1b[39m` : text;

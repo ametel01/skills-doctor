@@ -8,12 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added a full-screen interactive TTY dashboard with scan progress, usage metrics, cleanup candidates, and keyboard-driven next-step actions.
 - Documented the malicious skill detector rules, report category, and public API.
 - Added a public security-rule validator API surface for future malicious skill detection rules.
 - Established progress tracking for the malicious skill detector implementation plan.
 
 ### Changed
 
+- Replaced the plain interactive review prompt with a painted ANSI dashboard while preserving JSON, non-interactive, and injected-prompt output paths.
 - Separated security findings from quality issue counts, scoring, and default exit gates.
 - Added source excerpts to security findings and a per-finding security repair selection flow.
 
