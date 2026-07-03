@@ -118,8 +118,8 @@ describe("scan reports", () => {
         }),
       }),
     );
-    expect(resolveScanExitCode(report)).toBe(0);
-    expect(resolveScanExitCode(report, { failOn: "warning" })).toBe(0);
+    expect(resolveScanExitCode(report)).toBe(1);
+    expect(resolveScanExitCode(report, { failOn: "warning" })).toBe(1);
   });
 
   it("does not fail or reduce score for low-confidence security findings", () => {
@@ -181,6 +181,32 @@ describe("scan reports", () => {
     expect(resolveScanExitCode(report, { minScore: 100 })).toBe(1);
   });
 
+  it("supports stricter opt-in security priority gates", () => {
+    const report = buildScanReport({
+      version: "0.0.0-test",
+      directory,
+      elapsedMilliseconds: 12,
+      scan: {
+        roots: [],
+        skills: [],
+        diagnostics: [],
+        findings: [
+          makeFinding({
+            ruleId: "SKILL101_BROAD_ALLOWED_TOOLS",
+            severity: "warning",
+            category: "security",
+            priority: "P1",
+            confidence: "medium",
+          }),
+        ],
+      },
+    });
+
+    expect(resolveScanExitCode(report)).toBe(0);
+    expect(resolveScanExitCode(report, { failOnSecurity: "P1" })).toBe(1);
+    expect(resolveScanExitCode(report, { failOnSecurity: "P2" })).toBe(1);
+  });
+
   it("renders a security findings summary when security findings exist", () => {
     const report = buildScanReport({
       version: "0.0.0-test",
@@ -195,6 +221,8 @@ describe("scan reports", () => {
             ruleId: "SKILL001_PROMPT_OVERRIDE",
             severity: "warning",
             category: "security",
+            priority: "P0",
+            capabilities: ["bypasses_approval"],
             confidence: "medium",
           }),
         ],
@@ -202,8 +230,10 @@ describe("scan reports", () => {
     });
 
     expect(renderHumanSummary(report)).toContain(
-      "Security findings: 1 suspicious skill patterns (medium: 1)",
+      "Security findings: 1 suspicious skill patterns (medium: 1); priorities P0: 1; capabilities bypasses_approval: 1",
     );
+    expect(report.securityPriorityCounts).toEqual({ P0: 1, P1: 0, P2: 0 });
+    expect(report.securityCapabilityCounts).toEqual({ bypasses_approval: 1 });
     expect(renderHumanSummary(report)).toContain("Issues: none");
   });
 

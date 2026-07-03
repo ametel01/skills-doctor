@@ -20,6 +20,10 @@ export const buildProgram = (options: BuildProgramOptions = {}): Command => {
     .option("--usage", "include local Codex skill usage analysis")
     .option("--no-logs", "skip local Codex log discovery in interactive usage analysis")
     .option("--fail-on <severity>", "fail on findings at or above severity: error, warning, advice")
+    .option(
+      "--fail-on-security <priority>",
+      "fail on security findings at or above priority: P0, P1, P2",
+    )
     .option("--min-score <number>", "fail when the scan score is below this threshold")
     .option("-y, --yes", "skip prompts and use conservative defaults")
     .action(
@@ -32,6 +36,7 @@ export const buildProgram = (options: BuildProgramOptions = {}): Command => {
           logs?: boolean;
           yes?: boolean;
           failOn?: string;
+          failOnSecurity?: string;
           minScore?: string;
         },
       ) => {
@@ -87,7 +92,7 @@ const resolvePreParseJsonMode = (
 const findDirectoryArg = (args: readonly string[]): string | undefined =>
   args.find((arg, index) => isDirectoryArg(args, arg, index));
 
-const VALUE_FLAGS = new Set(["--fail-on", "--min-score"]);
+const VALUE_FLAGS = new Set(["--fail-on", "--fail-on-security", "--min-score"]);
 
 const isDirectoryArg = (args: readonly string[], arg: string, index: number): boolean => {
   if (arg === "--") return false;

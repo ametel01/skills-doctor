@@ -126,6 +126,7 @@ The root command currently accepts:
 - `--usage`
 - `--no-logs`
 - `--fail-on <severity>`
+- `--fail-on-security <priority>`
 - `--min-score <number>`
 - `-y, --yes`
 - `-v, --version`
@@ -237,11 +238,15 @@ Scan reports include:
 - handoff-request status
 
 Security findings remain in `findings` and count toward `findingCount` and
-`securityFindingCount`. They do not contribute to `errorCount`, `warningCount`,
-`adviceCount`, per-skill quality counts, score penalties, or default exit-code
-gates. Human summary output includes security confidence counts when security
-findings have confidence metadata; JSON mode exposes the same optional
-`confidence`, `rationale`, and `counterevidence` fields on each finding.
+`securityFindingCount`. Reports also include `securityPriorityCounts` and
+`securityCapabilityCounts`. Security findings do not contribute to `errorCount`,
+`warningCount`, `adviceCount`, or per-skill quality counts. P0 findings fail by
+default; `--fail-on-security P1` or `--fail-on-security P2` opts into stricter
+security gates. P2 security hygiene findings contribute to score, so
+`--min-score` can gate them. Human summary output includes security confidence,
+priority, and capability counts when present; JSON mode exposes the same
+optional `priority`, `capabilities`, `confidence`, `rationale`, and
+`counterevidence` fields on findings.
 
 Report files written for repair handoff are local artifacts under the OS temp
 directory, for example `/tmp/skills-doctor-<uid>/reports/<timestamp>/` on

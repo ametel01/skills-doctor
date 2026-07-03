@@ -6,7 +6,14 @@ import type {
 import { calculateScore, type ScoreSummary } from "./calculate-score.js";
 import type { ContextBudgetPressure } from "./discover-usage-sources.js";
 import { indexFindingsBySkillPath } from "./group-findings.js";
-import type { Diagnostic, Finding, ScanResult, SkillRoot } from "./types.js";
+import type {
+  CapabilityKind,
+  Diagnostic,
+  Finding,
+  ScanResult,
+  SecurityPriority,
+  SkillRoot,
+} from "./types.js";
 
 export type SkillSummary = {
   readonly ecosystem: string;
@@ -31,6 +38,8 @@ export type ScanReport = {
   readonly findingCount: number;
   readonly qualityFindingCount: number;
   readonly securityFindingCount: number;
+  readonly securityPriorityCounts: Readonly<Record<SecurityPriority, number>>;
+  readonly securityCapabilityCounts: Partial<Record<CapabilityKind, number>>;
   readonly errorCount: number;
   readonly warningCount: number;
   readonly adviceCount: number;
@@ -74,7 +83,8 @@ export type BuildScanReportUsageInput = {
 export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
   const qualityFindings = input.scan.findings.filter(isQualityFinding);
   const scoreFindings = input.scan.findings.filter(isScoreFinding);
-  const securityFindingCount = input.scan.findings.length - qualityFindings.length;
+  const securityFindings = input.scan.findings.filter(isSecurityFinding);
+  const securityFindingCount = securityFindings.length;
   const errorCount = countSeverity(qualityFindings, "error");
   const warningCount = countSeverity(qualityFindings, "warning");
   const adviceCount = countSeverity(qualityFindings, "advice");
@@ -94,6 +104,8 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
     findingCount: input.scan.findings.length,
     qualityFindingCount: qualityFindings.length,
     securityFindingCount,
+    securityPriorityCounts: countSecurityPriorities(securityFindings),
+    securityCapabilityCounts: countSecurityCapabilities(securityFindings),
     errorCount,
     warningCount,
     adviceCount,
@@ -145,8 +157,29 @@ const countSeverity = (findings: readonly Finding[], severity: Finding["severity
   findings.filter((finding) => finding.severity === severity).length;
 
 const isQualityFinding = (finding: Finding): boolean => finding.category !== "security";
+const isSecurityFinding = (finding: Finding): boolean => finding.category === "security";
 const isScoreFinding = (finding: Finding): boolean =>
   finding.category !== "security" || finding.priority === "P2";
+
+const countSecurityPriorities = (
+  findings: readonly Finding[],
+): Readonly<Record<SecurityPriority, number>> => ({
+  P0: findings.filter((finding) => finding.priority === "P0").length,
+  P1: findings.filter((finding) => finding.priority === "P1").length,
+  P2: findings.filter((finding) => finding.priority === "P2").length,
+});
+
+const countSecurityCapabilities = (
+  findings: readonly Finding[],
+): Partial<Record<CapabilityKind, number>> => {
+  const counts: Partial<Record<CapabilityKind, number>> = {};
+  for (const finding of findings) {
+    for (const capability of finding.capabilities ?? []) {
+      counts[capability] = (counts[capability] ?? 0) + 1;
+    }
+  }
+  return counts;
+};
 
 const countDiagnosticSeverity = (
   diagnostics: readonly Diagnostic[],

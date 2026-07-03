@@ -521,6 +521,15 @@ const makeReport = (findings: readonly Finding[], usage?: ScanReportUsage): Scan
     findingCount: findings.length,
     qualityFindingCount: findings.filter((finding) => finding.category !== "security").length,
     securityFindingCount: findings.filter((finding) => finding.category === "security").length,
+    securityPriorityCounts: {
+      P0: findings.filter((finding) => finding.category === "security" && finding.priority === "P0")
+        .length,
+      P1: findings.filter((finding) => finding.category === "security" && finding.priority === "P1")
+        .length,
+      P2: findings.filter((finding) => finding.category === "security" && finding.priority === "P2")
+        .length,
+    },
+    securityCapabilityCounts: {},
     errorCount: findings.filter((finding) => finding.severity === "error").length,
     warningCount: findings.filter((finding) => finding.severity === "warning").length,
     adviceCount: findings.filter((finding) => finding.severity === "advice").length,

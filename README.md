@@ -148,18 +148,19 @@ skills-doctor --json
 skills-doctor --json --json-compact
 skills-doctor --yes --json
 skills-doctor --yes --json --fail-on warning
+skills-doctor --yes --json --fail-on-security P1
 skills-doctor --yes --json --min-score 95
 skills-doctor --yes --json --usage
 ```
 
 JSON mode writes one machine-readable report to stdout and suppresses prompts
 and spinners. Human logs and expected errors stay out of stdout.
-By default, the exit code fails only for blocking errors and error diagnostics.
-Use `--fail-on warning`, `--fail-on advice`, or `--min-score <number>` for stricter CI gates.
-Security findings are separate review warnings by default. They do not fail the
-quality gate or affect the quality score, even with stricter quality gates,
-unless a future security-specific gate is added. JSON findings can include
-security confidence, rationale, and counterevidence fields.
+By default, the exit code fails for blocking quality errors, error diagnostics,
+and P0 security findings. Use `--fail-on warning`, `--fail-on advice`,
+`--fail-on-security P1`, `--fail-on-security P2`, or `--min-score <number>` for
+stricter CI gates. JSON reports include security priority counts, capability
+counts, and per-finding security fields such as `priority`, `capabilities`,
+`confidence`, `rationale`, and `counterevidence`.
 
 Use `--usage` to include local Codex usage analysis in JSON or non-interactive
 runs. Interactive runs analyze usage by default; pass `--no-logs` to skip local

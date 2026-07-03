@@ -256,6 +256,9 @@ describe("scanAction", () => {
     await expect(scanAction(".", { yes: true, minScore: "101" })).rejects.toBeInstanceOf(
       CliInputError,
     );
+    await expect(scanAction(".", { yes: true, failOnSecurity: "bad" })).rejects.toBeInstanceOf(
+      CliInputError,
+    );
   });
 
   it("imports the CLI module without running main", async () => {

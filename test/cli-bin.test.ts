@@ -159,7 +159,7 @@ describe("CLI bin", () => {
     const result = await runPackagedCli(["--json", "--json-compact", "--yes", directory]);
     const report = parseSingleJsonReport(result.stdout);
 
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(1);
     expect(report.findings).toContainEqual(
       expect.objectContaining({
         ruleId: "SKILL001_PROMPT_OVERRIDE",

@@ -260,6 +260,8 @@ type ScanReport = {
   readonly findingCount: number;
   readonly qualityFindingCount: number;
   readonly securityFindingCount: number;
+  readonly securityPriorityCounts: Readonly<Record<"P0" | "P1" | "P2", number>>;
+  readonly securityCapabilityCounts: Partial<Record<CapabilityKind, number>>;
   readonly errorCount: number;
   readonly warningCount: number;
   readonly adviceCount: number;
@@ -284,6 +286,9 @@ Fields:
 - `findingCount`: total number of quality and security findings.
 - `qualityFindingCount`: number of non-security quality findings.
 - `securityFindingCount`: number of security review findings.
+- `securityPriorityCounts`: count of security findings by P0/P1/P2 priority.
+- `securityCapabilityCounts`: count of capability labels referenced by security
+  findings, such as `reads_secrets`, `network_egress`, or `mcp_access`.
 - `errorCount`: number of blocking quality error findings.
 - `warningCount`: number of quality warning findings.
 - `adviceCount`: number of quality advisory findings.
@@ -451,16 +456,17 @@ type SkillSummary = {
 
 `resolveScanExitCode(report, options?)` mirrors the CLI blocking behavior:
 
-- returns `0` when there are no quality error findings and no error diagnostics.
+- returns `0` when there are no quality error findings, no error diagnostics,
+  and no default-blocking P0 security findings.
 - returns `1` when `report.errorCount > 0` or any diagnostic has
   `severity: "error"`.
 
 Quality warnings and advice appear in the report but do not make the exit code
 fail. Pass `{ failOn: "warning" }`, `{ failOn: "advice" }`, or
 `{ minScore: 95 }` to opt into stricter automation gates. These options match
-the CLI `--fail-on` and `--min-score` flags. Security findings are separate
-review warnings and are excluded from quality exit gates, including stricter
-`failOn` options.
+the CLI `--fail-on` and `--min-score` flags. P0 security findings fail by
+default. Pass `{ failOnSecurity: "P1" }` or `{ failOnSecurity: "P2" }` to make
+lower-priority security findings block too; this matches `--fail-on-security`.
 
 ## Compatibility
 

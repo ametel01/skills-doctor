@@ -182,6 +182,8 @@ describe("fixture scanner coverage", () => {
       "findingCount",
       "qualityFindingCount",
       "securityFindingCount",
+      "securityPriorityCounts",
+      "securityCapabilityCounts",
       "errorCount",
       "warningCount",
       "adviceCount",

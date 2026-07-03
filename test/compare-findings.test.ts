@@ -79,6 +79,8 @@ const makeReport = (errorCount: number): ScanReport => {
     findingCount: errorCount,
     qualityFindingCount: errorCount,
     securityFindingCount: 0,
+    securityPriorityCounts: { P0: 0, P1: 0, P2: 0 },
+    securityCapabilityCounts: {},
     errorCount,
     warningCount: 0,
     adviceCount: 0,

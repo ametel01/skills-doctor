@@ -1,10 +1,11 @@
 import type { ScanReport } from "./build-report.js";
-import type { Finding, FindingConfidence } from "./types.js";
+import type { CapabilityKind, Finding, FindingConfidence, SecurityPriority } from "./types.js";
 
 export type ScanGateSeverity = Finding["severity"];
 
 export type ScanExitCodeOptions = {
   readonly failOn?: ScanGateSeverity | undefined;
+  readonly failOnSecurity?: SecurityPriority | undefined;
   readonly minScore?: number | undefined;
 };
 
@@ -57,6 +58,17 @@ export const resolveScanExitCode = (
   ) {
     return 1;
   }
+  const failOnSecurity = options.failOnSecurity ?? "P0";
+  if (
+    report.findings.some(
+      (finding) =>
+        finding.category === "security" &&
+        finding.priority !== undefined &&
+        securityPriorityRank(finding.priority) >= securityPriorityRank(failOnSecurity),
+    )
+  ) {
+    return 1;
+  }
   if (options.minScore !== undefined && report.score.value < options.minScore) return 1;
   return 0;
 };
@@ -82,8 +94,10 @@ export const renderHumanSummary = (
   }
   if (summary.securityCount > 0) {
     const confidence = formatSecurityConfidence(summary.securityConfidenceCounts);
+    const priorities = formatSecurityPriorities(report.securityPriorityCounts);
+    const capabilities = formatSecurityCapabilities(report.securityCapabilityCounts);
     lines.push(
-      `${label("Security findings", shouldColor)}: ${warning(String(summary.securityCount), shouldColor)} suspicious skill patterns${confidence === "" ? "" : ` (${confidence})`}`,
+      `${label("Security findings", shouldColor)}: ${warning(String(summary.securityCount), shouldColor)} suspicious skill patterns${confidence === "" ? "" : ` (${confidence})`}${priorities === "" ? "" : `; ${priorities}`}${capabilities === "" ? "" : `; ${capabilities}`}`,
     );
   }
   if (report.usage !== undefined) {
@@ -136,9 +150,30 @@ const formatSecurityConfidence = (counts: Readonly<Record<FindingConfidence, num
     .map((confidence) => `${confidence}: ${counts[confidence]}`)
     .join(", ");
 
+const formatSecurityPriorities = (counts: Readonly<Record<SecurityPriority, number>>): string => {
+  const parts = (["P0", "P1", "P2"] as const)
+    .filter((priority) => counts[priority] > 0)
+    .map((priority) => `${priority}: ${counts[priority]}`);
+  return parts.length === 0 ? "" : `priorities ${parts.join(", ")}`;
+};
+
+const formatSecurityCapabilities = (counts: Partial<Record<CapabilityKind, number>>): string => {
+  const parts = Object.entries(counts)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(0, 4)
+    .map(([capability, count]) => `${capability}: ${count}`);
+  return parts.length === 0 ? "" : `capabilities ${parts.join(", ")}`;
+};
+
 const severityRank = (severity: ScanGateSeverity): number => {
   if (severity === "error") return 3;
   if (severity === "warning") return 2;
+  return 1;
+};
+
+const securityPriorityRank = (priority: SecurityPriority): number => {
+  if (priority === "P0") return 3;
+  if (priority === "P1") return 2;
   return 1;
 };
 

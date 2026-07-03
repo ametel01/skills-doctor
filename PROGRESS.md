@@ -6,9 +6,9 @@
 - User gap summary from 2026-07-03
 
 ## Current Status
-- Status: Step 8 complete.
-- Current step: Step 9: Add Security Gates And Report Schema Output.
-- Next step: Step 9: Add Security Gates And Report Schema Output.
+- Status: Step 9 complete.
+- Current step: Step 10: Update Documentation And Public Rule Catalog.
+- Next step: Step 10: Update Documentation And Public Rule Catalog.
 
 ## Step Checklist
 - [x] Step 0: Progress and Changelog Tracking Setup
@@ -20,7 +20,7 @@
 - [x] Step 6: Implement P0 Blocker Rules
 - [x] Step 7: Implement P1 High-Risk Rules
 - [x] Step 8: Implement P2 Quality And Hygiene Rules
-- [ ] Step 9: Add Security Gates And Report Schema Output
+- [x] Step 9: Add Security Gates And Report Schema Output
 - [ ] Step 10: Update Documentation And Public Rule Catalog
 - [ ] Step 11: Add End-To-End Fixture Coverage
 - [ ] Step 12: Final Verification And Release Readiness
@@ -143,7 +143,19 @@ After each completed step, update this file with:
 - Changelog: Added `Added` and `Changed` entries for P2 hygiene rules and score impact.
 - Commit: Step 8 commit (`feat: implement p2 security hygiene rules`).
 
+### Step 9: Add Security Gates And Report Schema Output
+- Summary: Added `securityPriorityCounts` and `securityCapabilityCounts` to `ScanReport`, rendered priority/capability summaries in human output, made P0 security findings fail by default, added `failOnSecurity` domain gate support, and exposed `--fail-on-security P0|P1|P2` in the CLI.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run typecheck` passed.
+  - `bun run test` passed: 21 files, 239 tests.
+  - `bun run build` passed.
+- Changelog: Added `Added` and `Changed` entries for security report aggregates and gates.
+- Commit: Step 9 commit (`feat: expose security priorities and capability gates`).
+
 ## Update Log
+- 2026-07-03: Completed Step 9 full validation for security report aggregates, P0 default gates, and `--fail-on-security`.
 - 2026-07-03: Completed focused Step 8 validation for P2 rule IDs, package hygiene findings, score impact, and docs sync.
 - 2026-07-03: Completed focused Step 7 validation for P1 rule IDs, priorities, package capability findings, MCP checks, and docs sync.
 - 2026-07-03: Completed focused Step 6 validation for P0 rule IDs, priorities, standalone secret access, persistence, and docs sync.

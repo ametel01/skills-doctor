@@ -22,7 +22,7 @@ import {
   type ScanExitCodeOptions,
   type ScanGateSeverity,
 } from "../../domain/summarize-findings.js";
-import type { Diagnostic, Finding, SkillRoot } from "../../domain/types.js";
+import type { Diagnostic, Finding, SecurityPriority, SkillRoot } from "../../domain/types.js";
 import { prepareCleanupHandoff } from "../utils/cleanup-handoff-to-agent.js";
 import { CliInputError } from "../utils/handle-error.js";
 import { prepareRepairHandoff } from "../utils/handoff-to-agent.js";
@@ -51,6 +51,7 @@ export type ScanFlags = {
   readonly logs?: boolean;
   readonly yes?: boolean;
   readonly failOn?: string | undefined;
+  readonly failOnSecurity?: string | undefined;
   readonly minScore?: string | undefined;
 };
 
@@ -263,6 +264,7 @@ export const scanAction = async (
 
 const resolveGateOptions = (flags: ScanFlags): ScanExitCodeOptions => ({
   failOn: parseFailOnSeverity(flags.failOn),
+  failOnSecurity: parseFailOnSecurityPriority(flags.failOnSecurity),
   minScore: parseMinScore(flags.minScore),
 });
 
@@ -316,6 +318,13 @@ const parseFailOnSeverity = (value: string | undefined): ScanGateSeverity | unde
   if (value === undefined) return undefined;
   if (value === "error" || value === "warning" || value === "advice") return value;
   throw new CliInputError("Invalid --fail-on value. Use one of: error, warning, advice.");
+};
+
+const parseFailOnSecurityPriority = (value: string | undefined): SecurityPriority | undefined => {
+  if (value === undefined) return undefined;
+  const normalized = value.toUpperCase();
+  if (normalized === "P0" || normalized === "P1" || normalized === "P2") return normalized;
+  throw new CliInputError("Invalid --fail-on-security value. Use one of: P0, P1, P2.");
 };
 
 const parseMinScore = (value: string | undefined): number | undefined => {
