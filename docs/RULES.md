@@ -66,6 +66,33 @@ Security rules are deterministic heuristics for suspicious instructions or
 capabilities in `SKILL.md`. They are not proof of malicious intent; they flag
 content that should be removed or reviewed before a skill is trusted.
 
+The scanner first builds Markdown candidates from body lines, command fences,
+inline commands, table rows, nearby lines, and section context. A candidate
+becomes a reportable security finding only when the rule can assemble its
+required evidence after counterevidence filters run. Broad keyword matches,
+destination-only examples, or isolated command snippets are not enough by
+themselves.
+
+Intent is classified conservatively:
+
+- Harmful intent is direct guidance to subvert instructions, conceal behavior,
+  bypass confirmations, transfer secrets to external destinations, execute
+  fetched content, weaken safety controls, hide traces, or run obfuscated
+  external content.
+- Defensive intent includes guidance to refuse prompt injection, preserve
+  higher-priority instructions, protect secrets, require user confirmation, or
+  warn against unsafe commands. Defensive matches are suppressed unless the
+  same bounded context still contains a harmful source/action/destination or
+  fetch/execute story.
+- Operational intent includes ordinary setup and integration examples such as
+  webhook signing-secret configuration, official service API authentication,
+  remote docs or spec parsing, and local static parsing. These are suppressed
+  unless they also connect sensitive material to an unrelated external sink or
+  fetched content to execution.
+- Ambiguous intent covers partial evidence, such as a sensitive source with no
+  transfer destination or a remote URL with no execution sink. Ambiguous
+  candidates remain unreported until a rule-specific evidence story is present.
+
 | Rule ID | Severity | Category | What it checks |
 | --- | --- | --- | --- |
 | `prompt-injection-instruction` | warning | security | Skill instructions appear to subvert higher-priority instructions. |
@@ -75,3 +102,49 @@ content that should be removed or reviewed before a skill is trusted.
 | `destructive-command-high-risk` | warning | security | Skill instructions describe broad destructive or trace-hiding actions. |
 | `agent-safety-disablement` | warning | security | Skill instructions appear to disable sandboxing, permissions, or confirmation. |
 | `external-resource-obfuscation` | warning | security | Skill instructions appear to decode or stage obscured content for execution. |
+
+Evidence requirements by rule:
+
+- `prompt-injection-instruction` reports explicit instruction subversion,
+  concealment, confirmation bypass, or continuing after denial. Defensive prompt
+  injection guidance, secret-protection guidance, and confirmation requirements
+  are counterevidence and are filtered before reporting.
+- `secret-exfiltration-instruction` reports only when bounded Markdown context
+  contains a sensitive source, a connective transfer action, and a suspicious
+  external destination. Local webhook signing-secret setup, local signature
+  verification, and destination-only documentation are counterevidence.
+- `network-exfiltration-command` reports network or transfer commands when they
+  connect sensitive sources to a non-local external destination. Local
+  destinations, parse-only commands, and official service API authentication are
+  counterevidence unless secret material is also sent to an unrelated external
+  sink.
+- `remote-code-execution-bootstrap` reports remote fetch evidence paired with a
+  shell or interpreter execution sink in the same command flow, or prose that
+  explicitly says to execute fetched content. Remote docs/spec parsing,
+  parse-only pipelines, local static parsers, and unrelated inline snippets are
+  counterevidence.
+- `destructive-command-high-risk` reports broad deletion, trace removal, or
+  permission weakening when not framed as prevention or scoped confirmation
+  guidance.
+- `agent-safety-disablement` reports sandbox, permission, review, or
+  confirmation bypass instructions when they are not merely descriptive launch
+  previews or defensive examples.
+- `external-resource-obfuscation` reports decode-or-stage guidance for
+  obfuscated external content when paired with shell or interpreter execution.
+  Defensive warnings and decode-only fixture handling are counterevidence.
+
+Security findings include optional confidence metadata:
+
+- `high`: the rule found a complete evidence chain, such as
+  source/action/destination exfiltration evidence or remote fetch plus execution
+  evidence.
+- `medium`: the rule found explicit harmful prompt, destructive, safety bypass,
+  or obfuscation language after counterevidence filters ran.
+- `low`: supported by the report schema for future review hints. Current
+  built-in security rules do not emit low-confidence findings.
+
+Security findings are separate review warnings. They are counted in
+`findingCount` and `securityFindingCount`, but they are excluded from the
+quality score, per-skill quality counts, and default exit-code gates. `--fail-on
+warning`, `--fail-on advice`, and `--min-score` apply to quality findings and
+error diagnostics, not to security findings.
