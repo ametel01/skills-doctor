@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added durable issue-wave progress tracking for the evidence-based security scanner work.
 - Added a full-screen interactive TTY dashboard with scan progress, usage metrics, cleanup candidates, and keyboard-driven next-step actions.
 - Documented the malicious skill detector rules, report category, and public API.
 - Added a public security-rule validator API surface for future malicious skill detection rules.
