@@ -8,10 +8,12 @@ import type {
   FindingsDirectoryResult,
 } from "../../domain/write-findings-directory.js";
 import { writeFindingsDirectory } from "../../domain/write-findings-directory.js";
-import { CliInputError } from "./handle-error.js";
+import { BackToMainMenuError, CliInputError } from "./handle-error.js";
 import type { PromptAdapter } from "./prompts.js";
+import { BACK_TO_MAIN_MENU_VALUE, backToMainMenuChoice } from "./prompts.js";
 
 export type RepairFindingSubset = "errors" | "errors-and-warnings" | "all" | "selected-skills";
+type RepairFindingChoice = RepairFindingSubset | typeof BACK_TO_MAIN_MENU_VALUE;
 
 export type PreparedRepairHandoff = {
   readonly findings: readonly Finding[];
@@ -77,7 +79,7 @@ const chooseRepairFindings = async (
   report: ScanReport,
   prompts: PromptAdapter,
 ): Promise<readonly Finding[]> => {
-  const choices: Array<{ name: string; value: RepairFindingSubset }> = [];
+  const choices: Array<{ name: string; value: RepairFindingChoice }> = [];
   const qualityFindings = report.findings.filter(isQualityFinding);
   const qualitySkillPaths = new Set(qualityFindings.map((finding) => finding.skillPath));
   if (report.errorCount > 0) {
@@ -95,7 +97,14 @@ const chooseRepairFindings = async (
     choices.push({ name: "Selected skills", value: "selected-skills" });
   }
 
-  const subset = await prompts.select<RepairFindingSubset>("Choose findings to repair", choices);
+  const subset = await prompts.select<RepairFindingChoice>("Choose findings to repair", [
+    ...choices,
+    backToMainMenuChoice,
+  ]);
+
+  if (subset === BACK_TO_MAIN_MENU_VALUE) {
+    throw new BackToMainMenuError();
+  }
 
   if (subset === "errors") {
     return qualityFindings.filter((finding) => finding.severity === "error");

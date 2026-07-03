@@ -317,8 +317,10 @@ a hard dependency.
 
 `ScanReportUsage` contains source paths, source diagnostics, context pressure,
 aggregate counts, `skillsByUsage`, recommendations, and all disable-candidate
-recommendations. It does not include raw user prompts or assistant transcript
-text.
+recommendations. Each `skillsByUsage` item includes `usageCount` for all
+detected uses in analyzed sources and `recentUsageCount` for detected
+timestamped uses in the 30-day recent window. It does not include raw user
+prompts or assistant transcript text.
 
 ## Finding
 

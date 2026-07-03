@@ -243,6 +243,34 @@ describe("cleanup handoff", () => {
     expect(prompt).not.toContain("skipped-unused");
   });
 
+  it("builds a tailored prompt for selected non-disable usage recommendations", () => {
+    const baseUsage = makeUsage();
+    const shortenRecommendation = {
+      action: "shorten-description" as const,
+      skillName: "used-skill",
+      skillPath: "/repo/.agents/skills/used-skill/SKILL.md",
+      reason: "Skill appears useful but has high description context cost.",
+      confidence: "high" as const,
+    };
+    const report = makeReport([], {
+      ...baseUsage,
+      recommendations: [...baseUsage.recommendations, shortenRecommendation],
+    });
+
+    const prompt = buildCleanupHandoffPrompt({
+      report,
+      recommendations: [shortenRecommendation],
+      reportDirectory: "/tmp/usage-report",
+    });
+
+    expect(prompt).toContain("Fix selected Agent Skills usage recommendations");
+    expect(prompt).toContain("Usage repair rules:");
+    expect(prompt).toContain("`shorten-description`: reduce context-heavy skill descriptions");
+    expect(prompt).toContain("shorten-description used-skill");
+    expect(prompt).not.toContain("Only disable skills with a `disable-candidate` recommendation");
+    expect(prompt).not.toContain("Selected unused skills to disable");
+  });
+
   it("writes usage JSON and Markdown cleanup reports", async () => {
     const report = makeReport([], makeUsage());
 
@@ -296,6 +324,35 @@ describe("cleanup handoff", () => {
     await expect(readFile(promptPath, "utf8")).resolves.toContain("npx skills-doctor@latest");
     await expect(readFile(path.join(reportDirectory, "usage.json"), "utf8")).resolves.toContain(
       "unused-skill",
+    );
+  });
+
+  it("prepares cleanup reports for selected non-disable recommendations", async () => {
+    const baseUsage = makeUsage();
+    const shortenRecommendation = {
+      action: "shorten-description" as const,
+      skillName: "used-skill",
+      skillPath: "/repo/.agents/skills/used-skill/SKILL.md",
+      reason: "Skill appears useful but has high description context cost.",
+      confidence: "high" as const,
+    };
+    const report = makeReport([], {
+      ...baseUsage,
+      recommendations: [...baseUsage.recommendations, shortenRecommendation],
+    });
+
+    const handoff = await prepareCleanupHandoff({
+      report,
+      recommendations: [shortenRecommendation],
+      outputRoot: directory,
+      timestamp: "2026-06-20T01:02:03.004Z",
+    });
+
+    expect(handoff.prompt).toContain("shorten-description used-skill");
+    const promptPath = handoff.promptPath;
+    if (promptPath === undefined) throw new Error("Expected cleanup prompt path.");
+    await expect(readFile(promptPath, "utf8")).resolves.toContain(
+      "`shorten-description`: reduce context-heavy skill descriptions",
     );
   });
 
@@ -595,6 +652,7 @@ const makeUsage = (): ScanReportUsage => ({
       rootPath: "/repo/.agents/skills",
       skillPath: "/repo/.agents/skills/used-skill/SKILL.md",
       usageCount: 2,
+      recentUsageCount: 2,
       tier: "recent",
       confidence: "high",
       lastUsedAt: "2026-06-20T00:00:00.000Z",
@@ -617,6 +675,7 @@ const makeUsage = (): ScanReportUsage => ({
       rootPath: "/repo/.agents/skills",
       skillPath: "/repo/.agents/skills/unused-skill/SKILL.md",
       usageCount: 0,
+      recentUsageCount: 0,
       tier: "unused",
       confidence: "none",
       pluginName: "github",

@@ -123,16 +123,22 @@ available, reads local Codex usage traces from known `~/.codex` paths. It can:
 2. Show usage ranking and cleanup recommendations when usage analysis ran.
 3. Let you choose a repair subset: errors, errors plus warnings, all findings,
    or selected skills.
-4. Detect local `claude` and `codex` executables.
-5. Write a full report under the OS temp directory, for example
+4. Let you launch a scoped agent handoff for a selected usage recommendation
+   group, such as disable candidates or context-heavy descriptions.
+5. Detect local `claude` and `codex` executables.
+6. Write a full report under the OS temp directory, for example
    `/tmp/skills-doctor-<uid>/reports/<timestamp>/` on Linux.
-6. Generate a compact `handoff-prompt.md` tailored to the selected findings or
+7. Generate a compact `handoff-prompt.md` tailored to the selected findings or
    `cleanup-prompt.md` tailored to usage cleanup.
-7. Preview the launch command.
-8. Ask for explicit confirmation before handing the terminal to the selected
+8. Preview the launch command.
+9. Ask for explicit confirmation before handing the terminal to the selected
    agent.
-9. Re-scan the same roots after the agent exits and report changed findings or
+10. Re-scan the same roots after the agent exits and report changed findings or
    cleanup summary details.
+
+Nested repair and cleanup selection menus let you return to the next-step
+chooser without launching an agent. Checkbox prompts show `b back` in the footer
+next to the normal navigation keys.
 
 Launch mappings:
 
@@ -143,10 +149,12 @@ Skills Doctor does not edit skill files during the scan phase. Repairs are made
 only by the local agent after you confirm the handoff.
 
 Cleanup handoff writes `usage.json`, `usage.md`, and `cleanup-prompt.md` before
-any agent launch. The prompt tells the agent to preserve recent/frequent skills,
-never delete skills, ignore non-disable recommendations during cleanup, disable
-unused global/plugin skills only through Codex `[[skills.config]]` entries in
-`~/.codex/config.toml`, and verify with `npx skills-doctor@latest`.
+any agent launch. Disable prompts tell the agent to preserve recent/frequent
+skills, never delete skills, ignore non-disable recommendations during cleanup,
+disable unused global/plugin skills only through Codex `[[skills.config]]`
+entries in `~/.codex/config.toml`, and verify with `npx skills-doctor@latest`.
+Grouped usage-recommendation prompts are scoped to the selected action, such as
+shortening context-heavy descriptions or reviewing duplicate skill names.
 Skills already disabled in Codex config are omitted from scan, usage-ranking,
 and cleanup-candidate results.
 

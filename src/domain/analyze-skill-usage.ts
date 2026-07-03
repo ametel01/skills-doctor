@@ -36,6 +36,7 @@ export type SkillUsageSummary = {
   readonly rootPath: string;
   readonly skillPath: string;
   readonly usageCount: number;
+  readonly recentUsageCount: number;
   readonly tier: SkillUsageTier;
   readonly confidence: SkillUsageConfidence;
   readonly lastUsedAt?: string | undefined;
@@ -240,6 +241,10 @@ const buildAnalysis = (input: {
   const summaries = input.catalog.map((catalogSkill) => {
     const skillEvents = eventsBySkill.get(skillKey(catalogSkill.skill)) ?? [];
     const usageCount = skillEvents.length;
+    const recentUsageCount = skillEvents.filter((event) => {
+      if (event.timestamp === undefined) return false;
+      return isRecent(event.timestamp, input.now, input.recentWindowDays);
+    }).length;
     const lastUsedAt = latestTimestamp(skillEvents);
     const confidence = summarizeConfidence(skillEvents);
     const tier = classifyTier({
@@ -258,6 +263,7 @@ const buildAnalysis = (input: {
       rootPath: catalogSkill.skill.rootPath,
       skillPath: catalogSkill.skill.skillPath,
       usageCount,
+      recentUsageCount,
       tier,
       confidence,
       ...(lastUsedAt === undefined ? {} : { lastUsedAt }),

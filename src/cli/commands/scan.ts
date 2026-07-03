@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   type AnalyzeSkillUsageInput,
   analyzeSkillUsage,
+  type SkillCleanupAction,
   type SkillCleanupRecommendation,
 } from "../../domain/analyze-skill-usage.js";
 import type { ScanReport } from "../../domain/build-report.js";
@@ -26,7 +27,11 @@ import {
 } from "../../domain/summarize-findings.js";
 import type { Diagnostic, Finding, SecurityPriority, SkillRoot } from "../../domain/types.js";
 import { prepareCleanupHandoff } from "../utils/cleanup-handoff-to-agent.js";
-import { CliInputError } from "../utils/handle-error.js";
+import {
+  BackToMainMenuError,
+  CliInputError,
+  isBackToMainMenuError,
+} from "../utils/handle-error.js";
 import { prepareRepairHandoff } from "../utils/handoff-to-agent.js";
 import { enableJsonMode, writeJsonReport } from "../utils/json-mode.js";
 import type { AgentAvailabilityProbe, RepairAgentLauncher } from "../utils/launch-agent.js";
@@ -35,7 +40,13 @@ import {
   formatRepairAgentPreview,
   launchRepairAgent,
 } from "../utils/launch-agent.js";
-import { type Choice, inquirerPromptAdapter, type PromptAdapter } from "../utils/prompts.js";
+import {
+  BACK_TO_MAIN_MENU_VALUE,
+  backToMainMenuChoice,
+  type Choice,
+  inquirerPromptAdapter,
+  type PromptAdapter,
+} from "../utils/prompts.js";
 import { printScoreHeader } from "../utils/render-score-header.js";
 import { shouldSkipPrompts } from "../utils/should-skip-prompts.js";
 import { createSpinner, type SpinnerFactory } from "../utils/spinner.js";
@@ -95,6 +106,7 @@ type ReviewAction =
   | "by-skill"
   | "repair"
   | "cleanup"
+  | "usage-recommendation-repair"
   | "usage-ranking"
   | "cleanup-recommendations"
   | "exit";
@@ -304,7 +316,7 @@ const buildUsageReportInput = async (input: {
 };
 
 const shouldShowReviewMenu = (report: ScanReport): boolean =>
-  report.findingCount > 0 || (report.usage?.topRecommendations.length ?? 0) > 0;
+  report.findingCount > 0 || hasActionableUsageRecommendations(report);
 
 const shouldUseTuiDashboard = (input: {
   readonly prompts: PromptAdapter;
@@ -520,7 +532,9 @@ const reviewScan = async (
 
     if (action === "exit") return;
     if (action === "cleanup") {
-      return runCleanupAgentFlow(report, input);
+      const nextReport = await runCleanupAgentFlow(report, input);
+      if (nextReport !== undefined) return nextReport;
+      continue;
     }
     if (action === "usage-ranking") {
       write(renderUsageRanking(report, { color: input.color }));
@@ -532,16 +546,31 @@ const reviewScan = async (
       await maybeWaitForTuiContinue(input);
       continue;
     }
+    if (action === "usage-recommendation-repair") {
+      const nextReport = await runUsageRecommendationAgentFlow(report, input);
+      if (nextReport !== undefined) return nextReport;
+      continue;
+    }
     if (action === "repair") {
-      return runRepairAgentFlow(report, input);
+      const nextReport = await runRepairAgentFlow(report, input);
+      if (nextReport !== undefined) return nextReport;
+      continue;
     }
     if (action === "security-repair") {
-      const selectedSecurityFindings = await selectSecurityFindings(report, input);
+      let selectedSecurityFindings: readonly Finding[];
+      try {
+        selectedSecurityFindings = await selectSecurityFindings(report, input);
+      } catch (error) {
+        if (isBackToMainMenuError(error)) continue;
+        throw error;
+      }
       if (selectedSecurityFindings.length === 0) {
         write("Security repair handoff cancelled.\n");
         continue;
       }
-      return runRepairAgentFlow(report, input, selectedSecurityFindings);
+      const nextReport = await runRepairAgentFlow(report, input, selectedSecurityFindings);
+      if (nextReport !== undefined) return nextReport;
+      continue;
     }
 
     const selectedFindings =
@@ -573,15 +602,32 @@ const buildReviewActionChoices = (report: ScanReport): readonly Choice<ReviewAct
           value: "cleanup" as const,
           description: "Clean up your skills configuration",
         },
+      ]
+    : []),
+  ...(report.usage !== undefined
+    ? [
         {
           name: "View usage ranking",
           value: "usage-ranking" as const,
           description: "See which skills are used most",
         },
+      ]
+    : []),
+  ...(report.usage !== undefined && report.usage.recommendations.length > 0
+    ? [
         {
           name: "View usage recommendations",
           value: "cleanup-recommendations" as const,
           description: "Get suggestions to optimize usage",
+        },
+      ]
+    : []),
+  ...(hasActionableUsageRecommendations(report)
+    ? [
+        {
+          name: "Fix usage recommendations with Claude or Codex",
+          value: "usage-recommendation-repair" as const,
+          description: "Create a scoped usage repair handoff",
         },
       ]
     : []),
@@ -656,24 +702,52 @@ const maybeWaitForTuiContinue = async (input: ReviewFindingsInput): Promise<void
 
 const hasSecurityFindings = (report: ScanReport): boolean => report.securityFindingCount > 0;
 
+const hasActionableUsageRecommendations = (report: ScanReport): boolean =>
+  report.usage?.recommendations.some((recommendation) => recommendation.action !== "keep") ?? false;
+
 const selectSecurityFindings = async (
   report: ScanReport,
   input: Pick<ReviewFindingsInput, "prompts">,
 ): Promise<readonly Finding[]> => {
   const securityFindings = report.findings.filter((finding) => finding.category === "security");
-  const selectedIndexes = new Set(
-    await input.prompts.checkbox(
-      "Select security findings to send for repair",
-      securityFindings.map((finding, index) => ({
-        name: `${finding.skillName ?? path.basename(path.dirname(finding.skillPath))}: ${finding.ruleId}`,
-        value: String(index),
-        description: formatFindingLocation(finding),
+  const severityGroups = groupSecurityFindingsBySeverity(securityFindings);
+  const selectedValues = new Set(
+    await input.prompts.checkbox("Select security findings to send for repair", [
+      ...severityGroups.map((group) => ({
+        name: `${group.severity} severity (${group.findings.length})`,
+        value: securitySeverityChoiceValue(group.severity),
+        description: `Select all ${group.severity.toLowerCase()} security findings`,
         checked: true,
       })),
-    ),
+      ...securityFindings.map((finding, index) => ({
+        name: `${formatSecuritySeverity(finding.priority)} - ${finding.skillName ?? path.basename(path.dirname(finding.skillPath))}: ${finding.ruleId}`,
+        value: String(index),
+        description: formatFindingLocation(finding),
+        checked: false,
+      })),
+    ]),
   );
-  return securityFindings.filter((_finding, index) => selectedIndexes.has(String(index)));
+  return securityFindings.filter(
+    (finding, index) =>
+      selectedValues.has(String(index)) ||
+      selectedValues.has(securitySeverityChoiceValue(formatSecuritySeverity(finding.priority))),
+  );
 };
+
+const groupSecurityFindingsBySeverity = (
+  findings: readonly Finding[],
+): readonly {
+  readonly severity: string;
+  readonly findings: readonly Finding[];
+}[] =>
+  ["Critical", "High", "Medium", "Review"].flatMap((severity) => {
+    const group = findings.filter(
+      (finding) => formatSecuritySeverity(finding.priority) === severity,
+    );
+    return group.length === 0 ? [] : [{ severity, findings: group }];
+  });
+
+const securitySeverityChoiceValue = (severity: string): string => `severity:${severity}`;
 
 const runCleanupAgentFlow = async (
   report: ScanReport,
@@ -698,6 +772,7 @@ const runCleanupAgentFlow = async (
         isAvailable: input.isRepairAgentAvailable,
       });
     } catch (error) {
+      if (isBackToMainMenuError(error)) return undefined;
       if (error instanceof CliInputError) {
         writeCleanupHandoffSummary(handoff, input.write, { color: input.color });
         input.write(`${error.message}\n`);
@@ -764,12 +839,150 @@ const runCleanupAgentFlow = async (
     );
     return nextReport;
   } catch (error) {
+    if (isBackToMainMenuError(error)) return undefined;
     if (error instanceof CliInputError) {
       input.write(`${error.message}\n`);
       return undefined;
     }
     throw error;
   }
+};
+
+const runUsageRecommendationAgentFlow = async (
+  report: ScanReport,
+  input: ReviewFindingsInput,
+): Promise<ScanReport | undefined> => {
+  try {
+    const selectedRecommendations = await selectUsageRecommendationGroup(report, input);
+    if (selectedRecommendations.length === 0) {
+      input.write("Usage recommendation handoff cancelled.\n");
+      return undefined;
+    }
+    const handoff = await prepareCleanupHandoff({
+      report,
+      recommendations: selectedRecommendations,
+      outputRoot: input.cleanupReportOutputRoot,
+      timestamp: input.cleanupReportTimestamp,
+    });
+    let agent: Awaited<ReturnType<typeof chooseRepairAgent>>;
+    try {
+      agent = await chooseRepairAgent({
+        prompts: input.prompts,
+        isAvailable: input.isRepairAgentAvailable,
+      });
+    } catch (error) {
+      if (isBackToMainMenuError(error)) return undefined;
+      if (error instanceof CliInputError) {
+        writeCleanupHandoffSummary(handoff, input.write, { color: input.color });
+        input.write(`${error.message}\n`);
+        return undefined;
+      }
+      throw error;
+    }
+    if (agent === undefined) {
+      writeCleanupHandoffSummary(handoff, input.write, { color: input.color });
+      input.write("Usage recommendation handoff cancelled.\n");
+      return undefined;
+    }
+    input.write(`${usageLabel("Selected", Boolean(input.color))} ${agent.displayName}.\n`);
+    input.write(
+      `${usageLabel("Launch preview", Boolean(input.color))}: ${formatRepairAgentPreview(agent.id)}\n`,
+    );
+    writeCleanupHandoffSummary(handoff, input.write, { color: input.color });
+    const shouldLaunch = await input.prompts.confirm(`Launch ${agent.displayName} now?`, false);
+    if (!shouldLaunch) {
+      input.write("Usage recommendation agent launch cancelled.\n");
+      return undefined;
+    }
+
+    let exitCode: number;
+    try {
+      exitCode = await input.launchAgent(agent.id, handoff.prompt, input.cwd);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      input.write(`Usage recommendation agent launch failed: ${message}\n`);
+      return undefined;
+    }
+    if (exitCode !== 0) {
+      input.write(`Usage recommendation agent exited with code ${exitCode}.\n`);
+    }
+
+    const reScanStartedAt = input.now?.();
+    const nextScan = await input.spinner.run("Re-scanning skills...", () =>
+      scanSkillRoots({ roots: input.roots }),
+    );
+    const nextElapsedMilliseconds =
+      input.now === undefined || reScanStartedAt === undefined
+        ? 0
+        : Math.max(0, Math.round(input.now() - reScanStartedAt));
+    const nextUsageInput = await input.spinner.run("Re-analyzing local Codex usage...", () =>
+      buildUsageReportInput({
+        scan: nextScan,
+        homeDir: input.homeDir,
+        discoverUsageSources: input.discoverUsageSources,
+        analyzeSkillUsage: input.analyzeSkillUsage,
+      }),
+    );
+    const nextReport = buildScanReport({
+      version: input.version,
+      directory: input.cwd,
+      elapsedMilliseconds: nextElapsedMilliseconds,
+      scan: nextScan,
+      usage: nextUsageInput,
+      handoffRequested: true,
+    });
+    input.write(
+      renderPostCleanupSummary(report, nextReport, handoff.reportDirectory, {
+        color: input.color,
+        title: "Post-usage-repair re-scan",
+      }),
+    );
+    return nextReport;
+  } catch (error) {
+    if (isBackToMainMenuError(error)) return undefined;
+    if (error instanceof CliInputError) {
+      input.write(`${error.message}\n`);
+      return undefined;
+    }
+    throw error;
+  }
+};
+
+const selectUsageRecommendationGroup = async (
+  report: ScanReport,
+  input: Pick<ReviewFindingsInput, "prompts">,
+): Promise<readonly SkillCleanupRecommendation[]> => {
+  const usage = report.usage;
+  if (usage === undefined) {
+    throw new CliInputError("Usage analysis is required before usage recommendation repair.");
+  }
+  const groups = groupRecommendations(
+    usage.recommendations.filter((recommendation) => recommendation.action !== "keep"),
+  );
+  if (groups.length === 0) return [];
+
+  const selectedAction = await input.prompts.select<
+    SkillCleanupAction | typeof BACK_TO_MAIN_MENU_VALUE
+  >("Choose usage recommendation group to fix", [
+    ...groups.map((group) => ({
+      name: `${recommendationGroupTitle(group.action)} (${group.recommendations.length})`,
+      value: group.action,
+      description: usageRepairGroupDescription(group.action),
+    })),
+    backToMainMenuChoice,
+  ]);
+  if (selectedAction === BACK_TO_MAIN_MENU_VALUE) {
+    throw new BackToMainMenuError();
+  }
+  return groups.find((group) => group.action === selectedAction)?.recommendations ?? [];
+};
+
+const usageRepairGroupDescription = (action: SkillCleanupAction): string => {
+  if (action === "disable-candidate") return "Disable unused skills in bulk";
+  if (action === "shorten-description") return "Reduce context-heavy descriptions";
+  if (action === "merge-candidate") return "Review duplicate skill names";
+  if (action === "review") return "Inspect uncertain or older usage signals";
+  return "Preserve recently used skills";
 };
 
 const selectCleanupRecommendations = async (
@@ -783,21 +996,35 @@ const selectCleanupRecommendations = async (
   );
   if (candidates.length === 0) return [];
 
+  const usageBySkillPath = new Map(
+    usage.skillsByUsage.map((summary) => [summary.skillPath, summary]),
+  );
   const defaultPaths = new Set(
     usage.topRecommendations.map((recommendation) => recommendation.skillPath),
   );
   const selectedPaths = new Set(
-    await input.prompts.checkbox(
-      "Select unused skills to disable",
-      candidates.map((recommendation) => ({
-        name: recommendation.skillName,
+    await input.prompts.checkbox("Select unused skills to disable", [
+      ...candidates.map((recommendation) => ({
+        name: formatCleanupCandidateName(
+          recommendation.skillName,
+          usageBySkillPath.get(recommendation.skillPath)?.recentUsageCount,
+        ),
         value: recommendation.skillPath,
         description: compactSkillPath(recommendation.skillPath),
         checked: defaultPaths.has(recommendation.skillPath),
       })),
-    ),
+    ]),
   );
   return candidates.filter((recommendation) => selectedPaths.has(recommendation.skillPath));
+};
+
+const formatCleanupCandidateName = (
+  skillName: string,
+  recentUsageCount: number | undefined,
+): string => {
+  if (recentUsageCount === undefined) return `${skillName} (usage unavailable)`;
+  const noun = recentUsageCount === 1 ? "use" : "uses";
+  return `${skillName} (${recentUsageCount} detected ${noun} in past 30 days)`;
 };
 
 const runRepairAgentFlow = async (
@@ -820,6 +1047,7 @@ const runRepairAgentFlow = async (
         isAvailable: input.isRepairAgentAvailable,
       });
     } catch (error) {
+      if (isBackToMainMenuError(error)) return undefined;
       if (error instanceof CliInputError) {
         writeRepairHandoffSummary(handoff, input.write, { color: input.color });
         input.write(`${error.message}\n`);
@@ -881,6 +1109,7 @@ const runRepairAgentFlow = async (
     }
     return nextReport;
   } catch (error) {
+    if (isBackToMainMenuError(error)) return undefined;
     if (error instanceof CliInputError) {
       input.write(`${error.message}\n`);
       return undefined;
@@ -1465,11 +1694,11 @@ const renderPostCleanupSummary = (
   before: ScanReport,
   after: ScanReport,
   reportDirectory: string | undefined,
-  options: RenderTerminalOptions = {},
+  options: RenderTerminalOptions & { readonly title?: string | undefined } = {},
 ): string => {
   const shouldColor = Boolean(options.color);
   const lines = [
-    `${usageLabel("Post-disable re-scan", shouldColor)}:`,
+    `${usageLabel(options.title ?? "Post-disable re-scan", shouldColor)}:`,
     `${usageLabel("Skills", shouldColor)}: ${accent(String(before.skillCount), shouldColor)} -> ${accent(String(after.skillCount), shouldColor)}`,
     `${usageLabel("Context budget pressure", shouldColor)}: ${colorizePressure(before.usage?.contextPressure.level ?? "unknown", shouldColor)} -> ${colorizePressure(after.usage?.contextPressure.level ?? "unknown", shouldColor)}`,
     `${usageLabel("Findings", shouldColor)}: ${warning(String(before.findingCount), shouldColor)} -> ${warning(String(after.findingCount), shouldColor)}`,

@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { CliInputError } from "./handle-error.js";
+import { BackToMainMenuError, CliInputError } from "./handle-error.js";
 import { isCommandAvailable } from "./is-command-available.js";
 import type { PromptAdapter } from "./prompts.js";
+import { BACK_TO_MAIN_MENU_VALUE, backToMainMenuChoice } from "./prompts.js";
 
 export const REPAIR_AGENT_IDS = ["claude", "codex"] as const;
 
@@ -79,17 +80,37 @@ export const chooseRepairAgent = async (
   if (agents.length === 1) {
     const agent = agents[0];
     if (agent === undefined) return undefined;
-    const confirmed = await input.prompts.confirm(`Use ${agent.displayName} for repair?`, true);
-    return confirmed ? agent : undefined;
+    const selected = await input.prompts.select<RepairAgentId | typeof BACK_TO_MAIN_MENU_VALUE>(
+      "Choose repair agent",
+      [
+        {
+          name: agent.displayName,
+          value: agent.id,
+          description: `Run ${formatRepairAgentPreview(agent.id)} locally with the repair prompt`,
+        },
+        backToMainMenuChoice,
+      ],
+    );
+    if (selected === BACK_TO_MAIN_MENU_VALUE) {
+      throw new BackToMainMenuError();
+    }
+    return REPAIR_AGENT_CONFIG[selected];
   }
 
-  const selected = await input.prompts.select<RepairAgentId>("Choose repair agent", [
-    ...agents.map((agent) => ({
-      name: agent.displayName,
-      value: agent.id,
-      description: `Run ${formatRepairAgentPreview(agent.id)} locally with the repair prompt`,
-    })),
-  ]);
+  const selected = await input.prompts.select<RepairAgentId | typeof BACK_TO_MAIN_MENU_VALUE>(
+    "Choose repair agent",
+    [
+      ...agents.map((agent) => ({
+        name: agent.displayName,
+        value: agent.id,
+        description: `Run ${formatRepairAgentPreview(agent.id)} locally with the repair prompt`,
+      })),
+      backToMainMenuChoice,
+    ],
+  );
+  if (selected === BACK_TO_MAIN_MENU_VALUE) {
+    throw new BackToMainMenuError();
+  }
   return REPAIR_AGENT_CONFIG[selected];
 };
 

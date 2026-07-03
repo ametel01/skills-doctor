@@ -1,5 +1,5 @@
 import { checkbox, confirm as confirmPrompt, input, select } from "@inquirer/prompts";
-import { CliInputError } from "./handle-error.js";
+import { BackToMainMenuError, CliInputError } from "./handle-error.js";
 
 export type Choice<Value extends string> = {
   readonly name: string;
@@ -7,6 +7,14 @@ export type Choice<Value extends string> = {
   readonly description?: string;
   readonly checked?: boolean;
 };
+
+export const BACK_TO_MAIN_MENU_VALUE = "__skills_doctor_back_to_main_menu__";
+
+export const backToMainMenuChoice = {
+  name: "Back to main menu",
+  value: BACK_TO_MAIN_MENU_VALUE,
+  description: "Return to next step",
+} as const satisfies Choice<typeof BACK_TO_MAIN_MENU_VALUE>;
 
 export type PromptAdapter = {
   readonly checkbox: <Value extends string>(
@@ -30,13 +38,52 @@ export class PromptCancelledError extends CliInputError {
 
 export const inquirerPromptAdapter: PromptAdapter = {
   checkbox: async (message, choices) =>
-    runPrompt(() => checkbox({ message, choices: [...choices] })),
+    runCheckboxPrompt(() =>
+      checkbox(
+        {
+          message,
+          choices: [...choices],
+          theme: {
+            style: {
+              keysHelpTip: formatCheckboxKeysHelp,
+            },
+          },
+        },
+        { signal: checkboxBackController.signal },
+      ),
+    ),
   confirm: async (message, defaultValue = true) =>
     runPrompt(() => confirmPrompt({ message, default: defaultValue })),
   input: async (message, defaultValue = "") =>
     runPrompt(() => input({ message, default: defaultValue })),
   select: async (message, choices) => runPrompt(() => select({ message, choices: [...choices] })),
 };
+
+let checkboxBackController = new AbortController();
+
+const runCheckboxPrompt = async <T>(operation: () => Promise<T>): Promise<T> => {
+  checkboxBackController = new AbortController();
+  let backRequested = false;
+  const onKeypress = (_input: string, key: { readonly name?: string | undefined }) => {
+    if (key.name !== "b") return;
+    backRequested = true;
+    checkboxBackController.abort();
+  };
+  process.stdin.on("keypress", onKeypress);
+  try {
+    return await runPrompt(operation);
+  } catch (error) {
+    if (backRequested) throw new BackToMainMenuError();
+    throw error;
+  } finally {
+    process.stdin.off("keypress", onKeypress);
+  }
+};
+
+const formatCheckboxKeysHelp = (keys: [key: string, action: string][]): string =>
+  [...keys.slice(0, -1), ["b", "back"], ...keys.slice(-1)]
+    .map(([key, action]) => `${key} ${action}`)
+    .join(" • ");
 
 const runPrompt = async <T>(operation: () => Promise<T>): Promise<T> => {
   try {

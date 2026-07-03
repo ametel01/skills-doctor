@@ -33,16 +33,11 @@ export const prepareCleanupHandoff = async (
   if (input.report.usage === undefined) {
     throw new CliInputError("Usage analysis is required before cleanup handoff.");
   }
-  if (input.report.usage.topRecommendations.length === 0) {
+  if (input.recommendations === undefined && input.report.usage.topRecommendations.length === 0) {
     throw new CliInputError("No cleanup recommendations are available.");
   }
   if (input.recommendations !== undefined && input.recommendations.length === 0) {
     throw new CliInputError("No cleanup recommendations were selected.");
-  }
-  if (
-    input.recommendations?.some((recommendation) => recommendation.action !== "disable-candidate")
-  ) {
-    throw new CliInputError("Cleanup handoff can only disable selected unused skills.");
   }
 
   const reportResult = await tryWriteCleanupDirectory({

@@ -4,8 +4,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
 import { scanAction } from "../src/cli/commands/scan.js";
-import { CliInputError } from "../src/cli/utils/handle-error.js";
-import type { Choice, PromptAdapter } from "../src/cli/utils/prompts.js";
+import { BackToMainMenuError, CliInputError } from "../src/cli/utils/handle-error.js";
+import {
+  BACK_TO_MAIN_MENU_VALUE,
+  type Choice,
+  type PromptAdapter,
+} from "../src/cli/utils/prompts.js";
 import { defaultReportOutputRoot } from "../src/domain/default-report-output-root.js";
 
 describe("scanAction", () => {
@@ -488,6 +492,74 @@ describe("scanAction", () => {
     expect(output).not.toContain("No skill announcement here.");
   });
 
+  it("launches a scoped agent handoff for a selected usage recommendation group", async () => {
+    const homeDir = path.join(directory, "home");
+    await writeLongSkill(
+      path.join(homeDir, ".agents", "skills", "long-used-skill"),
+      "long-used-skill",
+    );
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "Using the `long-used-skill` skill.",
+      },
+    ]);
+    const stdout: string[] = [];
+    const launches: string[] = [];
+    const nextStepChoices: string[][] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: {
+          ...queuedPrompts({
+            selects: ["all", "usage-recommendation-repair", "shorten-description"],
+            confirms: [true, true],
+          }),
+          select: async <Value extends string>(
+            message: string,
+            choices: readonly Choice<Value>[],
+          ) => {
+            if (message === "Next step") {
+              nextStepChoices.push(choices.map((choice) => choice.name));
+            }
+            return (
+              message === "Next step"
+                ? "usage-recommendation-repair"
+                : message === "Choose usage recommendation group to fix"
+                  ? "shorten-description"
+                  : message === "Choose repair agent"
+                    ? "codex"
+                    : "all"
+            ) as Value;
+          },
+        },
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async (command) => command === "codex",
+        launchAgent: async (_agentId, prompt) => {
+          launches.push(prompt);
+          return 0;
+        },
+      },
+    );
+
+    expect(nextStepChoices.at(-1)).toContain("Fix usage recommendations with Claude or Codex");
+    expect(stdout.join("")).toContain("Selected Codex.");
+    expect(launches).toHaveLength(1);
+    expect(launches[0]).toContain("Fix selected Agent Skills usage recommendations");
+    expect(launches[0]).toContain("shorten-description long-used-skill");
+    expect(launches[0]).toContain("reduce context-heavy skill descriptions");
+    expect(launches[0]).not.toContain("No skill announcement here.");
+  });
+
   it("lets users cancel cleanup agent launch after report writing", async () => {
     const homeDir = path.join(directory, "home");
     await writeStrongSkill(path.join(homeDir, ".agents", "skills", "unused-skill"), "unused-skill");
@@ -511,7 +583,7 @@ describe("scanAction", () => {
         stdinIsTty: true,
         prompts: queuedPrompts({
           selects: ["all", "cleanup"],
-          confirms: [true, false],
+          confirms: [false],
         }),
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
@@ -549,6 +621,7 @@ describe("scanAction", () => {
       },
     ]);
     const stdout: string[] = [];
+    const checkboxChoices: string[][] = [];
     const reportOutputRoot = path.join(directory, "cleanup-reports");
     const reportDirectory = path.join(reportOutputRoot, "2026-06-20T02-03-04-005Z");
 
@@ -563,6 +636,7 @@ describe("scanAction", () => {
         prompts: queuedPrompts({
           selects: ["all", "cleanup"],
           checked: [selectedSkillPath],
+          checkboxChoices,
         }),
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
@@ -573,6 +647,10 @@ describe("scanAction", () => {
       },
     );
 
+    expect(checkboxChoices.at(-1)).toEqual([
+      "selected-unused (0 detected uses in past 30 days)",
+      "skipped-unused (0 detected uses in past 30 days)",
+    ]);
     expect(stdout.join("")).toContain("No local repair agent was found.");
     const cleanupPrompt = await readFile(path.join(reportDirectory, "cleanup-prompt.md"), "utf8");
     expect(cleanupPrompt).toContain("selected-unused");
@@ -614,6 +692,41 @@ describe("scanAction", () => {
     expect(stdout.join("")).toContain(
       "- \x1b[31m[error]\x1b[39m \x1b[36mname-directory-mismatch\x1b[39m",
     );
+  });
+
+  it("returns from selected-skill repair submenu to the main menu", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      ["---", "name: bad-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    const nextStepChoices: string[][] = [];
+    const checkboxChoices: string[][] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        env: {},
+        stdinIsTty: true,
+        stdoutIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "repair", "selected-skills", "exit"],
+          checked: [BACK_TO_MAIN_MENU_VALUE],
+          nextStepChoices,
+          checkboxChoices,
+        }),
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(nextStepChoices).toHaveLength(2);
+    expect(checkboxChoices.at(-1)).toEqual([expect.stringMatching(/^bad-name \(\d+\)$/u)]);
   });
 
   it("lets users view findings by skill and then repair", async () => {
@@ -1159,8 +1272,13 @@ describe("scanAction", () => {
       },
     );
 
-    expect(checkboxChoices.at(-1)).toContain("first-security-skill: SKILL001_PROMPT_OVERRIDE");
-    expect(checkboxChoices.at(-1)).toContain("second-security-skill: SKILL007_REMOTE_CODE_EXEC");
+    expect(checkboxChoices.at(-1)).toContain("Critical severity (2)");
+    expect(checkboxChoices.at(-1)).toContain(
+      "Critical - first-security-skill: SKILL001_PROMPT_OVERRIDE",
+    );
+    expect(checkboxChoices.at(-1)).toContain(
+      "Critical - second-security-skill: SKILL007_REMOTE_CODE_EXEC",
+    );
     expect(launches).toHaveLength(1);
     expect(launches[0]).toContain("first-security-skill");
     expect(launches[0]).toContain("SKILL001_PROMPT_OVERRIDE");
@@ -1206,6 +1324,26 @@ const writeStrongSkill = async (skillDir: string, name: string): Promise<void> =
   );
 };
 
+const writeLongSkill = async (skillDir: string, name: string): Promise<void> => {
+  await mkdir(path.join(skillDir, "evals"), { recursive: true });
+  await writeFile(path.join(skillDir, "evals", "evals.json"), "{}\n");
+  await writeFile(
+    path.join(skillDir, "SKILL.md"),
+    [
+      "---",
+      `name: ${name}`,
+      `description: Use this skill when testing usage-aware CLI scans. ${"Long context. ".repeat(30)}`,
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Inspect the fixture inputs.",
+      "- Compare results with expected output.",
+      "",
+    ].join("\n"),
+  );
+};
+
 const writeJsonl = async (filePath: string, records: readonly unknown[]): Promise<void> => {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
@@ -1227,12 +1365,16 @@ const queuedPrompts = (input: {
   readonly confirms?: readonly boolean[];
   readonly checked?: readonly string[];
   readonly checkboxChoices?: string[][] | undefined;
+  readonly nextStepChoices?: string[][] | undefined;
 }): PromptAdapter => {
   const selects = [...input.selects];
   const confirms = [...(input.confirms ?? [])];
   return {
     checkbox: async <Value extends string>(_message: string, choices: readonly Choice<Value>[]) => {
       input.checkboxChoices?.push(choices.map((choice) => choice.name));
+      if (input.checked?.includes(BACK_TO_MAIN_MENU_VALUE)) {
+        throw new BackToMainMenuError();
+      }
       const defaultValues = choices
         .filter((choice) => choice.checked)
         .map((choice) => choice.value);
@@ -1240,7 +1382,20 @@ const queuedPrompts = (input: {
     },
     confirm: async () => confirms.shift() ?? true,
     input: async () => "",
-    select: async <Value extends string>() => (selects.shift() ?? "exit") as Value,
+    select: async <Value extends string>(message: string, choices: readonly Choice<Value>[]) => {
+      if (message === "Next step")
+        input.nextStepChoices?.push(choices.map((choice) => choice.name));
+      const next = selects[0];
+      if (
+        message === "Choose repair agent" &&
+        next !== "claude" &&
+        next !== "codex" &&
+        next !== BACK_TO_MAIN_MENU_VALUE
+      ) {
+        return (choices[0]?.value ?? "exit") as Value;
+      }
+      return (selects.shift() ?? "exit") as Value;
+    },
   };
 };
 

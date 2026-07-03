@@ -54,17 +54,20 @@ describe("skill usage analysis", () => {
     expect(analysis.events).toHaveLength(7);
     expect(summary(analysis, "gh-fix-ci")).toMatchObject({
       usageCount: 1,
+      recentUsageCount: 1,
       tier: "recent",
       confidence: "high",
       lastUsedAt: "2026-06-15T00:00:00.000Z",
     });
     expect(summary(analysis, "teach")).toMatchObject({
       usageCount: 5,
+      recentUsageCount: 5,
       tier: "frequent",
       confidence: "high",
     });
     expect(summary(analysis, "unused-global")).toMatchObject({
       usageCount: 0,
+      recentUsageCount: 0,
       tier: "unused",
       confidence: "none",
     });
@@ -76,6 +79,30 @@ describe("skill usage analysis", () => {
       "gh-fix-ci",
       "unused-global",
     ]);
+  });
+
+  it("counts only timestamped detected usage inside the recent window", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    await writeJsonl(usageSource, [
+      assistant("2026-05-10T00:00:00.000Z", "Using the `agent-coding-workflow` skill."),
+      assistant("2026-06-15T00:00:00.000Z", "Using the `agent-coding-workflow` skill."),
+      {
+        role: "assistant",
+        content: "Using the `agent-coding-workflow` skill without a timestamp.",
+      },
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [buildRecord({ name: "agent-coding-workflow", source: "global" })],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(summary(analysis, "agent-coding-workflow")).toMatchObject({
+      usageCount: 3,
+      recentUsageCount: 1,
+      tier: "recent",
+    });
   });
 
   it("returns unknown tiers and diagnostics when JSONL sources are missing", async () => {

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CliInputError } from "../src/cli/utils/handle-error.js";
+import { BackToMainMenuError, CliInputError } from "../src/cli/utils/handle-error.js";
 import {
   buildRepairAgentInvocation,
   buildRepairAgentSpawnInvocation,
@@ -10,7 +10,7 @@ import {
   detectRepairAgents,
   formatRepairAgentPreview,
 } from "../src/cli/utils/launch-agent.js";
-import type { PromptAdapter } from "../src/cli/utils/prompts.js";
+import { BACK_TO_MAIN_MENU_VALUE, type PromptAdapter } from "../src/cli/utils/prompts.js";
 
 describe("repair agent utilities", () => {
   let directory: string;
@@ -42,8 +42,23 @@ describe("repair agent utilities", () => {
     expect(agent?.id).toBe("codex");
   });
 
-  it("defaults to the only detected repair agent after confirmation", async () => {
-    const prompts = fakePrompts({ confirmed: true });
+  it("returns to the main menu when backing out of repair agent selection", async () => {
+    const choices: string[][] = [];
+    const prompts = fakePrompts({ selected: BACK_TO_MAIN_MENU_VALUE, choices });
+
+    await expect(
+      chooseRepairAgent({
+        prompts,
+        isAvailable: async () => true,
+      }),
+    ).rejects.toBeInstanceOf(BackToMainMenuError);
+
+    expect(choices.at(-1)).toContain("Back to main menu");
+  });
+
+  it("selects the only detected repair agent from a menu", async () => {
+    const choices: string[][] = [];
+    const prompts = fakePrompts({ selected: "claude", choices });
 
     const agent = await chooseRepairAgent({
       prompts,
@@ -51,17 +66,18 @@ describe("repair agent utilities", () => {
     });
 
     expect(agent?.id).toBe("claude");
+    expect(choices.at(-1)).toContain("Back to main menu");
   });
 
-  it("returns undefined when the only detected agent is declined", async () => {
-    const prompts = fakePrompts({ confirmed: false });
+  it("returns to the main menu when backing out of the only detected repair agent", async () => {
+    const prompts = fakePrompts({ selected: BACK_TO_MAIN_MENU_VALUE });
 
-    const agent = await chooseRepairAgent({
-      prompts,
-      isAvailable: async (command) => command === "codex",
-    });
-
-    expect(agent).toBeUndefined();
+    await expect(
+      chooseRepairAgent({
+        prompts,
+        isAvailable: async (command) => command === "codex",
+      }),
+    ).rejects.toBeInstanceOf(BackToMainMenuError);
   });
 
   it("raises an expected user error when no repair agents are available", async () => {
@@ -108,10 +124,17 @@ describe("repair agent utilities", () => {
 
 const fakePrompts = (input: {
   readonly confirmed?: boolean;
-  readonly selected?: "claude" | "codex";
+  readonly selected?: "claude" | "codex" | typeof BACK_TO_MAIN_MENU_VALUE;
+  readonly choices?: string[][] | undefined;
 }): PromptAdapter => ({
   checkbox: async () => [],
   confirm: async () => input.confirmed ?? true,
   input: async () => "",
-  select: async <Value extends string>() => (input.selected ?? "claude") as Value,
+  select: async <Value extends string>(
+    _message: string,
+    choices: readonly { readonly name: string; readonly value: Value }[],
+  ) => {
+    input.choices?.push(choices.map((choice) => choice.name));
+    return (input.selected ?? "claude") as Value;
+  },
 });

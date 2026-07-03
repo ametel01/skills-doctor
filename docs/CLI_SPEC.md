@@ -287,17 +287,28 @@ has cleanup recommendations. The CLI:
 
 1. Lets users view usage ranking or cleanup recommendations before launch.
 2. Lets users choose which unused `disable-candidate` skills to disable.
-3. Writes `usage.json` and `usage.md` with the full usage context.
-4. Writes `cleanup-prompt.md` with only the selected disable candidates.
-5. Detects available local `claude` and `codex` executables.
-6. Previews the command.
-7. Asks for confirmation before launching the selected agent.
-8. Re-scans and re-analyzes usage after the agent exits.
+3. Lets users choose a usage recommendation group, such as
+   `shorten-description` or `merge-candidate`, for a scoped bulk agent handoff.
+4. Writes `usage.json` and `usage.md` with the full usage context.
+5. Writes `cleanup-prompt.md` with only the selected disable candidates or
+   selected usage recommendation group.
+6. Detects available local `claude` and `codex` executables.
+7. Previews the command.
+8. Asks for confirmation before launching the selected agent.
+9. Re-scans and re-analyzes usage after the agent exits.
 
 If no findings exist but usage cleanup is available, the same next-step prompt
 still appears. If report writing fails, the CLI keeps an inline cleanup prompt.
 Cleanup prompts must forbid deletion and limit unused global/plugin cleanup to
 reversible Codex skills-config disable operations in `~/.codex/config.toml`.
+Nested repair, cleanup, usage-recommendation, security-repair, and repair-agent
+selection menus must let users return to the next-step chooser without
+launching an agent. Select prompts must include `Back to main menu` as the last
+choice; checkbox prompts must show `b back` in the footer and treat `b` as
+return-to-menu.
+Security repair selection must include severity bucket rows for Critical, High,
+Medium, and Review findings when present, plus individual finding rows for
+fine-grained selection.
 Cleanup handoff must act only on the user's selected `disable-candidate`
 recommendations and leave unselected candidates, keep, review,
 shorten-description, and merge-candidate recommendations as read-only report

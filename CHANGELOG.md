@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added past-30-day detected usage counts to usage summaries and the unused-skill cleanup picker.
+- Added scoped bulk agent handoffs for selected usage recommendation groups.
+- Added `b back` navigation to nested interactive checkbox selectors and `Back to main menu` choices to nested select prompts.
+- Added severity bucket selection to security repair handoffs so users can select Critical, High, Medium, or Review findings in bulk while still selecting individual findings.
 - Added security review incident grouping for human output while preserving raw security findings in JSON reports.
 - Added security priority and capability aggregate counts to JSON reports, plus `--fail-on-security` for stricter P1/P2 security gates.
 - Added P2 security hygiene rules for missing boundaries, missing human approval, ambiguous authority, unpinned tools, hidden artifacts, and large context bait.

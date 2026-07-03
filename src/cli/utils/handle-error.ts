@@ -8,6 +8,16 @@ export class CliInputError extends Error {
   }
 }
 
+export class BackToMainMenuError extends CliInputError {
+  constructor() {
+    super("Back to main menu.");
+    this.name = "BackToMainMenuError";
+  }
+}
+
+export const isBackToMainMenuError = (error: unknown): error is BackToMainMenuError =>
+  error instanceof BackToMainMenuError;
+
 export const isExpectedUserError = (error: unknown): error is CliInputError =>
   error instanceof CliInputError;
 
