@@ -202,6 +202,8 @@ const TRANSFER_COMMANDS = new Set([
   "yarn",
 ]);
 const CONNECTIVE_TRANSFER_COMMANDS = new Set(["tee"]);
+const LOCAL_SCRIPT_OPERAND_PATTERN =
+  /^(?:\.{1,2}\/|[A-Za-z0-9_.-]+\/|[A-Za-z0-9_.-]+\.(?:js|mjs|cjs|ts|sh|bash|py))\S*/;
 
 const SECURITY_RULES: readonly SecurityRule[] = [
   {
@@ -557,9 +559,31 @@ const hasRemoteFetchToExecutionPipeline = (context: CommandLineContext): boolean
     );
     if (fetchSegment === undefined) return false;
     return group.commands.some(
-      (command) => command.sink === "execution" && command.position > fetchSegment.position,
+      (command) =>
+        command.sink === "execution" &&
+        command.position > fetchSegment.position &&
+        !isPipedIntoLocalScriptParser(group.sourceText, command),
     );
   });
+};
+
+const isPipedIntoLocalScriptParser = (
+  sourceText: string,
+  command: CommandSegmentContext,
+): boolean => {
+  if (command.sink !== "execution") return false;
+  if (!hasLocalScriptOperand(command.text)) return false;
+  return sourceText
+    .split("|")
+    .slice(1)
+    .some((segment) => segment.trim().startsWith(command.text));
+};
+
+const hasLocalScriptOperand = (commandText: string): boolean => {
+  const command = readCommandName(commandText);
+  if (command === undefined) return false;
+  const args = stripShellPrompt(commandText).slice(command.length).trimStart();
+  return LOCAL_SCRIPT_OPERAND_PATTERN.test(args);
 };
 
 const hasFetchedContentExecutionInstruction = (text: string): boolean =>

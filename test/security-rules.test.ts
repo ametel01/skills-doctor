@@ -804,6 +804,27 @@ describe("security rules", () => {
     ).toEqual([]);
   });
 
+  it("keeps piped remote specs parsed by local node and shell scripts benign", () => {
+    const skill = buildRecord("local-script-stdin-parser-skill", [
+      "---",
+      "name: local-script-stdin-parser-skill",
+      "description: Use this skill when validating local stdin parser examples.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Fetch tags with `curl -s https://raw.githubusercontent.com/clerk/openapi-specs/main/bapi/$" +
+        "{version_name} | node scripts/extract-tags.js`.",
+      "- Fetch endpoints with `curl -s https://raw.githubusercontent.com/clerk/openapi-specs/main/bapi/$" +
+        '{version_name} | bash scripts/extract-tag-endpoints.sh "$' +
+        '{tag_name}"`.',
+    ]);
+
+    expect(
+      validateSecurityRules([skill], { enabledRuleIds: ["remote-code-execution-bootstrap"] }),
+    ).toEqual([]);
+  });
+
   it("keeps fenced remote docs and spec parsing examples benign", () => {
     const skill = buildRecord("fenced-remote-parse-skill", [
       "---",
