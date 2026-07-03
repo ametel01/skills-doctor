@@ -29,7 +29,12 @@ describe("TUI dashboard", () => {
     expect(output).toContain("skills-doctor@latest");
     expect(output).toContain("skills-doctor");
     expect(output).toContain("v1.0.0");
-    expect(output).toContain("100%");
+    expect(output).toContain("Scan score");
+    expect(output).toContain("100 / 100 Great");
+    expect(output).toContain("scan passed");
+    expect(output).toContain("0 score penalty");
+    expect(output).toContain("0 error rules · 0 warning rules · 0 advice rules");
+    expect(output).not.toContain("Progress");
     expect(output).not.toContain("66 / 66");
     expect(output).toContain("Skills");
     expect(output).toContain("Issues");

@@ -56,18 +56,51 @@ export const inquirerPromptAdapter: PromptAdapter = {
     runPrompt(() => confirmPrompt({ message, default: defaultValue })),
   input: async (message, defaultValue = "") =>
     runPrompt(() => input({ message, default: defaultValue })),
-  select: async (message, choices) => runPrompt(() => select({ message, choices: [...choices] })),
+  select: async (message, choices) =>
+    hasBackToMainMenuChoice(choices)
+      ? runSelectPrompt(() =>
+          select(
+            {
+              message,
+              choices: [...choices],
+              theme: {
+                style: {
+                  keysHelpTip: formatSelectKeysHelp,
+                },
+              },
+            },
+            { signal: selectBackController.signal },
+          ),
+        )
+      : runPrompt(() => select({ message, choices: [...choices] })),
 };
 
 let checkboxBackController = new AbortController();
+let selectBackController = new AbortController();
+
+const hasBackToMainMenuChoice = <Value extends string>(
+  choices: readonly Choice<Value>[],
+): boolean => choices.some((choice) => choice.value === BACK_TO_MAIN_MENU_VALUE);
 
 const runCheckboxPrompt = async <T>(operation: () => Promise<T>): Promise<T> => {
   checkboxBackController = new AbortController();
+  return await runBackKeyPrompt(operation, checkboxBackController);
+};
+
+const runSelectPrompt = async <T>(operation: () => Promise<T>): Promise<T> => {
+  selectBackController = new AbortController();
+  return await runBackKeyPrompt(operation, selectBackController);
+};
+
+const runBackKeyPrompt = async <T>(
+  operation: () => Promise<T>,
+  controller: AbortController,
+): Promise<T> => {
   let backRequested = false;
   const onKeypress = (_input: string, key: { readonly name?: string | undefined }) => {
     if (key.name !== "b") return;
     backRequested = true;
-    checkboxBackController.abort();
+    controller.abort();
   };
   process.stdin.on("keypress", onKeypress);
   try {
@@ -84,6 +117,9 @@ const formatCheckboxKeysHelp = (keys: [key: string, action: string][]): string =
   [...keys.slice(0, -1), ["b", "back"], ...keys.slice(-1)]
     .map(([key, action]) => `${key} ${action}`)
     .join(" • ");
+
+const formatSelectKeysHelp = (keys: [key: string, action: string][]): string =>
+  [...keys, ["b", "back"]].map(([key, action]) => `${key} ${action}`).join(" • ");
 
 const runPrompt = async <T>(operation: () => Promise<T>): Promise<T> => {
   try {

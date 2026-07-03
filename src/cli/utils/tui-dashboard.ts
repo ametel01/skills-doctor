@@ -1,6 +1,6 @@
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4
  * Hallmark · genre: modern-minimal · macrostructure: Workbench · theme: Terminal · enrichment: none · nav: N8 · footer: Ft4
- * knobs: adaptive-width · responsive-metric-strip · package-version-brand · security-summary
+ * knobs: score-result-panel · adaptive-width · responsive-metric-strip · package-version-brand · security-summary
  */
 import readline from "node:readline";
 import type { ScanReport } from "../../domain/build-report.js";
@@ -46,7 +46,7 @@ export const renderTuiDashboard = <Value extends string>(
   const lines: string[] = [
     ...renderHeader(report, width, shouldColor),
     "",
-    ...renderProgress(leftWidth, shouldColor),
+    ...renderScoreResult(report, leftWidth, shouldColor),
     "",
     ...renderMetricStrip(report, width, shouldColor),
   ];
@@ -246,22 +246,89 @@ const renderBrandBox = (
   return box("", art, width, shouldColor);
 };
 
-const renderProgress = (width: number, shouldColor: boolean): readonly string[] => {
-  const innerWidth = width - 4;
-  const label = blue("Progress", shouldColor);
-  const count = "100%";
-  const status = `${success("◉", shouldColor)} ${success("Complete", shouldColor)}`;
-  const barWidth = Math.max(16, innerWidth);
-  const bar = success("━".repeat(barWidth), shouldColor);
+const SCORE_PANEL_FACE_WIDTH = 7;
+const SCORE_PANEL_GAP = 2;
+const PERFECT_SCORE = 100;
+const SCORE_GOOD_THRESHOLD = 75;
+const SCORE_OK_THRESHOLD = 50;
 
-  return box(
-    `${label}${" ".repeat(
-      Math.max(1, innerWidth - visibleLength(label) - count.length - visibleLength(status) - 2),
-    )}${dim(count, shouldColor)}  ${status}`,
-    [bar],
-    width,
-    shouldColor,
+const renderScoreResult = (
+  report: ScanReport,
+  width: number,
+  shouldColor: boolean,
+): readonly string[] => {
+  const innerWidth = width - 4;
+  const title = scoreColor("Scan score", report.score.value, shouldColor);
+  const score = report.score;
+  const faceLines = renderScoreFace(score.value, shouldColor);
+  const detailWidth = Math.max(1, innerWidth - SCORE_PANEL_FACE_WIDTH - SCORE_PANEL_GAP);
+  const meterWidth = Math.max(12, Math.min(42, detailWidth - 2));
+  const penalty = formatPenalty(score.penalty);
+  const ruleSummary = `${score.distinctErrorRuleCount} error rules · ${score.distinctWarningRuleCount} warning rules · ${score.distinctAdviceRuleCount} advice rules`;
+  const outcome = report.ok ? "scan passed" : "action needed";
+  const body = [
+    renderScorePanelLine(
+      faceLines[0] ?? "",
+      `${scoreColor(String(score.value), score.value, shouldColor)} ${dim(
+        `/ ${PERFECT_SCORE}`,
+        shouldColor,
+      )} ${scoreColor(score.label, score.value, shouldColor)} ${dim("·", shouldColor)} ${scoreColor(outcome, score.value, shouldColor)}`,
+      detailWidth,
+    ),
+    renderScorePanelLine(
+      faceLines[1] ?? "",
+      `${renderScoreMeter(score.value, meterWidth, shouldColor)} ${dim(
+        `${score.value}%`,
+        shouldColor,
+      )}`,
+      detailWidth,
+    ),
+    renderScorePanelLine(
+      faceLines[2] ?? "",
+      `${strong(penalty, shouldColor)} ${muted("score penalty", shouldColor)}`,
+      detailWidth,
+    ),
+    renderScorePanelLine(faceLines[3] ?? "", muted(ruleSummary, shouldColor), detailWidth),
+  ];
+
+  return box(title, body, width, shouldColor);
+};
+
+const renderScorePanelLine = (faceLine: string, detail: string, detailWidth: number): string =>
+  `${padRight(faceLine, SCORE_PANEL_FACE_WIDTH)}${" ".repeat(SCORE_PANEL_GAP)}${fitToWidth(
+    detail,
+    detailWidth,
+  )}`;
+
+const renderScoreFace = (score: number, shouldColor: boolean): readonly string[] => {
+  const [eyes, mouth] = getScoreFace(score);
+  return ["╭─────╮", `│ ${eyes} │`, `│ ${mouth} │`, "╰─────╯"].map((line) =>
+    scoreColor(line, score, shouldColor),
   );
+};
+
+const getScoreFace = (score: number): readonly [string, string] => {
+  if (score >= SCORE_GOOD_THRESHOLD) return ["◠ ◠", " ▽ "];
+  if (score >= SCORE_OK_THRESHOLD) return ["• •", " ─ "];
+  return ["x x", " ▽ "];
+};
+
+const renderScoreMeter = (score: number, width: number, shouldColor: boolean): string => {
+  const boundedScore = Math.max(0, Math.min(PERFECT_SCORE, score));
+  const filledCount = Math.round((boundedScore / PERFECT_SCORE) * width);
+  return (
+    scoreColor("█".repeat(filledCount), score, shouldColor) +
+    dim("░".repeat(Math.max(0, width - filledCount)), shouldColor)
+  );
+};
+
+const formatPenalty = (penalty: number): string =>
+  penalty === 0 ? "0" : Number.isInteger(penalty) ? String(penalty) : penalty.toFixed(2);
+
+const scoreColor = (text: string, score: number, shouldColor: boolean): string => {
+  if (score >= SCORE_GOOD_THRESHOLD) return success(text, shouldColor);
+  if (score >= SCORE_OK_THRESHOLD) return amber(text, shouldColor);
+  return danger(text, shouldColor);
 };
 
 const renderMetricStrip = (

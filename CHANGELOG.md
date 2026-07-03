@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added past-30-day detected usage counts to usage summaries and the unused-skill cleanup picker.
 - Added scoped bulk agent handoffs for selected usage recommendation groups.
-- Added `b back` navigation to nested interactive checkbox selectors and `Back to main menu` choices to nested select prompts.
+- Added `b back` navigation to nested interactive checkbox selectors and select-based submenus with a `Back to main menu` choice.
 - Added severity bucket selection to security repair handoffs so users can select Critical, High, Medium, or Review findings in bulk while still selecting individual findings.
 - Added security review incident grouping for human output while preserving raw security findings in JSON reports.
 - Added security priority and capability aggregate counts to JSON reports, plus `--fail-on-security` for stricter P1/P2 security gates.
@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Replaced the TUI dashboard completion progress strip with a scan score panel showing the score, label, penalty, and contributing rule counts.
 - Reformatted interactive security review output into severity and category summary tables plus a compact incident table with user-facing Critical/High/Medium labels instead of P-code prose dumps.
 - Made the TUI dashboard adaptive across terminal widths, with percentage progress, a package-version brand card, a security findings metric, and responsive metric wrapping.
 - Human security review output now groups related rule hits into concise incidents and omits rationale/counterevidence noise by default.
