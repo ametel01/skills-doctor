@@ -611,6 +611,11 @@ describe("skill discovery and parsing", () => {
         evidenceChain: expect.objectContaining({
           items: expect.arrayContaining([
             expect.objectContaining({
+              capability: "reads_secrets",
+              path: expect.stringContaining("scripts/sync.sh"),
+            }),
+            expect.objectContaining({
+              capability: "network_egress",
               path: expect.stringContaining("scripts/sync.sh"),
             }),
           ]),

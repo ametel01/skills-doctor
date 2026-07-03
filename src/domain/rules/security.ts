@@ -810,6 +810,40 @@ const CAPABILITY_SECURITY_RULES = new Map<
   >
 >([
   [
+    "reads_secrets",
+    {
+      ruleId: "SKILL003_SECRET_ACCESS",
+      severity: "warning",
+      priority: "P0",
+      confidence: "medium",
+      title: "Secret access instruction appears in skill package",
+      message:
+        "The skill package appears to read local secret-bearing files, credentials, sessions, or token stores.",
+      suggestion:
+        "Remove secret-reading behavior unless it is explicitly scoped to local verification and protected by clear user approval.",
+      rationale: "A package artifact produced a secret-reading capability fact.",
+      counterevidence: [
+        "Local webhook signing-secret setup, local signature verification, destination-only documentation, and defensive secret-handling guidance are suppressed.",
+      ],
+    },
+  ],
+  [
+    "persistence",
+    {
+      ruleId: "SKILL006_PERSISTENCE",
+      severity: "warning",
+      priority: "P0",
+      confidence: "medium",
+      title: "Persistence instruction appears in skill package",
+      message:
+        "The skill package appears to write or register persistence through shell startup files, scheduled jobs, hooks, service managers, or autostart locations.",
+      suggestion:
+        "Remove persistence behavior unless it is clearly required, scoped, reversible, and approved.",
+      rationale: "A package artifact produced a persistence capability fact.",
+      counterevidence: ["Preventive or defensive wording is filtered before reporting this rule."],
+    },
+  ],
+  [
     "remote_code_exec",
     {
       ruleId: "SKILL007_REMOTE_CODE_EXEC",
@@ -999,22 +1033,27 @@ const buildPackageExfiltrationFinding = (
     (fact) => fact.artifactPath !== skillPackage.skill.skillPath && fact.kind === "network_egress",
   );
   if (secretFact === undefined || networkFact === undefined) return undefined;
-  return buildCapabilityFinding(skillPackage, networkFact, {
-    ruleId,
-    severity: "warning",
-    priority: "P0",
-    confidence: "high",
-    title: "Network transfer appears near secret-reading package capability",
-    message:
-      "The skill package appears to combine network transfer capability with secret or sensitive file-reading capability.",
-    suggestion:
-      "Remove network-transfer guidance around secrets or sensitive files, and keep security review workflows local unless the user explicitly provides a safe destination.",
-    rationale:
-      "Package artifacts produced both secret-reading and network-egress capability facts outside the main SKILL.md file.",
-    counterevidence: [
-      "Official service API authentication, parse-only local commands, and local destinations are ignored unless secret material is also sent to an unrelated external sink.",
-    ],
-  });
+  return buildCapabilityFinding(
+    skillPackage,
+    networkFact,
+    {
+      ruleId,
+      severity: "warning",
+      priority: "P0",
+      confidence: "high",
+      title: "Network transfer appears near secret-reading package capability",
+      message:
+        "The skill package appears to combine network transfer capability with secret or sensitive file-reading capability.",
+      suggestion:
+        "Remove network-transfer guidance around secrets or sensitive files, and keep security review workflows local unless the user explicitly provides a safe destination.",
+      rationale:
+        "Package artifacts produced both secret-reading and network-egress capability facts outside the main SKILL.md file.",
+      counterevidence: [
+        "Official service API authentication, parse-only local commands, and local destinations are ignored unless secret material is also sent to an unrelated external sink.",
+      ],
+    },
+    [secretFact, networkFact],
+  );
 };
 
 const P1_RISKY_CAPABILITIES = new Set<CapabilityKind>([
@@ -1230,6 +1269,7 @@ const buildCapabilityFinding = (
     | "rationale"
     | "counterevidence"
   >,
+  evidenceFacts: readonly CapabilityFact[] = [fact],
 ): Finding => ({
   ruleId: rule.ruleId,
   severity: rule.severity,
@@ -1251,16 +1291,14 @@ const buildCapabilityFinding = (
   capabilities: [fact.kind],
   evidenceChain: {
     summary: fact.description ?? rule.rationale,
-    items: [
-      {
-        path: fact.artifactPath,
-        capability: fact.kind,
-        startLine: fact.evidence?.startLine,
-        endLine: fact.evidence?.endLine,
-        excerpt: fact.evidence?.excerpt,
-        note: fact.description,
-      },
-    ],
+    items: evidenceFacts.map((evidenceFact) => ({
+      path: evidenceFact.artifactPath,
+      capability: evidenceFact.kind,
+      startLine: evidenceFact.evidence?.startLine,
+      endLine: evidenceFact.evidence?.endLine,
+      excerpt: evidenceFact.evidence?.excerpt,
+      note: evidenceFact.description,
+    })),
   },
   agentRepairable: true,
 });

@@ -1082,6 +1082,50 @@ describe("security rules", () => {
     );
   });
 
+  it("reports package secret reads and persistence as P0 findings", () => {
+    const skillPackage = buildPackage("package-p0-skill", [
+      artifact("scripts/install.sh", [
+        "cat ~/.aws/credentials > /tmp/creds.txt",
+        "crontab -l > /tmp/cron.txt",
+      ]),
+    ]);
+
+    const findings = validateSkillPackageSecurityRules([skillPackage], {
+      enabledRuleIds: ["SKILL003_SECRET_ACCESS", "SKILL006_PERSISTENCE"],
+    });
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "SKILL003_SECRET_ACCESS",
+        priority: "P0",
+        capabilities: expect.arrayContaining(["reads_secrets"]),
+        evidenceChain: expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              capability: "reads_secrets",
+              path: expect.stringContaining("scripts/install.sh"),
+            }),
+          ]),
+        }),
+      }),
+    );
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "SKILL006_PERSISTENCE",
+        priority: "P0",
+        capabilities: expect.arrayContaining(["persistence"]),
+        evidenceChain: expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              capability: "persistence",
+              path: expect.stringContaining("scripts/install.sh"),
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
   it("suppresses broad allowed tools when clear deny rules are present", () => {
     const skill = buildRecord("broad-tools-with-denylist-skill", [
       "---",
