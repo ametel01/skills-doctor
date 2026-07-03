@@ -12,6 +12,7 @@ export type FindingSummary = {
   readonly errorCount: number;
   readonly warningCount: number;
   readonly adviceCount: number;
+  readonly securityCount: number;
   readonly topSkills: readonly SummaryGroup[];
   readonly topCategories: readonly SummaryGroup[];
 };
@@ -27,15 +28,16 @@ export type RenderHumanSummaryOptions = {
 };
 
 export const summarizeFindings = (findings: readonly Finding[]): FindingSummary => ({
-  errorCount: countSeverity(findings, "error"),
-  warningCount: countSeverity(findings, "warning"),
-  adviceCount: countSeverity(findings, "advice"),
+  errorCount: countSeverity(qualityFindings(findings), "error"),
+  warningCount: countSeverity(qualityFindings(findings), "warning"),
+  adviceCount: countSeverity(qualityFindings(findings), "advice"),
+  securityCount: findings.filter((finding) => finding.category === "security").length,
   topSkills: topGroups(
-    findings.map((finding) => finding.skillName ?? finding.skillPath),
+    qualityFindings(findings).map((finding) => finding.skillName ?? finding.skillPath),
     5,
   ),
   topCategories: topGroups(
-    findings.map((finding) => finding.category),
+    qualityFindings(findings).map((finding) => finding.category),
     5,
   ),
 });
@@ -46,7 +48,11 @@ export const resolveScanExitCode = (
 ): 0 | 1 => {
   if (report.diagnostics.some((diagnostic) => diagnostic.severity === "error")) return 1;
   const failOn = options.failOn ?? "error";
-  if (report.findings.some((finding) => severityRank(finding.severity) >= severityRank(failOn))) {
+  if (
+    qualityFindings(report.findings).some(
+      (finding) => severityRank(finding.severity) >= severityRank(failOn),
+    )
+  ) {
     return 1;
   }
   if (options.minScore !== undefined && report.score.value < options.minScore) return 1;
@@ -61,15 +67,20 @@ export const renderHumanSummary = (
   const shouldColor = Boolean(options.color);
   const lines = [
     `${label("Skills", shouldColor)}: ${accent(String(report.skillCount), shouldColor)} scanned`,
-    report.findingCount === 0
+    report.qualityFindingCount === 0
       ? `${label("Issues", shouldColor)}: ${success("none", shouldColor)}`
-      : `${label("Issues", shouldColor)}: ${danger(String(report.findingCount), shouldColor)} (${danger(String(summary.errorCount), shouldColor)} errors, ${warning(String(summary.warningCount), shouldColor)} warnings, ${dim(String(summary.adviceCount), shouldColor)} tips)`,
+      : `${label("Issues", shouldColor)}: ${danger(String(report.qualityFindingCount), shouldColor)} (${danger(String(summary.errorCount), shouldColor)} errors, ${warning(String(summary.warningCount), shouldColor)} warnings, ${dim(String(summary.adviceCount), shouldColor)} tips)`,
   ];
   if (options.includeScore ?? true) {
     lines.splice(
       1,
       0,
       `${label("Score", shouldColor)}: ${colorizeScore(String(report.score.value), report.score.value, shouldColor)} (${colorizeScore(report.score.label, report.score.value, shouldColor)})`,
+    );
+  }
+  if (summary.securityCount > 0) {
+    lines.push(
+      `${label("Security findings", shouldColor)}: ${warning(String(summary.securityCount), shouldColor)} suspicious skill patterns`,
     );
   }
   if (report.usage !== undefined) {
@@ -100,6 +111,9 @@ const countCleanupCandidates = (report: ScanReport): number =>
 
 const countSeverity = (findings: readonly Finding[], severity: Finding["severity"]): number =>
   findings.filter((finding) => finding.severity === severity).length;
+
+const qualityFindings = (findings: readonly Finding[]): readonly Finding[] =>
+  findings.filter((finding) => finding.category !== "security");
 
 const severityRank = (severity: ScanGateSeverity): number => {
   if (severity === "error") return 3;

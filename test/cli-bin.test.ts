@@ -34,6 +34,10 @@ describe("CLI bin", () => {
     expect(stdout.trim().split(/\r?\n/).at(-1)).toBe(packageJson.version);
   });
 
+  it("builds before running the development entrypoint", () => {
+    expect(packageJson.scripts.dev).toBe("bun run build && node bin/skills-doctor.js");
+  });
+
   it("prints one JSON report for a clean packaged scan", async () => {
     await writeSkill({
       directoryName: "good-skill",

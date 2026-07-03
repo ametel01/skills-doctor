@@ -33,10 +33,16 @@ import {
   formatRepairAgentPreview,
   launchRepairAgent,
 } from "../utils/launch-agent.js";
-import { inquirerPromptAdapter, type PromptAdapter } from "../utils/prompts.js";
+import { type Choice, inquirerPromptAdapter, type PromptAdapter } from "../utils/prompts.js";
 import { printScoreHeader } from "../utils/render-score-header.js";
 import { shouldSkipPrompts } from "../utils/should-skip-prompts.js";
 import { createSpinner, type SpinnerFactory } from "../utils/spinner.js";
+import {
+  renderTuiDashboard,
+  selectTuiAction,
+  TUI_CLEAR_SCREEN,
+  waitForTuiContinue,
+} from "../utils/tui-dashboard.js";
 
 export type ScanFlags = {
   readonly json?: boolean;
@@ -81,6 +87,8 @@ type RootScopeSelection = "all" | "local" | "global" | "custom";
 type ReviewAction =
   | "all"
   | "errors"
+  | "security"
+  | "security-repair"
   | "by-skill"
   | "repair"
   | "cleanup"
@@ -103,12 +111,13 @@ export const scanAction = async (
   const writeStdout = options.writeStdout ?? ((message) => process.stdout.write(message));
   const writeStderr = options.writeStderr ?? ((message) => process.stderr.write(message));
   const stdoutIsTty = options.stdoutIsTty ?? process.stdout.isTTY === true;
+  const stdinIsTty = options.stdinIsTty ?? process.stdin.isTTY === true;
   const now = options.now ?? performance.now.bind(performance);
   const skipPrompts = shouldSkipPrompts({
     yes: Boolean(flags.yes),
     json: Boolean(flags.json),
     env: options.env,
-    stdinIsTty: options.stdinIsTty ?? process.stdin.isTTY,
+    stdinIsTty,
   });
   const spinner =
     options.spinner ??
@@ -198,15 +207,30 @@ export const scanAction = async (
   if (flags.json) {
     writeJsonReport(report, writeStdout);
   } else {
-    await printScoreHeader({
-      score: report.score,
-      write: writeStdout,
-      color: stdoutIsTty,
-      columns: options.terminalColumns ?? process.stdout.columns,
-      animate: options.animateScoreHeader ?? (!skipPrompts && stdoutIsTty),
+    const shouldReview = !skipPrompts && shouldShowReviewMenu(report);
+    const useTui = shouldUseTuiDashboard({
+      prompts,
+      stdinIsTty,
+      stdoutIsTty,
     });
-    writeStdout(renderHumanSummary(report, { includeScore: false, color: stdoutIsTty }));
-    if (!skipPrompts && shouldShowReviewMenu(report)) {
+    if (useTui && !shouldReview) {
+      writeStdout(
+        `${TUI_CLEAR_SCREEN}${renderTuiDashboard(report, [], {
+          color: true,
+          columns: options.terminalColumns ?? process.stdout.columns,
+        })}`,
+      );
+    } else if (!useTui || !shouldReview) {
+      await printScoreHeader({
+        score: report.score,
+        write: writeStdout,
+        color: stdoutIsTty,
+        columns: options.terminalColumns ?? process.stdout.columns,
+        animate: options.animateScoreHeader ?? (!skipPrompts && stdoutIsTty),
+      });
+      writeStdout(renderHumanSummary(report, { includeScore: false, color: stdoutIsTty }));
+    }
+    if (shouldReview) {
       finalReport =
         (await reviewScan(report, {
           cwd,
@@ -226,6 +250,9 @@ export const scanAction = async (
           homeDir: options.homeDir,
           discoverUsageSources: options.discoverUsageSources ?? discoverUsageSources,
           analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
+          stdinIsTty,
+          useTui,
+          terminalColumns: options.terminalColumns ?? process.stdout.columns,
         })) ?? report;
     }
   }
@@ -274,6 +301,16 @@ const buildUsageReportInput = async (input: {
 
 const shouldShowReviewMenu = (report: ScanReport): boolean =>
   report.findingCount > 0 || (report.usage?.topRecommendations.length ?? 0) > 0;
+
+const shouldUseTuiDashboard = (input: {
+  readonly prompts: PromptAdapter;
+  readonly stdinIsTty: boolean;
+  readonly stdoutIsTty: boolean;
+}): boolean =>
+  input.prompts === inquirerPromptAdapter &&
+  input.stdinIsTty &&
+  input.stdoutIsTty &&
+  process.stdin.setRawMode !== undefined;
 
 const parseFailOnSeverity = (value: string | undefined): ScanGateSeverity | undefined => {
   if (value === undefined) return undefined;
@@ -457,40 +494,18 @@ type ReviewFindingsInput = {
   readonly analyzeSkillUsage: (
     input: AnalyzeSkillUsageInput,
   ) => ReturnType<typeof analyzeSkillUsage>;
+  readonly stdinIsTty?: boolean | undefined;
+  readonly useTui?: boolean | undefined;
+  readonly terminalColumns?: number | undefined;
 };
 
 const reviewScan = async (
   report: ScanReport,
   input: ReviewFindingsInput,
 ): Promise<ScanReport | undefined> => {
-  const { prompts, write } = input;
+  const { write } = input;
   while (true) {
-    const action = await prompts.select<ReviewAction>("Next step", [
-      ...(report.usage !== undefined && report.usage.topRecommendations.length > 0
-        ? [
-            {
-              name: "Choose unused skills to disable",
-              value: "cleanup" as const,
-            },
-            { name: "View usage ranking", value: "usage-ranking" as const },
-            {
-              name: "View usage recommendations",
-              value: "cleanup-recommendations" as const,
-            },
-          ]
-        : []),
-      ...(report.findingCount > 0
-        ? [{ name: "Fix skills with Claude or Codex", value: "repair" as const }]
-        : []),
-      ...(report.errorCount > 0 ? [{ name: "View errors", value: "errors" as const }] : []),
-      ...(report.findingCount > 0
-        ? [
-            { name: "View all findings", value: "all" as const },
-            { name: "View findings by skill", value: "by-skill" as const },
-          ]
-        : []),
-      { name: "Exit", value: "exit" },
-    ]);
+    const action = await selectReviewAction(report, input, buildReviewActionChoices(report));
 
     if (action === "exit") return;
     if (action === "cleanup") {
@@ -498,26 +513,155 @@ const reviewScan = async (
     }
     if (action === "usage-ranking") {
       write(renderUsageRanking(report, { color: input.color }));
+      await maybeWaitForTuiContinue(input);
       continue;
     }
     if (action === "cleanup-recommendations") {
       write(renderCleanupRecommendations(report, { color: input.color }));
+      await maybeWaitForTuiContinue(input);
       continue;
     }
     if (action === "repair") {
       return runRepairAgentFlow(report, input);
     }
+    if (action === "security-repair") {
+      const selectedSecurityFindings = await selectSecurityFindings(report, input);
+      if (selectedSecurityFindings.length === 0) {
+        write("Security repair handoff cancelled.\n");
+        continue;
+      }
+      return runRepairAgentFlow(report, input, selectedSecurityFindings);
+    }
 
     const selectedFindings =
       action === "errors"
         ? report.findings.filter((finding) => finding.severity === "error")
-        : report.findings;
+        : action === "security"
+          ? report.findings.filter((finding) => finding.category === "security")
+          : report.findings.filter((finding) => finding.category !== "security");
     if (action === "by-skill") {
       write(renderFindingsBySkill(selectedFindings, { color: input.color }));
+      await maybeWaitForTuiContinue(input);
+      continue;
+    }
+    if (action === "security") {
+      write(renderSecurityFindings(selectedFindings, { color: input.color }));
+      await maybeWaitForTuiContinue(input);
       continue;
     }
     write(renderFindings(selectedFindings, { color: input.color }));
+    await maybeWaitForTuiContinue(input);
   }
+};
+
+const buildReviewActionChoices = (report: ScanReport): readonly Choice<ReviewAction>[] => [
+  ...(report.usage !== undefined && report.usage.topRecommendations.length > 0
+    ? [
+        {
+          name: "Choose unused skills to disable",
+          value: "cleanup" as const,
+          description: "Clean up your skills configuration",
+        },
+        {
+          name: "View usage ranking",
+          value: "usage-ranking" as const,
+          description: "See which skills are used most",
+        },
+        {
+          name: "View usage recommendations",
+          value: "cleanup-recommendations" as const,
+          description: "Get suggestions to optimize usage",
+        },
+      ]
+    : []),
+  ...(report.qualityFindingCount > 0
+    ? [
+        {
+          name: "Fix skills with Claude or Codex",
+          value: "repair" as const,
+          description: "Create an agent repair handoff",
+        },
+      ]
+    : []),
+  ...(report.errorCount > 0
+    ? [
+        {
+          name: "View errors",
+          value: "errors" as const,
+          description: "Inspect blocking skill findings",
+        },
+      ]
+    : []),
+  ...(hasSecurityFindings(report)
+    ? [
+        {
+          name: "Review security findings",
+          value: "security" as const,
+          description: "Inspect suspicious skill patterns",
+        },
+        {
+          name: "Fix selected security findings with Claude or Codex",
+          value: "security-repair" as const,
+          description: "Create a scoped security repair handoff",
+        },
+      ]
+    : []),
+  ...(report.qualityFindingCount > 0
+    ? [
+        {
+          name: "View quality findings",
+          value: "all" as const,
+          description: "Inspect all quality findings",
+        },
+        {
+          name: "View quality findings by skill",
+          value: "by-skill" as const,
+          description: "Group findings by affected skill",
+        },
+      ]
+    : []),
+  { name: "Exit", value: "exit", description: "Quit skills-doctor" },
+];
+
+const selectReviewAction = async (
+  report: ScanReport,
+  input: ReviewFindingsInput,
+  choices: readonly Choice<ReviewAction>[],
+): Promise<ReviewAction> => {
+  if (input.useTui) {
+    return selectTuiAction(report, choices, {
+      color: input.color,
+      columns: input.terminalColumns,
+      write: input.write,
+    });
+  }
+  return input.prompts.select<ReviewAction>("Next step", choices);
+};
+
+const maybeWaitForTuiContinue = async (input: ReviewFindingsInput): Promise<void> => {
+  if (!input.useTui) return;
+  await waitForTuiContinue({ write: input.write, color: input.color });
+};
+
+const hasSecurityFindings = (report: ScanReport): boolean => report.securityFindingCount > 0;
+
+const selectSecurityFindings = async (
+  report: ScanReport,
+  input: Pick<ReviewFindingsInput, "prompts">,
+): Promise<readonly Finding[]> => {
+  const securityFindings = report.findings.filter((finding) => finding.category === "security");
+  const selectedIndexes = new Set(
+    await input.prompts.checkbox(
+      "Select security findings to send for repair",
+      securityFindings.map((finding, index) => ({
+        name: `${finding.skillName ?? path.basename(path.dirname(finding.skillPath))}: ${finding.ruleId}`,
+        value: String(index),
+        description: formatFindingLocation(finding),
+        checked: true,
+      })),
+    ),
+  );
+  return securityFindings.filter((_finding, index) => selectedIndexes.has(String(index)));
 };
 
 const runCleanupAgentFlow = async (
@@ -648,11 +792,13 @@ const selectCleanupRecommendations = async (
 const runRepairAgentFlow = async (
   report: ScanReport,
   input: ReviewFindingsInput,
+  preselectedFindings?: readonly Finding[],
 ): Promise<ScanReport | undefined> => {
   try {
     const handoff = await prepareRepairHandoff({
       report,
       prompts: input.prompts,
+      preselectedFindings,
       outputRoot: input.repairReportOutputRoot,
       timestamp: input.repairReportTimestamp,
     });
@@ -805,6 +951,38 @@ const renderFindings = (
     .join("\n\n")}\n`;
 };
 
+const renderSecurityFindings = (
+  findings: readonly Finding[],
+  options: RenderTerminalOptions = {},
+): string => {
+  const shouldColor = Boolean(options.color);
+  const lines = [
+    `${usageLabel("Security report", shouldColor)}: ${warning(String(findings.length), shouldColor)} suspicious skill pattern${findings.length === 1 ? "" : "s"}`,
+    "",
+  ];
+  for (const finding of findings) {
+    const location = finding.skillName ?? finding.skillPath;
+    lines.push(
+      `${colorizeSeverity(`[${finding.severity}]`, finding.severity, shouldColor)} ${accent(finding.ruleId, shouldColor)} ${dim(location, shouldColor)}`,
+      formatFindingLocation(finding),
+      finding.message,
+      `${usageLabel("Suggestion", shouldColor)}: ${finding.suggestion}`,
+    );
+    if (finding.evidence !== undefined) {
+      lines.push(`${usageLabel("Evidence", shouldColor)}:`);
+      for (const line of finding.evidence.excerpt) {
+        const marker = line.highlighted ? ">" : " ";
+        const renderedLine = `${marker} ${String(line.line).padStart(4, " ")} | ${line.text}`;
+        lines.push(
+          line.highlighted ? warning(renderedLine, shouldColor) : dim(renderedLine, shouldColor),
+        );
+      }
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+};
+
 const renderFindingsBySkill = (
   findings: readonly Finding[],
   options: RenderTerminalOptions = {},
@@ -824,6 +1002,9 @@ const renderFindingsBySkill = (
     .join("\n\n")
     .concat("\n");
 };
+
+const formatFindingLocation = (finding: Finding): string =>
+  `Location: ${finding.skillPath}${finding.line === undefined ? "" : `:${finding.line}`}`;
 
 const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions = {}): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";

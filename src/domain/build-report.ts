@@ -29,6 +29,8 @@ export type ScanReport = {
   readonly diagnostics: readonly Diagnostic[];
   readonly skillCount: number;
   readonly findingCount: number;
+  readonly qualityFindingCount: number;
+  readonly securityFindingCount: number;
   readonly errorCount: number;
   readonly warningCount: number;
   readonly adviceCount: number;
@@ -70,12 +72,14 @@ export type BuildScanReportUsageInput = {
 };
 
 export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
-  const errorCount = countSeverity(input.scan.findings, "error");
-  const warningCount = countSeverity(input.scan.findings, "warning");
-  const adviceCount = countSeverity(input.scan.findings, "advice");
+  const qualityFindings = input.scan.findings.filter(isQualityFinding);
+  const securityFindingCount = input.scan.findings.length - qualityFindings.length;
+  const errorCount = countSeverity(qualityFindings, "error");
+  const warningCount = countSeverity(qualityFindings, "warning");
+  const adviceCount = countSeverity(qualityFindings, "advice");
   const diagnosticErrorCount = countDiagnosticSeverity(input.scan.diagnostics, "error");
   const hasErrorDiagnostics = diagnosticErrorCount > 0;
-  const findingsBySkillPath = indexFindingsBySkillPath(input.scan.findings);
+  const qualityFindingsBySkillPath = indexFindingsBySkillPath(qualityFindings);
 
   return {
     schemaVersion: 1,
@@ -87,16 +91,18 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
     diagnostics: input.scan.diagnostics,
     skillCount: input.scan.skills.length,
     findingCount: input.scan.findings.length,
+    qualityFindingCount: qualityFindings.length,
+    securityFindingCount,
     errorCount,
     warningCount,
     adviceCount,
-    score: calculateScore(input.scan.findings, {
+    score: calculateScore(qualityFindings, {
       diagnosticErrorCodes: input.scan.diagnostics
         .filter((diagnostic) => diagnostic.severity === "error")
         .map((diagnostic) => diagnostic.code),
     }),
     skills: input.scan.skills.map((skill) => {
-      const skillFindings = findingsBySkillPath.get(skill.skillPath) ?? [];
+      const skillFindings = qualityFindingsBySkillPath.get(skill.skillPath) ?? [];
       return {
         ecosystem: skill.ecosystem,
         name: skill.parseResult.ok
@@ -136,6 +142,8 @@ const buildReportUsage = (input: BuildScanReportUsageInput): ScanReportUsage => 
 
 const countSeverity = (findings: readonly Finding[], severity: Finding["severity"]): number =>
   findings.filter((finding) => finding.severity === severity).length;
+
+const isQualityFinding = (finding: Finding): boolean => finding.category !== "security";
 
 const countDiagnosticSeverity = (
   diagnostics: readonly Diagnostic[],

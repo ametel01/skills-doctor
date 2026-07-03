@@ -74,6 +74,11 @@ Rules and scoring:
   progressive disclosure, resources, scripts, eval guidance, and
   cross-ecosystem divergence. `options` can inject resource and eval existence
   checks for in-memory or alternate filesystem integrations.
+- `validateSecurityRules(skills, options?)`: validates deterministic security
+  heuristics for suspicious `SKILL.md` instructions such as instruction
+  subversion, secret exfiltration, network exfiltration, remote execution,
+  high-risk destructive actions, safety disablement, and obfuscated execution.
+  Findings describe suspicious patterns and are not proof of malicious intent.
 - `calculateScore(findings, options?)`: calculates a score summary.
 - `getScoreLabel(value)`: maps a numeric score to a score label.
 
@@ -113,6 +118,8 @@ Exported types include:
 - `Diagnostic`
 - `Finding`
 - `FindingCategory`
+- `FindingEvidence`
+- `FindingEvidenceLine`
 - `FindingSeverity`
 - `FindingsComparison`
 - `FindingsDirectoryInput`
@@ -123,6 +130,7 @@ Exported types include:
 - `QualityRuleOptions`
 - `ResourceStatus`
 - `RuleCatalogEntry`
+- `SecurityRuleOptions`
 - `ScanReport`
 - `ScanReportUsage`
 - `ScanResult`
@@ -182,6 +190,8 @@ type ScanReport = {
   readonly diagnostics: readonly Diagnostic[];
   readonly skillCount: number;
   readonly findingCount: number;
+  readonly qualityFindingCount: number;
+  readonly securityFindingCount: number;
   readonly errorCount: number;
   readonly warningCount: number;
   readonly adviceCount: number;
@@ -203,11 +213,13 @@ Fields:
 - `scannedRoots`: roots selected for scanning.
 - `diagnostics`: scan-level issues that are not tied to a parsed skill finding.
 - `skillCount`: number of parsed skill records.
-- `findingCount`: total number of findings.
-- `errorCount`: number of blocking error findings.
-- `warningCount`: number of warning findings.
-- `adviceCount`: number of advisory findings.
-- `score`: score summary from `calculateScore()`.
+- `findingCount`: total number of quality and security findings.
+- `qualityFindingCount`: number of non-security quality findings.
+- `securityFindingCount`: number of security review findings.
+- `errorCount`: number of blocking quality error findings.
+- `warningCount`: number of quality warning findings.
+- `adviceCount`: number of quality advisory findings.
+- `score`: quality score summary from `calculateScore()`.
 - `skills`: per-skill summaries.
 - `findings`: detailed rule findings.
 - `usage`: optional usage analysis included only when the caller supplies usage
@@ -252,6 +264,7 @@ type Finding = {
     | "scripts"
     | "evals"
     | "portability"
+    | "security"
     | "cross-ecosystem";
   readonly title: string;
   readonly message: string;
@@ -262,12 +275,27 @@ type Finding = {
   readonly skillPath: string;
   readonly skillName?: string;
   readonly line?: number;
+  readonly evidence?: FindingEvidence;
   readonly agentRepairable: boolean;
+};
+
+type FindingEvidence = {
+  readonly path: string;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly excerpt: readonly FindingEvidenceLine[];
+};
+
+type FindingEvidenceLine = {
+  readonly line: number;
+  readonly text: string;
+  readonly highlighted: boolean;
 };
 ```
 
 `ruleId` values are documented in `docs/RULES.md`. `line` is present only when
-the scanner can resolve a specific source line.
+the scanner can resolve a specific source line. Security findings include
+`evidence` when the scanner can show the excerpt that triggered the warning.
 
 Use `ruleCatalog` when integrations need structured rule metadata without
 scraping Markdown:
@@ -340,14 +368,15 @@ type SkillSummary = {
 
 `resolveScanExitCode(report, options?)` mirrors the CLI blocking behavior:
 
-- returns `0` when there are no error findings and no error diagnostics.
+- returns `0` when there are no quality error findings and no error diagnostics.
 - returns `1` when `report.errorCount > 0` or any diagnostic has
   `severity: "error"`.
 
-Warnings and advice appear in the report but do not make the exit code fail.
+Quality warnings and advice appear in the report but do not make the exit code fail.
 Pass `{ failOn: "warning" }`, `{ failOn: "advice" }`, or `{ minScore: 95 }`
 to opt into stricter automation gates. These options match the CLI
-`--fail-on` and `--min-score` flags.
+`--fail-on` and `--min-score` flags. Security findings are separate review
+warnings and are excluded from quality exit gates.
 
 ## Compatibility
 

@@ -231,6 +231,48 @@ export const ruleCatalog = [
     description: "Non-trivial skill lacks evals/evals.json.",
   },
   {
+    ruleId: "prompt-injection-instruction",
+    severity: "warning",
+    categories: ["security"],
+    description: "Skill instructions appear to subvert higher-priority instructions.",
+  },
+  {
+    ruleId: "secret-exfiltration-instruction",
+    severity: "warning",
+    categories: ["security"],
+    description: "Skill instructions appear to send secrets outside the local task context.",
+  },
+  {
+    ruleId: "network-exfiltration-command",
+    severity: "warning",
+    categories: ["security"],
+    description: "Network transfer guidance appears near secret or sensitive file reading.",
+  },
+  {
+    ruleId: "remote-code-execution-bootstrap",
+    severity: "warning",
+    categories: ["security"],
+    description: "Skill instructions appear to fetch remote content and execute it.",
+  },
+  {
+    ruleId: "destructive-command-high-risk",
+    severity: "warning",
+    categories: ["security"],
+    description: "Skill instructions describe broad destructive or trace-hiding actions.",
+  },
+  {
+    ruleId: "agent-safety-disablement",
+    severity: "warning",
+    categories: ["security"],
+    description: "Skill instructions appear to disable sandboxing, permissions, or confirmation.",
+  },
+  {
+    ruleId: "external-resource-obfuscation",
+    severity: "warning",
+    categories: ["security"],
+    description: "Skill instructions appear to decode or stage obscured content for execution.",
+  },
+  {
     ruleId: "cross-ecosystem-skill-divergence",
     severity: "warning",
     categories: ["cross-ecosystem"],

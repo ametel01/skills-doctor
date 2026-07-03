@@ -34,6 +34,7 @@ Use these files as implementation evidence:
   - `src/domain/parse-skill.ts`
   - `src/domain/rules/structural.ts`
   - `src/domain/rules/quality.ts`
+  - `src/domain/rules/security.ts`
   - `src/domain/build-report.ts`
   - `src/domain/analyze-skill-usage.ts`
   - `src/domain/discover-usage-sources.ts`
@@ -195,6 +196,9 @@ Responsibilities:
 - `rules/structural.ts`: validate required skill shape.
 - `rules/quality.ts`: validate skill-quality heuristics, resources, scripts,
   evals, and cross-ecosystem divergence.
+- `rules/security.ts`: validate deterministic security heuristics for
+  suspicious `SKILL.md` instructions and capabilities. Findings are warnings or
+  errors about suspicious patterns, not proof of malicious intent.
 - `build-report.ts`: build the stable scan report object.
 - `calculate-score.ts`: compute the score from distinct blocking and warning
   rules.
@@ -214,8 +218,8 @@ domain modules.
 ## Findings And Reports
 
 Findings use the shared types in `src/domain/types.ts`. Rule IDs emitted by
-structural and quality rules must be documented in `docs/RULES.md`; the test
-suite checks this.
+structural, quality, and security rules must be documented in `docs/RULES.md`;
+the test suite checks this.
 
 Scan reports include:
 

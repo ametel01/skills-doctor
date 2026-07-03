@@ -22,6 +22,7 @@ describe("public API facade", () => {
     expect(api).toHaveProperty("getScoreLabel");
     expect(api).toHaveProperty("ruleCatalog");
     expect(api).toHaveProperty("buildMissingSkillFinding");
+    expect(api).toHaveProperty("validateSecurityRules");
     expect(api).not.toHaveProperty("scanAction");
     expect(api).not.toHaveProperty("prepareRepairHandoff");
     expect(api).not.toHaveProperty("launchRepairAgent");
@@ -89,6 +90,8 @@ describe("fixture scanner coverage", () => {
       "diagnostics",
       "skillCount",
       "findingCount",
+      "qualityFindingCount",
+      "securityFindingCount",
       "errorCount",
       "warningCount",
       "adviceCount",

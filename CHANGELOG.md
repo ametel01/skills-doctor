@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added a full-screen interactive TTY dashboard with scan progress, usage metrics, cleanup candidates, and keyboard-driven next-step actions.
+- Documented the malicious skill detector rules, report category, and public API.
+- Added a public security-rule validator API surface for future malicious skill detection rules.
+- Established progress tracking for the malicious skill detector implementation plan.
+
+### Changed
+
+- Replaced the plain interactive review prompt with a painted ANSI dashboard while preserving JSON, non-interactive, and injected-prompt output paths.
+- Separated security findings from quality issue counts, scoring, and default exit gates.
+- Added source excerpts to security findings and a per-finding security repair selection flow.
+
+### Fixed
+
+- Made `bun run dev` rebuild ignored `dist/` output before launching the packaged bin so local CLI runs reflect source changes.
+
+### Security
+
+- Surfaced security findings in the interactive CLI summary and review menu.
+- Verified malicious skill detector release readiness with full verification and package dry-run.
+- Integrated security findings into normal skill scans and report exit-code behavior.
+- Added deterministic detection for remote execution, safety-disablement, destructive, and obfuscated command patterns in skill files.
+- Added deterministic detection for instruction-subversion and secret-exfiltration patterns in skill files.
+
 ## [0.5.2] - 2026-06-20
 
 ### Added

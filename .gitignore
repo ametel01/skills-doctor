@@ -3,3 +3,4 @@ dist/
 coverage/
 .skills-doctor/
 *.tgz
+.hallmark
