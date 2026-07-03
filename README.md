@@ -67,6 +67,11 @@ runs scan only a single unambiguous detected root. If multiple local/global
 scopes or multiple ecosystems are detected, they fail with a clear user error
 instead of guessing.
 
+For each skill package, security scanning also classifies `SKILL.md`,
+`scripts/**`, `references/**`, `assets/**`, agent/MCP/Claude config files,
+hooks, package manifests, shell scripts, Dockerfiles, CI files, hidden files,
+executable artifacts, and symlink metadata.
+
 ## What It Checks
 
 The scanner validates skills against `docs/SKILLS_SPEC.md`, which consolidates
@@ -80,20 +85,23 @@ the Agent Skills standards from <https://agentskills.io/home>, including:
 - script guidance that is non-interactive and reproducible
 - eval guidance for non-trivial skills
 - divergent same-name skills across Claude and Codex/agents roots
-- suspicious security patterns in `SKILL.md`, including instruction
-  subversion, secret exfiltration, remote execution bootstraps, high-risk
-  destructive actions, safety disablement, and obfuscated execution guidance
+- suspicious security patterns across the skill package, including prompt
+  override, permission bypass, secret access, exfiltration chains, destructive
+  commands, persistence, remote execution, obfuscation, broad tools, missing
+  denylists, external dependencies, MCP exposure, self-modification, hidden
+  artifacts, and large context bait
 
 See `docs/RULES.md` for a full rule catalog, severity, and intended rationale.
 Programmatic consumers can import `ruleCatalog` for the same metadata as structured data.
 Security findings are deterministic heuristic findings about suspicious
-instructions or capabilities; they are not proof that a skill author intended
-harm.
+instructions or capabilities such as `reads_secrets`, `network_egress`,
+`remote_code_exec`, `persistence`, `bypasses_approval`, or `mcp_access`; they
+are not proof that a skill author intended harm.
 
 Quality findings are grouped as blocking errors, warnings, and advisory improvements.
 Security findings are reported separately as suspicious skill patterns with
-source excerpts, confidence, rationale, and counterevidence for false-positive
-review when that metadata is available.
+source excerpts, priority, capabilities, confidence, rationale, and
+counterevidence for false-positive review when that metadata is available.
 The human summary opens with a score header showing a face, `0` to `100` score,
 label, and proportional terminal bar. The score starts at 100 and deducts 1.5
 points for each distinct error rule and 0.75 points for each distinct warning

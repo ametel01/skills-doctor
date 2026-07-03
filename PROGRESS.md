@@ -6,9 +6,9 @@
 - User gap summary from 2026-07-03
 
 ## Current Status
-- Status: Step 9 complete.
-- Current step: Step 10: Update Documentation And Public Rule Catalog.
-- Next step: Step 10: Update Documentation And Public Rule Catalog.
+- Status: Step 10 complete.
+- Current step: Step 11: Add End-To-End Fixture Coverage.
+- Next step: Step 11: Add End-To-End Fixture Coverage.
 
 ## Step Checklist
 - [x] Step 0: Progress and Changelog Tracking Setup
@@ -21,7 +21,7 @@
 - [x] Step 7: Implement P1 High-Risk Rules
 - [x] Step 8: Implement P2 Quality And Hygiene Rules
 - [x] Step 9: Add Security Gates And Report Schema Output
-- [ ] Step 10: Update Documentation And Public Rule Catalog
+- [x] Step 10: Update Documentation And Public Rule Catalog
 - [ ] Step 11: Add End-To-End Fixture Coverage
 - [ ] Step 12: Final Verification And Release Readiness
 
@@ -154,7 +154,20 @@ After each completed step, update this file with:
 - Changelog: Added `Added` and `Changed` entries for security report aggregates and gates.
 - Commit: Step 9 commit (`feat: expose security priorities and capability gates`).
 
+### Step 10: Update Documentation And Public Rule Catalog
+- Summary: Aligned README, API docs, CLI spec, and rules docs with package artifact scanning, capability-delta output, P0/P1/P2 gates, security priority/capability report aggregates, and the complete spec-aligned rule catalog.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run typecheck` passed.
+  - `bun test test/quality-rules.test.ts test/api-fixtures.test.ts test/cli-bin.test.ts` passed: 36 docs/catalog/API/packaged CLI tests.
+  - `bun run test` passed: 21 files, 239 tests.
+  - `bun run build` passed.
+- Changelog: No changelog entry added because this was documentation alignment for behavior already recorded in earlier steps.
+- Commit: Step 10 commit (`docs: document full security scanner behavior`).
+
 ## Update Log
+- 2026-07-03: Completed Step 10 documentation alignment and full validation.
 - 2026-07-03: Completed Step 9 full validation for security report aggregates, P0 default gates, and `--fail-on-security`.
 - 2026-07-03: Completed focused Step 8 validation for P2 rule IDs, package hygiene findings, score impact, and docs sync.
 - 2026-07-03: Completed focused Step 7 validation for P1 rule IDs, priorities, package capability findings, MCP checks, and docs sync.

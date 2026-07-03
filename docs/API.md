@@ -239,9 +239,8 @@ Capability facts are deterministic heuristic observations. They are not proof
 that a skill author intended harm; they are evidence inputs for security rules
 and review workflows.
 
-`SecurityPriority` values are `P0`, `P1`, and `P2`. Future package-level
-security rules populate this priority on security findings while preserving the
-existing `severity` field.
+`SecurityPriority` values are `P0`, `P1`, and `P2`. Security rules populate this
+priority on security findings while preserving the existing `severity` field.
 
 ## ScanReport
 

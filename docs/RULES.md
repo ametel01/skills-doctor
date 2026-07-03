@@ -196,7 +196,8 @@ Security findings include optional confidence metadata:
 
 Security findings are separate review warnings. They are counted in
 `findingCount` and `securityFindingCount`, but they are excluded from per-skill
-quality counts and default exit-code gates. P0 and P1 security findings are
+quality counts. P0 security findings fail default exit-code gates; P1 and P2
+can be made blocking with `--fail-on-security`. P0 and P1 security findings are
 excluded from the quality score; P2 security hygiene findings affect score so
-`--min-score` can gate them. `--fail-on warning` and `--fail-on advice` apply
-to quality findings and error diagnostics, not to security findings.
+`--min-score` can gate them. `--fail-on warning` and `--fail-on advice` apply to
+quality findings and error diagnostics, not to security findings.
