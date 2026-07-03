@@ -103,6 +103,14 @@ Intent is classified conservatively:
 | `SKILL006_PERSISTENCE` | warning | P0 | security | Skill instructions appear to install persistence through startup, hooks, or services. |
 | `SKILL007_REMOTE_CODE_EXEC` | warning | P0 | security | Skill instructions appear to fetch remote content and execute it. |
 | `SKILL008_OBFUSCATION` | warning | P0 | security | Skill instructions appear to decode or stage obscured content for execution. |
+| `SKILL101_BROAD_ALLOWED_TOOLS` | warning | P1 | security | Skill package grants broad file, shell, web, agent, or MCP tool access. |
+| `SKILL102_MISSING_DENYLIST` | warning | P1 | security | Risky skill package capabilities lack sensitive-file or command deny rules. |
+| `SKILL103_IMPLICIT_INVOCATION_RISK` | warning | P1 | security | Skill metadata uses broad implicit-invocation wording. |
+| `SKILL104_EXTERNAL_DEPENDENCY` | warning | P1 | security | Skill package fetches unpinned dependencies or trusts remote content. |
+| `SKILL105_CROSS_MODAL_MISMATCH` | warning | P1 | security | Skill package behavior does not match the stated skill purpose. |
+| `SKILL106_SELF_MODIFYING_SKILL` | warning | P1 | security | Skill package instructs runtime modification of its own files or registry metadata. |
+| `SKILL107_UNTRUSTED_MCP` | warning | P1 | security | Skill package adds or exposes broad MCP tools without a clear allowlist. |
+| `SKILL108_MCP_SCOPE_EXCESS` | warning | P1 | security | MCP configuration requests broad OAuth scopes or weak redirect metadata. |
 
 Evidence requirements by rule:
 
@@ -138,6 +146,23 @@ Evidence requirements by rule:
 - `SKILL008_OBFUSCATION` reports decode-or-stage guidance for
   obfuscated external content when paired with shell or interpreter execution.
   Defensive warnings and decode-only fixture handling are counterevidence.
+- `SKILL101_BROAD_ALLOWED_TOOLS` reports broad `allowed-tools`, shell, write,
+  edit, web, agent, or MCP wildcard grants unless paired with clear deny rules.
+- `SKILL102_MISSING_DENYLIST` reports package-level risky capabilities when no
+  denylist or `permissions.deny` evidence protects sensitive files or commands.
+- `SKILL103_IMPLICIT_INVOCATION_RISK` reports broad descriptions such as
+  always-use, any-task, general-assistant, or all-purpose selection wording.
+- `SKILL104_EXTERNAL_DEPENDENCY` reports runtime URL fetches, unpinned package
+  installs, arbitrary repo clones, or instructions to trust remote markdown.
+- `SKILL105_CROSS_MODAL_MISMATCH` reports risky non-`SKILL.md` package
+  capabilities when the stated skill purpose does not scope that behavior.
+- `SKILL106_SELF_MODIFYING_SKILL` reports instructions to edit `SKILL.md`,
+  scripts, references, assets, `.agents/skills`, or registry metadata at
+  runtime.
+- `SKILL107_UNTRUSTED_MCP` reports MCP servers, MCP wildcards, or broad MCP
+  dependencies without trusted-server or named-tool allowlist evidence.
+- `SKILL108_MCP_SCOPE_EXCESS` reports broad MCP OAuth scopes or loose redirect
+  URI metadata.
 
 Security findings include optional confidence metadata:
 

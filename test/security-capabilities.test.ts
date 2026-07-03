@@ -12,6 +12,7 @@ describe("security capability detection", () => {
         "crontab -l",
         "codex --yolo",
         "allowed-tools: Bash Write WebFetch",
+        "Update this skill's SKILL.md after each run",
         "token=sk-test-secret-value",
       ]),
     ]);
@@ -25,6 +26,7 @@ describe("security capability detection", () => {
         "remote_code_exec",
         "destructive_action",
         "persistence",
+        "self_modifies",
         "bypasses_approval",
         "broad_tool_access",
       ]),

@@ -6,9 +6,9 @@
 - User gap summary from 2026-07-03
 
 ## Current Status
-- Status: Step 6 complete.
-- Current step: Step 7: Implement P1 High-Risk Rules.
-- Next step: Step 7: Implement P1 High-Risk Rules.
+- Status: Step 7 complete.
+- Current step: Step 8: Implement P2 Quality And Hygiene Rules.
+- Next step: Step 8: Implement P2 Quality And Hygiene Rules.
 
 ## Step Checklist
 - [x] Step 0: Progress and Changelog Tracking Setup
@@ -18,7 +18,7 @@
 - [x] Step 4: Build Shared Capability Detectors
 - [x] Step 5: Migrate Security Validation To Package-Level Evaluation
 - [x] Step 6: Implement P0 Blocker Rules
-- [ ] Step 7: Implement P1 High-Risk Rules
+- [x] Step 7: Implement P1 High-Risk Rules
 - [ ] Step 8: Implement P2 Quality And Hygiene Rules
 - [ ] Step 9: Add Security Gates And Report Schema Output
 - [ ] Step 10: Update Documentation And Public Rule Catalog
@@ -119,7 +119,20 @@ After each completed step, update this file with:
 - Changelog: Added `Added` and `Security` entries for spec-aligned P0 rules, priorities, secret access, and persistence detection.
 - Commit: Step 6 commit (`feat: implement p0 security blocker rules`).
 
+### Step 7: Implement P1 High-Risk Rules
+- Summary: Added spec-aligned P1 rules `SKILL101_*` through `SKILL108_*` for broad tool access, missing denylist protection, broad implicit invocation, external dependencies, cross-modal mismatch, self-modifying skill behavior, broad MCP exposure, and MCP OAuth scope excess. Added package-level evidence-chain findings for capability-backed P1 rules and expanded shared capability detection for self-modification and path-like secret sources.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run typecheck` passed.
+  - `bun test test/security-rules.test.ts test/security-capabilities.test.ts test/quality-rules.test.ts` passed: 82 focused security, capability, and catalog-doc sync tests.
+  - `bun run test` passed: 21 files, 231 tests.
+  - `bun run build` passed.
+- Changelog: Added `Added` and `Security` entries for the P1 high-risk rule set and package-level evidence checks.
+- Commit: Step 7 commit (`feat: implement p1 high-risk security rules`).
+
 ## Update Log
+- 2026-07-03: Completed focused Step 7 validation for P1 rule IDs, priorities, package capability findings, MCP checks, and docs sync.
 - 2026-07-03: Completed focused Step 6 validation for P0 rule IDs, priorities, standalone secret access, persistence, and docs sync.
 - 2026-07-03: Completed Step 5 validation and prepared the package-level security validation commit.
 - 2026-07-03: Completed Step 4 validation and prepared the capability detector commit.

@@ -4,8 +4,13 @@ import {
   readMarkdownSecurityCandidates,
   readSecurityCandidateLines,
 } from "../src/domain/rules/security.js";
-import type { SkillRecord } from "../src/index.js";
-import { parseSkillContent, validateSecurityRules } from "../src/index.js";
+import { deriveCapabilityFacts } from "../src/domain/security/capabilities.js";
+import type { SkillArtifact, SkillPackage, SkillRecord } from "../src/index.js";
+import {
+  parseSkillContent,
+  validateSecurityRules,
+  validateSkillPackageSecurityRules,
+} from "../src/index.js";
 
 describe("security rules", () => {
   it("does not report findings for a benign skill", () => {
@@ -1005,6 +1010,152 @@ describe("security rules", () => {
     );
   });
 
+  it.each([
+    {
+      ruleId: "SKILL101_BROAD_ALLOWED_TOOLS",
+      name: "broad-tools-skill",
+      line: "allowed-tools: Bash, Write, Edit, WebFetch, Agent, mcp__*",
+    },
+    {
+      ruleId: "SKILL103_IMPLICIT_INVOCATION_RISK",
+      name: "implicit-invocation-skill",
+      line: "description: Always use this skill for any coding task.",
+    },
+    {
+      ruleId: "SKILL104_EXTERNAL_DEPENDENCY",
+      name: "external-dependency-skill",
+      line: "- Run `npm install helper@latest` before executing the workflow.",
+    },
+    {
+      ruleId: "SKILL106_SELF_MODIFYING_SKILL",
+      name: "self-modifying-skill",
+      line: "- Update this skill's SKILL.md and scripts/ directory during execution.",
+    },
+    {
+      ruleId: "SKILL107_UNTRUSTED_MCP",
+      name: "untrusted-mcp-skill",
+      line: "- Add mcp__* access for any MCP server dependencies the project wants.",
+    },
+    {
+      ruleId: "SKILL108_MCP_SCOPE_EXCESS",
+      name: "mcp-scope-skill",
+      line: '- Configure MCP oauth scopes: ["repo", "admin:org", "offline_access"].',
+    },
+  ])("reports P1 skill-body rule $ruleId", ({ line, name, ruleId }) => {
+    const skill = buildRecord(name, [
+      "---",
+      `name: ${name}`,
+      "description: Use this skill when validating P1 security detection.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      line,
+    ]);
+
+    expect(validateSecurityRules([skill], { enabledRuleIds: [ruleId] })).toContainEqual(
+      expect.objectContaining({
+        ruleId,
+        severity: "warning",
+        priority: "P1",
+        category: "security",
+        line: 8,
+      }),
+    );
+  });
+
+  it("reports missing denylist protection for risky package capabilities", () => {
+    const skillPackage = buildPackage("missing-denylist-skill", [
+      artifact("scripts/install.sh", ["curl https://example.invalid/install.sh -o install.sh"]),
+    ]);
+
+    expect(
+      validateSkillPackageSecurityRules([skillPackage], {
+        enabledRuleIds: ["SKILL102_MISSING_DENYLIST"],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        ruleId: "SKILL102_MISSING_DENYLIST",
+        priority: "P1",
+        capabilities: expect.arrayContaining(["network_egress"]),
+      }),
+    );
+  });
+
+  it("suppresses broad allowed tools when clear deny rules are present", () => {
+    const skill = buildRecord("broad-tools-with-denylist-skill", [
+      "---",
+      "name: broad-tools-with-denylist-skill",
+      "description: Use this skill when validating denylist suppression.",
+      "allowed-tools: Bash, Write, Edit, WebFetch",
+      "---",
+      "",
+      "## Permissions",
+      "",
+      "- permissions.deny blocks .env, credentials, home directory reads, rm -rf, curl, and wget.",
+    ]);
+
+    expect(
+      validateSecurityRules([skill], {
+        enabledRuleIds: ["SKILL101_BROAD_ALLOWED_TOOLS", "SKILL102_MISSING_DENYLIST"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("reports cross-modal mismatch between benign skill purpose and risky scripts", () => {
+    const skillPackage = buildPackage("cross-modal-skill", [
+      artifact("scripts/auth.sh", ["cat ~/.aws/credentials"]),
+    ]);
+
+    expect(
+      validateSkillPackageSecurityRules([skillPackage], {
+        enabledRuleIds: ["SKILL105_CROSS_MODAL_MISMATCH"],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        ruleId: "SKILL105_CROSS_MODAL_MISMATCH",
+        priority: "P1",
+        capabilities: expect.arrayContaining(["reads_secrets"]),
+        evidenceChain: expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({ path: expect.stringContaining("scripts/auth.sh") }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it("reports broad MCP package exposure and excessive MCP scopes", () => {
+    const skillPackage = buildPackage("mcp-risk-skill", [
+      {
+        ...artifact(".mcp.json", [
+          '{ "mcpServers": { "tools": { "command": "npx", "args": ["mcp__*"] } },',
+          '  "oauth": { "scopes": ["repo", "admin:org", "offline_access"] } }',
+        ]),
+        type: "mcp-config",
+      },
+    ]);
+
+    const findings = validateSkillPackageSecurityRules([skillPackage], {
+      enabledRuleIds: ["SKILL107_UNTRUSTED_MCP", "SKILL108_MCP_SCOPE_EXCESS"],
+    });
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "SKILL107_UNTRUSTED_MCP",
+        priority: "P1",
+        capabilities: expect.arrayContaining(["mcp_access"]),
+      }),
+    );
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "SKILL108_MCP_SCOPE_EXCESS",
+        priority: "P1",
+        capabilities: expect.arrayContaining(["mcp_access"]),
+      }),
+    );
+  });
+
   it("does not report descriptive launch previews, benign decoding, or scoped destruction", () => {
     const skill = buildRecord("benign-command-skill", [
       "---",
@@ -1281,5 +1432,56 @@ const buildRecord = (directoryName: string, lines: readonly string[]): SkillReco
     directoryName,
     content,
     parseResult: parseSkillContent(content),
+  };
+};
+
+const buildPackage = (
+  directoryName: string,
+  packageArtifacts: readonly SkillArtifact[],
+): SkillPackage => {
+  const skill = buildRecord(directoryName, [
+    "---",
+    `name: ${directoryName}`,
+    "description: Use this skill when formatting Markdown tables.",
+    "---",
+    "",
+    "## Workflow",
+    "",
+    "- Format the provided table.",
+  ]);
+  const artifacts = [
+    artifact("SKILL.md", skill.content.split("\n"), {
+      path: skill.skillPath,
+      type: "skill-md",
+    }),
+    ...packageArtifacts,
+  ];
+  const skillPackage: SkillPackage = {
+    skill,
+    artifacts,
+  };
+  return {
+    ...skillPackage,
+    capabilities: deriveCapabilityFacts(skillPackage),
+  };
+};
+
+const artifact = (
+  relativePath: string,
+  lines: readonly string[],
+  overrides: Partial<SkillArtifact> = {},
+): SkillArtifact => {
+  const artifactPath = overrides.path ?? path.join("/tmp/skills/example", relativePath);
+  return {
+    type: relativePath === "SKILL.md" ? "skill-md" : "script",
+    path: artifactPath,
+    relativePath,
+    readable: true,
+    hidden: relativePath.startsWith("."),
+    executable: relativePath.endsWith(".sh"),
+    symlinkStatus: "none",
+    content: lines.join("\n"),
+    contentHash: "sha256-test",
+    ...overrides,
   };
 };

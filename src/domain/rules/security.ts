@@ -21,7 +21,15 @@ type SecurityRuleId =
   | "SKILL005_DESTRUCTIVE_COMMANDS"
   | "SKILL006_PERSISTENCE"
   | "SKILL007_REMOTE_CODE_EXEC"
-  | "SKILL008_OBFUSCATION";
+  | "SKILL008_OBFUSCATION"
+  | "SKILL101_BROAD_ALLOWED_TOOLS"
+  | "SKILL102_MISSING_DENYLIST"
+  | "SKILL103_IMPLICIT_INVOCATION_RISK"
+  | "SKILL104_EXTERNAL_DEPENDENCY"
+  | "SKILL105_CROSS_MODAL_MISMATCH"
+  | "SKILL106_SELF_MODIFYING_SKILL"
+  | "SKILL107_UNTRUSTED_MCP"
+  | "SKILL108_MCP_SCOPE_EXCESS";
 
 type SecurityRule = {
   readonly ruleId: SecurityRuleId;
@@ -135,6 +143,23 @@ const OBFUSCATED_EXECUTION_PATTERN =
   /\b((base64|encoded|obfuscated|hidden remote)\b.{0,100}\b(decode|decode it|decoded|stage)|\b(decode|decode it|decoded|stage)\b.{0,100}\b(base64|encoded|obfuscated|hidden remote))\b.{0,100}\b(execute|run|shell|bash|sh|zsh|interpreter)\b/i;
 const PERSISTENCE_PATTERN =
   /\b(write|append|install|create|modify|add|register)\b.{0,120}(?:^|[^\w])(\.bashrc|\.zshrc|\.profile|\.bash_profile|crontab|cron\.d|launch agents?|launchd|systemd|git hooks?|\.git\/hooks|npm postinstall|postinstall|setup\.py|vscode tasks?|\.vscode\/tasks\.json|auto-?start)\b|(?:^|[^\w])(\.bashrc|\.zshrc|\.profile|\.bash_profile|crontab|cron\.d|launch agents?|launchd|systemd|git hooks?|\.git\/hooks|npm postinstall|postinstall|setup\.py|vscode tasks?|\.vscode\/tasks\.json|auto-?start)\b.{0,120}\b(write|append|install|create|modify|add|register)\b/i;
+const BROAD_ALLOWED_TOOLS_PATTERN =
+  /\ballowed-tools\s*:\s*.*\b(Bash|Write|Edit|WebFetch|Agent|mcp__\*)\b|\bmcp__\*\b|\b(Bash|Write|Edit|WebFetch|Agent)\b.{0,80}\b(without narrowing|broad|unrestricted|all tools?)\b/i;
+const DENYLIST_PATTERN =
+  /\b(permissions\.deny|denylist|deny-list|deny rules?|disallow|forbid|blocked tools?|forbidden)\b.{0,180}\b(\.env|secrets?|credentials?|tokens?|~\/|home directory|rm\s+-rf|curl|wget|Bash|Read|Write|Edit|WebFetch|mcp__\*)\b|\b(\.env|secrets?|credentials?|tokens?|~\/|home directory|rm\s+-rf|curl|wget|Bash|Read|Write|Edit|WebFetch|mcp__\*)\b.{0,180}\b(permissions\.deny|denylist|deny-list|deny rules?|disallow|forbid|blocked tools?|forbidden)\b/i;
+const IMPLICIT_INVOCATION_PATTERN =
+  /\b(use (?:this skill )?(?:for|on) any (?:coding )?task|always use|general assistant|best skill for everything|use for everything|all-purpose|every request|any repository|any repo)\b/i;
+const EXTERNAL_DEPENDENCY_PATTERN =
+  /\b(npm install|pnpm add|yarn add|bun add|pip install|pipx run|uvx|brew install|docker pull|git clone|go install)\b.{0,160}\b(latest|main|master|HEAD|https?:\/\/|github\.com|gitlab\.com)\b|\b(fetch|download|load|read|trust)\b.{0,120}\b(remote markdown|remote prompt|remote docs?|https?:\/\/)/i;
+const SELF_MODIFYING_PATTERN =
+  /\b(edit|modify|rewrite|update|patch|append|replace)\b.{0,120}\b(this skill|SKILL\.md|scripts\/|references\/|assets\/|\.agents\/skills|registry metadata|skill registry)\b|\b(this skill|SKILL\.md|scripts\/|references\/|assets\/|\.agents\/skills|registry metadata|skill registry)\b.{0,120}\b(edit|modify|rewrite|update|patch|append|replace)\b/i;
+const UNTRUSTED_MCP_PATTERN =
+  /\b(mcp__\*|mcpServers|\.mcp\.json|broad MCP|MCP dependencies?|MCP servers?)\b/i;
+const MCP_ALLOWLIST_PATTERN = /\b(allowlist|allow-list|allowed mcp|trusted mcp|approved mcp)\b/i;
+const MCP_SCOPE_EXCESS_PATTERN =
+  /\b(scopes?|oauth)\b.{0,160}\b(repo|admin|write|offline_access|read:user|read:org|gist|workflow|\*)\b|\bredirect_uris?\b.{0,120}\b(http:\/\/|localhost|127\.0\.0\.1|\*)\b/i;
+const PURPOSE_RISK_KEYWORD_PATTERN =
+  /\b(security|auth|credential|secret|token|network|http|api|deploy|install|dependency|script|shell|filesystem|file system|mcp|tool|automation)\b/i;
 const PREVENTION_PATTERN =
   /\b(do not|don't|never|avoid|refuse to|must not|should not)\b.{0,80}\b(ignore|disregard|override|bypass|send|post|upload|forward|transmit|copy|paste|exfiltrate|curl|wget|netcat|nc|scp|rsync|webhook|--yolo|--dangerously-skip-permissions|sandbox|auto-approve|confirmation|base64|encoded)\b/i;
 const EVIDENCE_SECRET_VALUE_PATTERN =
@@ -398,6 +423,142 @@ const SECURITY_RULES: readonly SecurityRule[] = [
         (line) => !isPreventiveLine(line.text) && OBFUSCATED_EXECUTION_PATTERN.test(line.text),
       ),
   },
+  {
+    ruleId: "SKILL101_BROAD_ALLOWED_TOOLS",
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Broad allowed tools appear in skill metadata or body",
+    message:
+      "The skill appears to grant broad file, shell, web, agent, or MCP tool access without clear narrowing.",
+    suggestion:
+      "Narrow allowed tools to the minimum required set and pair risky access with explicit deny rules for secrets, home directories, and destructive commands.",
+    rationale: "Matched broad allowed-tools or broad tool grant wording without denylist evidence.",
+    counterevidence: [
+      "Clear deny rules for sensitive files or destructive tools suppress this rule.",
+    ],
+    findLine: (lines) =>
+      hasDenylistEvidence(lines)
+        ? undefined
+        : findFirstLine(lines, (line) => BROAD_ALLOWED_TOOLS_PATTERN.test(line.text)),
+  },
+  {
+    ruleId: "SKILL102_MISSING_DENYLIST",
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Risky skill access is missing denylist protection",
+    message:
+      "The skill appears to use scripts, network, broad tools, secrets, or destructive actions without deny rules for sensitive files or commands.",
+    suggestion:
+      "Add deny rules for secrets, home directories, credential paths, network transfer around secrets, and destructive commands.",
+    rationale:
+      "Matched risky access evidence while no denylist or permissions.deny evidence was present.",
+    counterevidence: ["Explicit denylist or permissions.deny guidance suppresses this rule."],
+    findLine: () => undefined,
+  },
+  {
+    ruleId: "SKILL103_IMPLICIT_INVOCATION_RISK",
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Broad implicit invocation wording appears in skill metadata or body",
+    message:
+      "The skill uses broad invocation wording that may cause an agent to select it for unrelated tasks.",
+    suggestion:
+      "Scope the description to a narrow task, inputs, and boundaries so implicit skill selection is predictable.",
+    rationale:
+      "Matched broad selection phrases such as always-use, any-task, or general-assistant wording.",
+    counterevidence: [
+      "Narrow task descriptions and explicit when-not-to-use boundaries reduce this risk.",
+    ],
+    findLine: (lines) =>
+      findFirstLine(lines, (line) => IMPLICIT_INVOCATION_PATTERN.test(line.text)),
+  },
+  {
+    ruleId: "SKILL104_EXTERNAL_DEPENDENCY",
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "External dependency or remote content trust appears in skill body",
+    message:
+      "The skill appears to fetch runtime dependencies, unpinned packages, arbitrary repositories, or remote markdown/prompts.",
+    suggestion:
+      "Pin package versions and repository revisions, vendor required scripts when possible, and treat remote docs or markdown as untrusted data.",
+    rationale:
+      "Matched unpinned installs, arbitrary clones, runtime URL fetches, or remote markdown trust.",
+    counterevidence: [
+      "Pinned versions, fixed digests, and parse-only remote documentation reduce this risk.",
+    ],
+    findLine: (lines) =>
+      findFirstLine(lines, (line) => EXTERNAL_DEPENDENCY_PATTERN.test(line.text)),
+  },
+  {
+    ruleId: "SKILL105_CROSS_MODAL_MISMATCH",
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Skill purpose appears mismatched with package behavior",
+    message:
+      "The package contains risky script, resource, or config behavior that does not match the skill's stated purpose.",
+    suggestion:
+      "Align package artifacts with the declared purpose or split unrelated auth, network, filesystem, and execution behavior into a separate reviewed skill.",
+    rationale:
+      "Package-level validation compares benign stated purpose with risky non-SKILL.md capability facts.",
+    counterevidence: [
+      "Descriptions that explicitly scope the security, network, dependency, tool, or filesystem behavior reduce this risk.",
+    ],
+    findLine: () => undefined,
+  },
+  {
+    ruleId: "SKILL106_SELF_MODIFYING_SKILL",
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Self-modifying skill instruction appears",
+    message:
+      "The skill appears to instruct the agent to modify its own instructions, scripts, references, assets, or registry metadata.",
+    suggestion:
+      "Avoid runtime self-modification. Require reviewed source changes outside skill execution for updates to skill package files.",
+    rationale: "Matched edit or mutation verbs targeting skill package files or registry metadata.",
+    counterevidence: [
+      "Normal repository edits outside the skill package are not self-modification.",
+    ],
+    findLine: (lines) => findFirstLine(lines, (line) => SELF_MODIFYING_PATTERN.test(line.text)),
+  },
+  {
+    ruleId: "SKILL107_UNTRUSTED_MCP",
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Broad or untrusted MCP access appears",
+    message:
+      "The skill appears to add or expose MCP servers or broad MCP tools without a clear allowlist.",
+    suggestion:
+      "Restrict MCP tools to trusted servers and named tools, and document human confirmation for sensitive MCP invocations.",
+    rationale:
+      "Matched MCP server, MCP wildcard, or MCP dependency evidence without allowlist wording.",
+    counterevidence: ["Explicit trusted-server or tool allowlists suppress this rule."],
+    findLine: (lines) =>
+      hasMcpAllowlistEvidence(lines)
+        ? undefined
+        : findFirstLine(lines, (line) => UNTRUSTED_MCP_PATTERN.test(line.text)),
+  },
+  {
+    ruleId: "SKILL108_MCP_SCOPE_EXCESS",
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Excessive MCP OAuth scope or redirect metadata appears",
+    message:
+      "The skill or MCP config appears to request broad OAuth scopes or weak redirect metadata.",
+    suggestion:
+      "Minimize OAuth scopes, require PKCE where applicable, and validate exact redirect URIs and protected-resource metadata.",
+    rationale:
+      "Matched broad OAuth scopes or loose redirect URI metadata in MCP-related configuration.",
+    counterevidence: ["Minimal scopes and exact redirect validation reduce this risk."],
+    findLine: (lines) => findFirstLine(lines, (line) => MCP_SCOPE_EXCESS_PATTERN.test(line.text)),
+  },
 ];
 
 export const validateSecurityRules = (
@@ -476,6 +637,22 @@ const buildEvidence = (
     excerpt,
   };
 };
+
+const hasDenylistEvidence = (lines: readonly MarkdownSecurityCandidate[]): boolean =>
+  lines.some((line) => DENYLIST_PATTERN.test(line.text));
+
+const hasMcpAllowlistEvidence = (lines: readonly MarkdownSecurityCandidate[]): boolean =>
+  lines.some((line) => MCP_ALLOWLIST_PATTERN.test(line.text));
+
+const packageHasDenylistEvidence = (skillPackage: SkillPackage): boolean =>
+  skillPackage.artifacts.some(
+    (artifact) => artifact.content !== undefined && DENYLIST_PATTERN.test(artifact.content),
+  );
+
+const packageHasMcpAllowlistEvidence = (skillPackage: SkillPackage): boolean =>
+  skillPackage.artifacts.some(
+    (artifact) => artifact.content !== undefined && MCP_ALLOWLIST_PATTERN.test(artifact.content),
+  );
 
 const CAPABILITY_SECURITY_RULES = new Map<
   CapabilityKind,
@@ -565,27 +742,90 @@ const CAPABILITY_SECURITY_RULES = new Map<
       ],
     },
   ],
+  [
+    "broad_tool_access",
+    {
+      ruleId: "SKILL101_BROAD_ALLOWED_TOOLS",
+      severity: "warning",
+      priority: "P1",
+      confidence: "medium",
+      title: "Broad allowed tools appear in skill package",
+      message:
+        "The skill package appears to grant broad file, shell, web, agent, or MCP tool access without clear narrowing.",
+      suggestion:
+        "Narrow allowed tools to the minimum required set and pair risky access with explicit deny rules for secrets, home directories, and destructive commands.",
+      rationale: "A package artifact produced a broad-tool-access capability fact.",
+      counterevidence: [
+        "Clear deny rules for sensitive files or destructive tools suppress this rule.",
+      ],
+    },
+  ],
+  [
+    "external_dependency",
+    {
+      ruleId: "SKILL104_EXTERNAL_DEPENDENCY",
+      severity: "warning",
+      priority: "P1",
+      confidence: "medium",
+      title: "External dependency or remote content trust appears in skill package",
+      message:
+        "The skill package appears to fetch runtime dependencies, unpinned packages, arbitrary repositories, or remote markdown/prompts.",
+      suggestion:
+        "Pin package versions and repository revisions, vendor required scripts when possible, and treat remote docs or markdown as untrusted data.",
+      rationale: "A package artifact produced an external-dependency capability fact.",
+      counterevidence: [
+        "Pinned versions, fixed digests, and parse-only remote documentation reduce this risk.",
+      ],
+    },
+  ],
+  [
+    "self_modifies",
+    {
+      ruleId: "SKILL106_SELF_MODIFYING_SKILL",
+      severity: "warning",
+      priority: "P1",
+      confidence: "medium",
+      title: "Self-modifying skill instruction appears in skill package",
+      message:
+        "The skill package appears to instruct the agent to modify its own instructions, scripts, references, assets, or registry metadata.",
+      suggestion:
+        "Avoid runtime self-modification. Require reviewed source changes outside skill execution for updates to skill package files.",
+      rationale: "A package artifact produced a self-modification capability fact.",
+      counterevidence: [
+        "Normal repository edits outside the skill package are not self-modification.",
+      ],
+    },
+  ],
 ]);
 
 const validatePackageCapabilitySecurity = (
   skillPackage: SkillPackage,
   enabledRuleIds: readonly string[] | undefined,
 ): Finding[] => {
-  const enabled = enabledRuleIds === undefined ? undefined : new Set(enabledRuleIds);
+  const enabled =
+    enabledRuleIds === undefined ? undefined : new Set(enabledRuleIds.flatMap(resolveRuleIdAlias));
   const skillMdPath = skillPackage.skill.skillPath;
   const facts = skillPackage.capabilities ?? [];
+  const hasDenylist = packageHasDenylistEvidence(skillPackage);
   const directFindings = facts.flatMap((fact) => {
     if (fact.artifactPath === skillMdPath) return [];
     const rule = CAPABILITY_SECURITY_RULES.get(fact.kind);
     if (rule === undefined) return [];
     if (enabled !== undefined && !enabled.has(rule.ruleId)) return [];
+    if (rule.ruleId === "SKILL101_BROAD_ALLOWED_TOOLS" && hasDenylist) return [];
     return [buildCapabilityFinding(skillPackage, fact, rule)];
   });
 
-  const exfiltrationFinding = buildPackageExfiltrationFinding(skillPackage, facts, enabled);
-  return exfiltrationFinding === undefined
-    ? directFindings
-    : [...directFindings, exfiltrationFinding];
+  return [
+    ...directFindings,
+    ...[
+      buildPackageExfiltrationFinding(skillPackage, facts, enabled),
+      buildMissingDenylistFinding(skillPackage, facts, enabled),
+      buildCrossModalMismatchFinding(skillPackage, facts, enabled),
+      buildUntrustedMcpFinding(skillPackage, facts, enabled),
+      buildMcpScopeExcessFinding(skillPackage, enabled),
+    ].filter((finding): finding is Finding => finding !== undefined),
+  ];
 };
 
 const buildPackageExfiltrationFinding = (
@@ -618,6 +858,165 @@ const buildPackageExfiltrationFinding = (
       "Official service API authentication, parse-only local commands, and local destinations are ignored unless secret material is also sent to an unrelated external sink.",
     ],
   });
+};
+
+const P1_RISKY_CAPABILITIES = new Set<CapabilityKind>([
+  "broad_tool_access",
+  "network_egress",
+  "external_dependency",
+  "remote_code_exec",
+  "destructive_action",
+  "reads_secrets",
+  "mcp_access",
+]);
+
+const CROSS_MODAL_RISKY_CAPABILITIES = new Set<CapabilityKind>([
+  "reads_secrets",
+  "network_egress",
+  "remote_code_exec",
+  "persistence",
+  "destructive_action",
+  "external_dependency",
+  "mcp_access",
+]);
+
+const buildMissingDenylistFinding = (
+  skillPackage: SkillPackage,
+  facts: readonly CapabilityFact[],
+  enabled: ReadonlySet<string> | undefined,
+): Finding | undefined => {
+  const ruleId: SecurityRuleId = "SKILL102_MISSING_DENYLIST";
+  if (enabled !== undefined && !enabled.has(ruleId)) return undefined;
+  if (packageHasDenylistEvidence(skillPackage)) return undefined;
+  const fact = facts.find(
+    (candidate) =>
+      candidate.artifactPath !== skillPackage.skill.skillPath &&
+      P1_RISKY_CAPABILITIES.has(candidate.kind),
+  );
+  if (fact === undefined) return undefined;
+  return buildCapabilityFinding(skillPackage, fact, {
+    ruleId,
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Risky skill package access is missing denylist protection",
+    message:
+      "The skill package appears to use scripts, network, broad tools, secrets, or destructive actions without deny rules for sensitive files or commands.",
+    suggestion:
+      "Add deny rules for secrets, home directories, credential paths, network transfer around secrets, and destructive commands.",
+    rationale:
+      "Package artifacts produced risky capability facts while no denylist or permissions.deny evidence was present.",
+    counterevidence: ["Explicit denylist or permissions.deny guidance suppresses this rule."],
+  });
+};
+
+const buildCrossModalMismatchFinding = (
+  skillPackage: SkillPackage,
+  facts: readonly CapabilityFact[],
+  enabled: ReadonlySet<string> | undefined,
+): Finding | undefined => {
+  const ruleId: SecurityRuleId = "SKILL105_CROSS_MODAL_MISMATCH";
+  if (enabled !== undefined && !enabled.has(ruleId)) return undefined;
+  const description = readSkillDescription(skillPackage.skill);
+  if (description !== undefined && PURPOSE_RISK_KEYWORD_PATTERN.test(description)) return undefined;
+  const fact = facts.find(
+    (candidate) =>
+      candidate.artifactPath !== skillPackage.skill.skillPath &&
+      CROSS_MODAL_RISKY_CAPABILITIES.has(candidate.kind),
+  );
+  if (fact === undefined) return undefined;
+  return buildCapabilityFinding(skillPackage, fact, {
+    ruleId,
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Skill purpose appears mismatched with package behavior",
+    message:
+      "The package contains risky script, resource, or config behavior that does not match the skill's stated purpose.",
+    suggestion:
+      "Align package artifacts with the declared purpose or split unrelated auth, network, filesystem, and execution behavior into a separate reviewed skill.",
+    rationale:
+      "A non-SKILL.md artifact produced risky capability evidence while the skill description does not scope that behavior.",
+    counterevidence: [
+      "Descriptions that explicitly scope the security, network, dependency, tool, or filesystem behavior reduce this risk.",
+    ],
+  });
+};
+
+const buildUntrustedMcpFinding = (
+  skillPackage: SkillPackage,
+  facts: readonly CapabilityFact[],
+  enabled: ReadonlySet<string> | undefined,
+): Finding | undefined => {
+  const ruleId: SecurityRuleId = "SKILL107_UNTRUSTED_MCP";
+  if (enabled !== undefined && !enabled.has(ruleId)) return undefined;
+  if (packageHasMcpAllowlistEvidence(skillPackage)) return undefined;
+  const fact = facts.find(
+    (candidate) =>
+      candidate.artifactPath !== skillPackage.skill.skillPath && candidate.kind === "mcp_access",
+  );
+  if (fact === undefined) return undefined;
+  return buildCapabilityFinding(skillPackage, fact, {
+    ruleId,
+    severity: "warning",
+    priority: "P1",
+    confidence: "medium",
+    title: "Broad or untrusted MCP access appears in skill package",
+    message:
+      "The skill package appears to add or expose MCP servers or broad MCP tools without a clear allowlist.",
+    suggestion:
+      "Restrict MCP tools to trusted servers and named tools, and document human confirmation for sensitive MCP invocations.",
+    rationale: "Package artifacts produced MCP access evidence without allowlist wording.",
+    counterevidence: ["Explicit trusted-server or tool allowlists suppress this rule."],
+  });
+};
+
+const buildMcpScopeExcessFinding = (
+  skillPackage: SkillPackage,
+  enabled: ReadonlySet<string> | undefined,
+): Finding | undefined => {
+  const ruleId: SecurityRuleId = "SKILL108_MCP_SCOPE_EXCESS";
+  if (enabled !== undefined && !enabled.has(ruleId)) return undefined;
+  for (const artifact of skillPackage.artifacts) {
+    if (artifact.content === undefined || !MCP_SCOPE_EXCESS_PATTERN.test(artifact.content)) {
+      continue;
+    }
+    const line = readSourceLines(artifact.content).find((candidate) =>
+      MCP_SCOPE_EXCESS_PATTERN.test(candidate.text),
+    );
+    const fact: CapabilityFact = {
+      kind: "mcp_access",
+      artifactPath: artifact.path,
+      confidence: "medium",
+      line: line?.number,
+      evidence:
+        line === undefined
+          ? undefined
+          : {
+              path: artifact.path,
+              startLine: line.number,
+              endLine: line.number,
+              excerpt: [
+                { line: line.number, text: redactEvidenceText(line.text), highlighted: true },
+              ],
+            },
+      description: "MCP configuration requests broad OAuth scopes or weak redirect metadata.",
+    };
+    return buildCapabilityFinding(skillPackage, fact, {
+      ruleId,
+      severity: "warning",
+      priority: "P1",
+      confidence: "medium",
+      title: "Excessive MCP OAuth scope or redirect metadata appears",
+      message: "The skill package appears to request broad OAuth scopes or weak redirect metadata.",
+      suggestion:
+        "Minimize OAuth scopes, require PKCE where applicable, and validate exact redirect URIs and protected-resource metadata.",
+      rationale:
+        "Matched broad OAuth scopes or loose redirect URI metadata in an MCP-related artifact.",
+      counterevidence: ["Minimal scopes and exact redirect validation reduce this risk."],
+    });
+  }
+  return undefined;
 };
 
 const buildCapabilityFinding = (
@@ -1041,4 +1440,10 @@ const readSkillName = (skill: SkillRecord): string => {
   if (!skill.parseResult.ok) return skill.directoryName;
   const name = skill.parseResult.frontmatter.data.name;
   return typeof name === "string" && name.trim().length > 0 ? name : skill.directoryName;
+};
+
+const readSkillDescription = (skill: SkillRecord): string | undefined => {
+  if (!skill.parseResult.ok) return undefined;
+  const description = skill.parseResult.frontmatter.data.description;
+  return typeof description === "string" && description.trim().length > 0 ? description : undefined;
 };

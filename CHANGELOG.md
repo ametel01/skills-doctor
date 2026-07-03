@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added P1 high-risk security rules for broad tool grants, missing denylists, broad implicit invocation, external dependencies, cross-modal mismatch, self-modifying skills, MCP exposure, and MCP OAuth scope excess.
 - Added P0 security priorities and spec-aligned `SKILL001_*` through `SKILL008_*` rule IDs for blocker security detections.
 - Added derived security capability facts for package artifacts, including secret access, network egress, remote execution, persistence, approval bypass, destructive actions, broad tools, MCP access, and obfuscation indicators.
 - Added package artifact discovery metadata to scan results, including script/resource/config files and symlink status.
@@ -36,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Security
 
+- Added package-level MCP, denylist, external-dependency, self-modification, and cross-modal mismatch checks with P1 priority evidence chains.
 - Added standalone local secret-access and persistence-installation blocker detections, including path-like sources such as `~/.ssh`, `.aws`, and shell startup files.
 - Surfaced security findings in the interactive CLI summary and review menu.
 - Integrated security findings into normal skill scans and report exit-code behavior.
