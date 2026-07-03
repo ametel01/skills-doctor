@@ -1,5 +1,6 @@
-/* Hallmark · pre-emit critique: P5 H4 E4 S5 R4 V4
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4
  * Hallmark · genre: modern-minimal · macrostructure: Workbench · theme: Terminal · enrichment: none · nav: N8 · footer: Ft4
+ * knobs: adaptive-width · responsive-metric-strip · package-version-brand · security-summary
  */
 import readline from "node:readline";
 import type { ScanReport } from "../../domain/build-report.js";
@@ -19,13 +20,19 @@ export type TuiSelectOptions = TuiDashboardOptions & {
 
 const MIN_COLUMNS = 76;
 const DEFAULT_COLUMNS = 120;
-const MAX_COLUMNS = 150;
 const HEADER_GAP = 4;
-const BRAND_WIDTH = 40;
+const BRAND_WIDE_WIDTH = 48;
+const BRAND_COMPACT_WIDTH = 36;
+const BRAND_MIN_COLUMNS = 112;
+const BRAND_WIDE_COLUMNS = 150;
+const METRIC_WIDE_COLUMNS = 170;
+const METRIC_MEDIUM_COLUMNS = 96;
 const ESC = "\x1b[";
 export const TUI_CLEAR_SCREEN = `${ESC}?25l${ESC}3J${ESC}2J${ESC}H`;
 // biome-ignore lint/complexity/useRegexLiterals: literal ESC triggers noControlCharactersInRegex.
 const ANSI_PATTERN = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
+// biome-ignore lint/complexity/useRegexLiterals: literal ESC triggers noControlCharactersInRegex.
+const ANSI_SEQUENCE_PATTERN = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "y");
 
 export const renderTuiDashboard = <Value extends string>(
   report: ScanReport,
@@ -39,7 +46,7 @@ export const renderTuiDashboard = <Value extends string>(
   const lines: string[] = [
     ...renderHeader(report, width, shouldColor),
     "",
-    ...renderProgress(report, leftWidth, shouldColor),
+    ...renderProgress(leftWidth, shouldColor),
     "",
     ...renderMetricStrip(report, width, shouldColor),
   ];
@@ -67,10 +74,12 @@ export const selectTuiAction = async <Value extends string>(
   }
 
   let selectedIndex = 0;
+  const followsTerminalResize = options.columns === undefined;
   const render = () => {
+    const columns = options.columns ?? process.stdout.columns;
     options.write(
       `${TUI_CLEAR_SCREEN}${renderTuiDashboard(report, choices, {
-        columns: options.columns,
+        columns,
         color: options.color,
         selectedIndex,
       })}`,
@@ -81,6 +90,9 @@ export const selectTuiAction = async <Value extends string>(
     const wasRaw = stdin.isRaw;
 
     const cleanup = () => {
+      if (followsTerminalResize) {
+        process.stdout.off("resize", render);
+      }
       stdin.off("keypress", onKeypress);
       stdin.setRawMode?.(wasRaw === true);
       stdin.pause();
@@ -147,6 +159,9 @@ export const selectTuiAction = async <Value extends string>(
     stdin.setRawMode(true);
     stdin.resume();
     stdin.on("keypress", onKeypress);
+    if (followsTerminalResize) {
+      process.stdout.on("resize", render);
+    }
     render();
   });
 };
@@ -189,7 +204,8 @@ const renderHeader = (
   width: number,
   shouldColor: boolean,
 ): readonly string[] => {
-  const brand = renderBrandBox(BRAND_WIDTH, shouldColor);
+  const brandWidth = getBrandWidth(width);
+  const brand = brandWidth === 0 ? [] : renderBrandBox(report.version, brandWidth, shouldColor);
   const leftWidth = getHeaderLeftWidth(width);
   const statusLines = [
     `${green("›", shouldColor)}  ${success("npx", shouldColor)} ${bright("skills-doctor@latest", shouldColor)}`,
@@ -198,37 +214,50 @@ const renderHeader = (
     `${info("ⓘ", shouldColor)}  Reading Codex skill settings...`,
     `${info("ⓘ", shouldColor)}  Scanning skills...`,
     "",
-  ].map((line) => padRight(line, leftWidth));
+  ].map((line) => fitToWidth(line, leftWidth));
+
+  if (brandWidth === 0) return statusLines;
 
   return statusLines.map(
-    (line, index) => `${line}${" ".repeat(HEADER_GAP)}${brand[index] ?? " ".repeat(BRAND_WIDTH)}`,
+    (line, index) => `${line}${" ".repeat(HEADER_GAP)}${brand[index] ?? " ".repeat(brandWidth)}`,
   );
 };
 
-const renderBrandBox = (width: number, shouldColor: boolean): readonly string[] => {
-  const art = [
-    `${violet("╭────╮", shouldColor)}  ${strong("skills-doctor", shouldColor)}`,
-    `${blue("│ ◠◠ │", shouldColor)}  ${muted("Diagnose. Optimize. Focus.", shouldColor)}`,
-    `${blue("╰─┬──╯", shouldColor)}  ${subtleBadge(" v1.0.0 ", shouldColor)}`,
-    `${blue("  ╰─", shouldColor)}${info("●", shouldColor)}${green("●", shouldColor)}${amber("●", shouldColor)}`,
-  ];
-  return box("", art, width, shouldColor);
-};
-
-const renderProgress = (
-  report: ScanReport,
+const renderBrandBox = (
+  version: string,
   width: number,
   shouldColor: boolean,
 ): readonly string[] => {
+  const art =
+    width >= BRAND_WIDE_WIDTH
+      ? [
+          `${violet(" ╭──────╮", shouldColor)}   ${strong("skills-doctor", shouldColor)}`,
+          `${blue("╭│ ◠  ◠ │╮", shouldColor)}  ${muted("Diagnose. Optimize. Focus.", shouldColor)}`,
+          `${violet("╰│  ──  │╯", shouldColor)}  ${subtleBadge(` v${version} `, shouldColor)}`,
+          `${blue(" ╰──┬───╯", shouldColor)}   ${info("●", shouldColor)}${green("●", shouldColor)}${amber("●", shouldColor)}`,
+          `${blue("    ╰─", shouldColor)}${info("●", shouldColor)}${green("●", shouldColor)}`,
+        ]
+      : [
+          `${violet("╭────╮", shouldColor)} ${strong("skills-doctor", shouldColor)}`,
+          `${blue("│ ◠◠ │", shouldColor)} ${muted("Diagnose. Focus.", shouldColor)}`,
+          `${blue("╰─┬──╯", shouldColor)} ${subtleBadge(` v${version} `, shouldColor)}`,
+          `${blue("  ╰─", shouldColor)}${info("●", shouldColor)}${green("●", shouldColor)}${amber("●", shouldColor)}`,
+        ];
+  return box("", art, width, shouldColor);
+};
+
+const renderProgress = (width: number, shouldColor: boolean): readonly string[] => {
   const innerWidth = width - 4;
   const label = blue("Progress", shouldColor);
-  const count = `${report.skillCount} / ${report.skillCount}`;
+  const count = "100%";
   const status = `${success("◉", shouldColor)} ${success("Complete", shouldColor)}`;
   const barWidth = Math.max(16, innerWidth);
   const bar = success("━".repeat(barWidth), shouldColor);
 
   return box(
-    `${label}${" ".repeat(Math.max(1, innerWidth - visibleLength(label) - count.length - 12))}${dim(count, shouldColor)}  ${status}`,
+    `${label}${" ".repeat(
+      Math.max(1, innerWidth - visibleLength(label) - count.length - visibleLength(status) - 2),
+    )}${dim(count, shouldColor)}  ${status}`,
     [bar],
     width,
     shouldColor,
@@ -241,15 +270,34 @@ const renderMetricStrip = (
   shouldColor: boolean,
 ): readonly string[] => {
   const metrics = buildMetrics(report, shouldColor);
-  const count = metrics.length;
-  const columnWidth = Math.max(15, Math.floor((width - 2 - (count - 1)) / count));
-  const top = `${border("╭", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("╮", shouldColor)}`;
-  const bottom = `${border("╰", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("╯", shouldColor)}`;
-  const rows = [0, 1, 2, 3, 4].map((rowIndex) => {
-    const cells = metrics.map((metric) => padRight(` ${metric[rowIndex] ?? ""}`, columnWidth));
-    return `${border("│", shouldColor)}${cells.join(border("│", shouldColor))}${border("│", shouldColor)}`;
+  const columnsPerRow = getMetricColumnsPerRow(width, metrics.length);
+  const metricRows = chunk(metrics, columnsPerRow);
+  const lines: string[] = [
+    `${border("╭", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("╮", shouldColor)}`,
+  ];
+
+  metricRows.forEach((rowMetrics, rowIndex) => {
+    const count = rowMetrics.length;
+    const columnWidth = Math.max(15, Math.floor((width - 2 - (count - 1)) / count));
+    for (const metricLineIndex of [0, 1, 2, 3, 4]) {
+      const cells = rowMetrics.map((metric) =>
+        padRight(` ${metric[metricLineIndex] ?? ""}`, columnWidth),
+      );
+      lines.push(
+        `${border("│", shouldColor)}${cells.join(border("│", shouldColor))}${border("│", shouldColor)}`,
+      );
+    }
+    if (rowIndex < metricRows.length - 1) {
+      lines.push(
+        `${border("├", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("┤", shouldColor)}`,
+      );
+    }
   });
-  return [top, ...rows, bottom];
+
+  lines.push(
+    `${border("╰", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("╯", shouldColor)}`,
+  );
+  return lines;
 };
 
 const buildMetrics = (report: ScanReport, shouldColor: boolean): readonly (readonly string[])[] => {
@@ -278,6 +326,17 @@ const buildMetrics = (report: ScanReport, shouldColor: boolean): readonly (reado
             `${report.errorCount} error · ${report.warningCount} warning · ${report.adviceCount} tip`,
             shouldColor,
           ),
+    ],
+    [
+      `${danger("⌬", shouldColor)} ${danger("Security findings", shouldColor)}`,
+      "",
+      report.securityFindingCount === 0
+        ? strong("none", shouldColor)
+        : danger(String(report.securityFindingCount), shouldColor),
+      report.securityFindingCount === 0
+        ? muted("detected", shouldColor)
+        : muted(formatSecurityPriorities(report), shouldColor),
+      "",
     ],
     [
       `${violet("◷", shouldColor)} ${violet("Usage analysis", shouldColor)}`,
@@ -399,12 +458,35 @@ const framedPanel = (
 ];
 
 const getHeaderLeftWidth = (width: number): number =>
-  Math.max(32, width - BRAND_WIDTH - HEADER_GAP);
+  Math.max(32, width - getBrandWidth(width) - (getBrandWidth(width) === 0 ? 0 : HEADER_GAP));
 
 const normalizeColumns = (columns: number | undefined): number => {
   if (columns === undefined || !Number.isFinite(columns)) return DEFAULT_COLUMNS;
-  return Math.max(MIN_COLUMNS, Math.min(MAX_COLUMNS, Math.floor(columns)));
+  return Math.max(MIN_COLUMNS, Math.floor(columns));
 };
+
+const getBrandWidth = (width: number): number => {
+  if (width < BRAND_MIN_COLUMNS) return 0;
+  if (width < BRAND_WIDE_COLUMNS) return BRAND_COMPACT_WIDTH;
+  return BRAND_WIDE_WIDTH;
+};
+
+const getMetricColumnsPerRow = (width: number, metricCount: number): number => {
+  if (width >= METRIC_WIDE_COLUMNS) return metricCount;
+  if (width >= METRIC_MEDIUM_COLUMNS) return Math.min(3, metricCount);
+  return Math.min(2, metricCount);
+};
+
+const chunk = <Value>(items: readonly Value[], size: number): readonly Value[][] => {
+  const chunks: Value[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+};
+
+const formatSecurityPriorities = (report: ScanReport): string =>
+  `Crit ${report.securityPriorityCounts.P0} · High ${report.securityPriorityCounts.P1} · Med ${report.securityPriorityCounts.P2}`;
 
 const formatScanScope = (report: ScanReport): string => {
   const sources = new Set(report.scannedRoots.map((root) => root.source));
@@ -452,12 +534,42 @@ const resolveShortcutIndex = <Value extends string>(
 const padRight = (text: string, width: number): string =>
   `${text}${" ".repeat(Math.max(0, width - visibleLength(text)))}`;
 
+const fitToWidth = (text: string, width: number): string =>
+  padRight(truncateVisible(text, width), width);
+
+const truncateVisible = (text: string, width: number): string => {
+  if (width <= 0) return "";
+  if (visibleLength(text) <= width) return text;
+
+  let visible = 0;
+  let index = 0;
+  let result = "";
+  while (index < text.length && visible < width) {
+    ANSI_SEQUENCE_PATTERN.lastIndex = index;
+    const ansiMatch = ANSI_SEQUENCE_PATTERN.exec(text);
+    if (ansiMatch?.index === index) {
+      result += ansiMatch[0];
+      index += ansiMatch[0].length;
+      continue;
+    }
+
+    const codePoint = text.codePointAt(index);
+    if (codePoint === undefined) break;
+    const character = String.fromCodePoint(codePoint);
+    result += character;
+    visible += 1;
+    index += character.length;
+  }
+
+  return result;
+};
+
 const visibleLength = (text: string): number => stripAnsi(text).length;
 
 const stripAnsi = (text: string): string => text.replace(ANSI_PATTERN, "");
 
 const selectedRow = (text: string, shouldColor: boolean): string =>
-  shouldColor ? `\x1b[48;2;19;38;79m${text}\x1b[49m` : `> ${text}`;
+  shouldColor ? `\x1b[48;2;19;38;79m${text}\x1b[49m` : text;
 
 const selectedBadge = (text: string, shouldColor: boolean): string =>
   shouldColor

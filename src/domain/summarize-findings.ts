@@ -264,8 +264,14 @@ const formatSecurityConfidence = (counts: Readonly<Record<FindingConfidence, num
 const formatSecurityPriorities = (counts: Readonly<Record<SecurityPriority, number>>): string => {
   const parts = (["P0", "P1", "P2"] as const)
     .filter((priority) => counts[priority] > 0)
-    .map((priority) => `${priority}: ${counts[priority]}`);
-  return parts.length === 0 ? "" : `priorities ${parts.join(", ")}`;
+    .map((priority) => `${formatSecuritySeverity(priority)}: ${counts[priority]}`);
+  return parts.length === 0 ? "" : `severity ${parts.join(", ")}`;
+};
+
+const formatSecuritySeverity = (priority: SecurityPriority): string => {
+  if (priority === "P0") return "Critical";
+  if (priority === "P1") return "High";
+  return "Medium";
 };
 
 const formatSecurityCapabilities = (counts: Partial<Record<CapabilityKind, number>>): string => {

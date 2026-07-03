@@ -255,7 +255,7 @@ export const scanAction = async (
           analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
           stdinIsTty,
           useTui,
-          terminalColumns: options.terminalColumns ?? process.stdout.columns,
+          terminalColumns: options.terminalColumns,
         })) ?? report;
     }
   }
@@ -971,36 +971,152 @@ const renderSecurityFindings = (
   const lines = [
     `${usageLabel("Security review", shouldColor)}: ${warning(String(incidents.length), shouldColor)} incident${incidents.length === 1 ? "" : "s"} from ${warning(String(findings.length), shouldColor)} suspicious pattern${findings.length === 1 ? "" : "s"}`,
     "",
+    usageLabel("Severity summary", shouldColor),
+    ...renderTable(["Severity", "Incidents"], summarizeSecurityIncidentSeverity(incidents), {
+      colorizers: [
+        (text, _rowIndex, row) =>
+          colorizeSecuritySeverity(row[0] ?? text.trim(), text, shouldColor),
+        (text) => warning(text, shouldColor),
+      ],
+    }),
+    "",
+    usageLabel("Category summary", shouldColor),
+    ...renderTable(["Category", "Incidents"], summarizeSecurityIncidentCategories(incidents), {
+      colorizers: [(text) => accent(text, shouldColor), (text) => warning(text, shouldColor)],
+    }),
+    "",
+    usageLabel("Incidents", shouldColor),
+    ...renderSecurityIncidentTable(incidents, shouldColor),
+    "",
+    usageLabel("Suggested next actions", shouldColor),
+    `- Review ${danger("Critical", shouldColor)} rows first, especially data exposure, remote execution, secret access, and destructive action.`,
+    `- Use ${accent("Fix selected security findings", shouldColor)} to create a scoped repair handoff.`,
+    `- Full evidence remains available in generated reports and repair handoffs.`,
   ];
-  for (const incident of incidents) {
-    const finding = incident.primaryFinding;
-    const priority = finding.priority ?? "security";
-    const location = incident.skillName ?? incident.skillPath;
-    lines.push(
-      `${colorizeSeverity(`[${priority}]`, finding.severity, shouldColor)} ${accent(finding.title, shouldColor)}`,
-      `${usageLabel("Skill", shouldColor)}: ${dim(location, shouldColor)}`,
-      `${usageLabel("Artifact", shouldColor)}: ${dim(formatIncidentArtifact(incident), shouldColor)}`,
-      finding.message,
-      `${usageLabel("Related signals", shouldColor)}: ${incident.relatedRuleIds.join(", ")}`,
-      ...(incident.capabilities.length === 0
-        ? []
-        : [`${usageLabel("Capabilities", shouldColor)}: ${incident.capabilities.join(", ")}`]),
-      `${usageLabel("Suggestion", shouldColor)}: ${finding.suggestion}`,
-    );
-    const evidence = finding.evidence ?? incident.findings.find((item) => item.evidence)?.evidence;
-    if (evidence !== undefined) {
-      lines.push(`${usageLabel("Evidence", shouldColor)}:`);
-      for (const line of evidence.excerpt.slice(0, 2)) {
-        const marker = line.highlighted ? ">" : " ";
-        const renderedLine = `${marker} ${String(line.line).padStart(4, " ")} | ${line.text}`;
-        lines.push(
-          line.highlighted ? warning(renderedLine, shouldColor) : dim(renderedLine, shouldColor),
-        );
-      }
-    }
-    lines.push("");
-  }
   return lines.join("\n");
+};
+
+const summarizeSecurityIncidentSeverity = (
+  incidents: readonly SecurityReviewIncident[],
+): readonly (readonly string[])[] => {
+  const counts = new Map<string, number>();
+  for (const incident of incidents) {
+    const severity = formatSecuritySeverity(incident.priority);
+    counts.set(severity, (counts.get(severity) ?? 0) + 1);
+  }
+  return ["Critical", "High", "Medium", "Review"].flatMap((severity) => {
+    const count = counts.get(severity) ?? 0;
+    return count === 0 ? [] : [[severity, String(count)]];
+  });
+};
+
+const summarizeSecurityIncidentCategories = (
+  incidents: readonly SecurityReviewIncident[],
+): readonly (readonly string[])[] =>
+  [...countSecurityIncidentCategories(incidents).entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([category, count]) => [category, String(count)]);
+
+const countSecurityIncidentCategories = (
+  incidents: readonly SecurityReviewIncident[],
+): ReadonlyMap<string, number> => {
+  const counts = new Map<string, number>();
+  for (const incident of incidents) {
+    const category = classifySecurityIncidentForDisplay(incident);
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  return counts;
+};
+
+const SECURITY_INCIDENT_TABLE_WIDTHS = [8, 17, 18, 34, 36] as const;
+
+const renderSecurityIncidentTable = (
+  incidents: readonly SecurityReviewIncident[],
+  shouldColor: boolean,
+): readonly string[] => {
+  if (incidents.length === 0) return [];
+  const headers = ["Severity", "Category", "Skill", "Finding", "Artifact"];
+  return [
+    `  ${headers
+      .map((header, index) => formatFixedCell(header, SECURITY_INCIDENT_TABLE_WIDTHS[index] ?? 0))
+      .join("  ")}`,
+    ...incidents.map((incident) => {
+      const cells = [
+        formatSecuritySeverity(incident.priority),
+        classifySecurityIncidentForDisplay(incident),
+        incident.skillName ?? path.basename(path.dirname(incident.skillPath)),
+        incident.primaryFinding.title,
+        compactArtifactPath(formatIncidentArtifact(incident)),
+      ];
+      const formattedCells = cells.map((cell, index) =>
+        formatFixedCell(cell, SECURITY_INCIDENT_TABLE_WIDTHS[index] ?? 0),
+      );
+      return `  ${[
+        colorizeSecuritySeverity(cells[0] ?? "", formattedCells[0] ?? "", shouldColor),
+        accent(formattedCells[1] ?? "", shouldColor),
+        accent(formattedCells[2] ?? "", shouldColor),
+        formattedCells[3] ?? "",
+        dim(formattedCells[4] ?? "", shouldColor),
+      ].join("  ")}`;
+    }),
+  ];
+};
+
+const formatFixedCell = (text: string, width: number): string =>
+  truncateCell(text, width).padEnd(width, " ");
+
+const truncateCell = (text: string, width: number): string => {
+  if (text.length <= width) return text;
+  if (width <= 3) return ".".repeat(width);
+  return `${text.slice(0, width - 3)}...`;
+};
+
+const formatSecuritySeverity = (priority: SecurityPriority | undefined): string => {
+  if (priority === "P0") return "Critical";
+  if (priority === "P1") return "High";
+  if (priority === "P2") return "Medium";
+  return "Review";
+};
+
+const colorizeSecuritySeverity = (severity: string, text: string, shouldColor: boolean): string => {
+  if (severity === "Critical") return danger(text, shouldColor);
+  if (severity === "High") return warning(text, shouldColor);
+  if (severity === "Medium") return accent(text, shouldColor);
+  return dim(text, shouldColor);
+};
+
+const classifySecurityIncidentForDisplay = (incident: SecurityReviewIncident): string => {
+  const ruleIds = new Set(incident.relatedRuleIds);
+  const capabilities = new Set(incident.capabilities);
+  if (ruleIds.has("SKILL004_EXFIL_CHAIN")) return "Data exposure";
+  if (ruleIds.has("SKILL007_REMOTE_CODE_EXEC") || capabilities.has("remote_code_exec")) {
+    return "Remote execution";
+  }
+  if (ruleIds.has("SKILL003_SECRET_ACCESS") || capabilities.has("reads_secrets")) {
+    return "Secret access";
+  }
+  if (ruleIds.has("SKILL005_DESTRUCTIVE_COMMANDS") || capabilities.has("destructive_action")) {
+    return "Destructive action";
+  }
+  if (ruleIds.has("SKILL002_PERMISSION_BYPASS") || capabilities.has("bypasses_approval")) {
+    return "Permission bypass";
+  }
+  if (ruleIds.has("SKILL001_PROMPT_OVERRIDE")) return "Prompt injection";
+  if (ruleIds.has("SKILL107_UNTRUSTED_MCP")) return "MCP access";
+  if (ruleIds.has("SKILL108_MCP_SCOPE_EXCESS") || capabilities.has("mcp_access")) {
+    return "OAuth/MCP scope";
+  }
+  if (ruleIds.has("SKILL101_BROAD_ALLOWED_TOOLS") || capabilities.has("broad_tool_access")) {
+    return "Broad tools";
+  }
+  if (ruleIds.has("SKILL102_MISSING_DENYLIST")) return "Missing guardrails";
+  if (ruleIds.has("SKILL104_EXTERNAL_DEPENDENCY") || capabilities.has("external_dependency")) {
+    return "Dependency risk";
+  }
+  if (ruleIds.has("SKILL006_PERSISTENCE") || capabilities.has("persistence")) return "Persistence";
+  if (ruleIds.has("SKILL008_OBFUSCATION") || capabilities.has("obfuscation")) return "Obfuscation";
+  if (incident.primaryFinding.priority === "P2") return "Hygiene";
+  return "Security";
 };
 
 const renderFindingsBySkill = (
@@ -1026,6 +1142,14 @@ const renderFindingsBySkill = (
 const formatIncidentArtifact = (incident: SecurityReviewIncident): string => {
   const line = incident.primaryFinding.evidence?.startLine ?? incident.primaryFinding.line;
   return `${incident.artifactPath}${line === undefined ? "" : `:${line}`}`;
+};
+
+const compactArtifactPath = (artifactPath: string): string => {
+  const lineMatch = artifactPath.match(/:(\d+)$/u);
+  const lineSuffix = lineMatch?.[0] ?? "";
+  const pathWithoutLine =
+    lineSuffix.length === 0 ? artifactPath : artifactPath.slice(0, -lineSuffix.length);
+  return `${compactSkillPath(pathWithoutLine)}${lineSuffix}`;
 };
 
 const formatFindingLocation = (finding: Finding): string =>

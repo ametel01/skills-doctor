@@ -40,7 +40,7 @@ export const buildProgram = (options: BuildProgramOptions = {}): Command => {
           minScore?: string;
         },
       ) => {
-        await scanAction(directory, flags);
+        await scanAction(directory, flags, { version: packageJson.version });
       },
     );
 

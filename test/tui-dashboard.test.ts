@@ -23,14 +23,17 @@ describe("TUI dashboard", () => {
           description: "Quit skills-doctor",
         },
       ],
-      { color: false, columns: 118, selectedIndex: 0 },
+      { color: false, columns: 150, selectedIndex: 0 },
     );
 
     expect(output).toContain("skills-doctor@latest");
     expect(output).toContain("skills-doctor");
-    expect(output).toContain("66 / 66");
+    expect(output).toContain("v1.0.0");
+    expect(output).toContain("100%");
+    expect(output).not.toContain("66 / 66");
     expect(output).toContain("Skills");
     expect(output).toContain("Issues");
+    expect(output).toContain("Security findings");
     expect(output).toContain("Usage analysis");
     expect(output).toContain("23 used");
     expect(output).toContain("43 unused");
@@ -41,9 +44,54 @@ describe("TUI dashboard", () => {
     expect(output).toContain("[0]  Exit");
     expect(output).toContain("[↑] [↓]  navigate");
   });
+
+  it("uses the requested terminal width instead of capping the dashboard", () => {
+    const output = renderTuiDashboard(makeReport(), [], {
+      color: false,
+      columns: 180,
+      selectedIndex: 0,
+    });
+
+    const renderedLines = output.trimEnd().split("\n");
+    expect(renderedLines[0]?.length).toBe(180);
+    expect(renderedLines.some((line) => line.includes("Security findings"))).toBe(true);
+    expect(renderedLines.some((line) => line.includes("v1.0.0"))).toBe(true);
+  });
+
+  it("does not overrun adaptive breakpoint widths", () => {
+    for (const columns of [100, 111, 112, 120, 132, 149, 150, 169, 170, 180]) {
+      const output = renderTuiDashboard(makeReport({ securityFindingCount: 100 }), [], {
+        color: false,
+        columns,
+        selectedIndex: 0,
+      });
+
+      const maxLineLength = Math.max(
+        ...output
+          .trimEnd()
+          .split("\n")
+          .map((line) => line.length),
+      );
+      expect(maxLineLength, `max line length at ${columns} columns`).toBe(columns);
+    }
+  });
+
+  it("keeps the version brand card visible on medium-width terminals", () => {
+    expect(renderTuiDashboard(makeReport(), [], { color: false, columns: 111 })).not.toContain(
+      "v1.0.0",
+    );
+    expect(renderTuiDashboard(makeReport(), [], { color: false, columns: 112 })).toContain(
+      "v1.0.0",
+    );
+    expect(renderTuiDashboard(makeReport(), [], { color: false, columns: 120 })).toContain(
+      "v1.0.0",
+    );
+  });
 });
 
-const makeReport = (): ScanReport => ({
+const makeReport = (
+  overrides: Partial<Pick<ScanReport, "securityFindingCount" | "securityPriorityCounts">> = {},
+): ScanReport => ({
   schemaVersion: 1,
   ok: true,
   version: "1.0.0",
@@ -60,8 +108,8 @@ const makeReport = (): ScanReport => ({
   skillCount: 66,
   findingCount: 0,
   qualityFindingCount: 0,
-  securityFindingCount: 0,
-  securityPriorityCounts: { P0: 0, P1: 0, P2: 0 },
+  securityFindingCount: overrides.securityFindingCount ?? 0,
+  securityPriorityCounts: overrides.securityPriorityCounts ?? { P0: 0, P1: 0, P2: 0 },
   securityCapabilityCounts: {},
   errorCount: 0,
   warningCount: 0,

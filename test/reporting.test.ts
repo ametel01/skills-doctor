@@ -231,7 +231,7 @@ describe("scan reports", () => {
     });
 
     expect(renderHumanSummary(report)).toContain(
-      "Security review: 1 incident from 1 suspicious pattern (medium: 1); priorities P0: 1; capabilities bypasses_approval: 1",
+      "Security review: 1 incident from 1 suspicious pattern (medium: 1); severity Critical: 1; capabilities bypasses_approval: 1",
     );
     expect(report.securityPriorityCounts).toEqual({ P0: 1, P1: 0, P2: 0 });
     expect(report.securityCapabilityCounts).toEqual({ bypasses_approval: 1 });

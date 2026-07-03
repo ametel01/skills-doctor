@@ -21,6 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Reformatted interactive security review output into severity and category summary tables plus a compact incident table with user-facing Critical/High/Medium labels instead of P-code prose dumps.
+- Made the TUI dashboard adaptive across terminal widths, with percentage progress, a package-version brand card, a security findings metric, and responsive metric wrapping.
 - Human security review output now groups related rule hits into concise incidents and omits rationale/counterevidence noise by default.
 - P0 security findings now fail scan exit-code gates by default.
 - P2 security hygiene findings now contribute to scan score while remaining separate from default severity-based exit gates.
@@ -32,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Kept the TUI dashboard repainting on terminal resize and preserved the version brand card on medium-width terminal windows without line overruns.
+- Passed the package version into interactive scan reports so the TUI brand card no longer falls back to a hard-coded version.
 - Enforced non-empty compatibility metadata, string-only metadata maps, and deterministic checks for interactive or unsafe referenced scripts.
 - Reported package-level secret reads and persistence capabilities as their required P0 security findings, and included both secret and network evidence in package exfiltration chains.
 - Reduced prompt-injection false positives for ask-first admin flows and verified confirmation-skip CLI examples.
