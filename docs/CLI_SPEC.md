@@ -198,7 +198,8 @@ Responsibilities:
   evals, and cross-ecosystem divergence.
 - `rules/security.ts`: validate deterministic security heuristics for
   suspicious `SKILL.md` instructions and capabilities. Findings are warnings or
-  errors about suspicious patterns, not proof of malicious intent.
+  errors about suspicious patterns, not proof of malicious intent. Security
+  findings may carry confidence, rationale, and counterevidence metadata.
 - `build-report.ts`: build the stable scan report object.
 - `calculate-score.ts`: compute the score from distinct blocking and warning
   rules.
@@ -235,10 +236,19 @@ Scan reports include:
   cleanup recommendations
 - handoff-request status
 
+Security findings remain in `findings` and count toward `findingCount` and
+`securityFindingCount`. They do not contribute to `errorCount`, `warningCount`,
+`adviceCount`, per-skill quality counts, score penalties, or default exit-code
+gates. Human summary output includes security confidence counts when security
+findings have confidence metadata; JSON mode exposes the same optional
+`confidence`, `rationale`, and `counterevidence` fields on each finding.
+
 Report files written for repair handoff are local artifacts under the OS temp
 directory, for example `/tmp/skills-doctor-<uid>/reports/<timestamp>/` on
 Linux, unless a test or caller passes another output root. Per-skill report
-filenames must be deterministic and collision resistant.
+filenames must be deterministic and collision resistant. Findings Markdown,
+per-skill reports, and repair handoff prompts include security metadata when it
+is present.
 
 Usage cleanup report files are also local artifacts under the OS temp directory
 and include `usage.json`, `usage.md`, and `cleanup-prompt.md`. Usage reports

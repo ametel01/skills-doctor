@@ -92,7 +92,8 @@ harm.
 
 Quality findings are grouped as blocking errors, warnings, and advisory improvements.
 Security findings are reported separately as suspicious skill patterns with
-source excerpts for false-positive review.
+source excerpts, confidence, rationale, and counterevidence for false-positive
+review when that metadata is available.
 The human summary opens with a score header showing a face, `0` to `100` score,
 label, and proportional terminal bar. The score starts at 100 and deducts 1.5
 points for each distinct error rule and 0.75 points for each distinct warning
@@ -156,8 +157,9 @@ and spinners. Human logs and expected errors stay out of stdout.
 By default, the exit code fails only for blocking errors and error diagnostics.
 Use `--fail-on warning`, `--fail-on advice`, or `--min-score <number>` for stricter CI gates.
 Security findings are separate review warnings by default. They do not fail the
-quality gate or affect the quality score unless a future security-specific gate
-is added.
+quality gate or affect the quality score, even with stricter quality gates,
+unless a future security-specific gate is added. JSON findings can include
+security confidence, rationale, and counterevidence fields.
 
 Use `--usage` to include local Codex usage analysis in JSON or non-interactive
 runs. Interactive runs analyze usage by default; pass `--no-logs` to skip local

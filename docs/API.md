@@ -118,6 +118,7 @@ Exported types include:
 - `Diagnostic`
 - `Finding`
 - `FindingCategory`
+- `FindingConfidence`
 - `FindingEvidence`
 - `FindingEvidenceLine`
 - `FindingSeverity`
@@ -276,6 +277,9 @@ type Finding = {
   readonly skillName?: string;
   readonly line?: number;
   readonly evidence?: FindingEvidence;
+  readonly confidence?: "high" | "medium" | "low";
+  readonly rationale?: string;
+  readonly counterevidence?: readonly string[];
   readonly agentRepairable: boolean;
 };
 
@@ -296,6 +300,10 @@ type FindingEvidenceLine = {
 `ruleId` values are documented in `docs/RULES.md`. `line` is present only when
 the scanner can resolve a specific source line. Security findings include
 `evidence` when the scanner can show the excerpt that triggered the warning.
+Security findings may also include `confidence`, `rationale`, and
+`counterevidence` so callers can distinguish high-confidence source/action/sink
+stories from medium-confidence harmful-language matches and display the filters
+that were considered. Evidence excerpts redact common secret-token patterns.
 
 Use `ruleCatalog` when integrations need structured rule metadata without
 scraping Markdown:
@@ -372,11 +380,12 @@ type SkillSummary = {
 - returns `1` when `report.errorCount > 0` or any diagnostic has
   `severity: "error"`.
 
-Quality warnings and advice appear in the report but do not make the exit code fail.
-Pass `{ failOn: "warning" }`, `{ failOn: "advice" }`, or `{ minScore: 95 }`
-to opt into stricter automation gates. These options match the CLI
-`--fail-on` and `--min-score` flags. Security findings are separate review
-warnings and are excluded from quality exit gates.
+Quality warnings and advice appear in the report but do not make the exit code
+fail. Pass `{ failOn: "warning" }`, `{ failOn: "advice" }`, or
+`{ minScore: 95 }` to opt into stricter automation gates. These options match
+the CLI `--fail-on` and `--min-score` flags. Security findings are separate
+review warnings and are excluded from quality exit gates, including stricter
+`failOn` options.
 
 ## Compatibility
 
