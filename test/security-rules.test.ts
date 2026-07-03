@@ -336,6 +336,54 @@ describe("security rules", () => {
     ).toEqual([]);
   });
 
+  it("keeps webhook signing-secret troubleshooting table rows benign", () => {
+    const skill = buildRecord("webhook-troubleshooting-table-skill", [
+      "---",
+      "name: webhook-troubleshooting-table-skill",
+      "description: Use this skill when validating webhook table rows.",
+      "---",
+      "",
+      "## Error Signatures",
+      "",
+      "| Error / symptom | Root cause | Fix |",
+      "|---|---|---|",
+      "| Webhook 401 / signature verification failed | `CLERK_WEBHOOK_SIGNING_SECRET` mismatch or route protected by middleware | Copy the Signing Secret from Dashboard -> Webhooks; add the webhook route to `createRouteMatcher(['/api/webhooks(.*)'])` |",
+    ]);
+
+    expect(
+      validateSecurityRules([skill], {
+        enabledRuleIds: ["secret-exfiltration-instruction", "network-exfiltration-command"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("keeps Slack notification webhooks benign when secret values are not sent", () => {
+    const skill = buildRecord("slack-notification-webhook-skill", [
+      "---",
+      "name: slack-notification-webhook-skill",
+      "description: Use this skill when validating notification webhook examples.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "```typescript",
+      "const event = await verifyWebhook(req); // uses CLERK_WEBHOOK_SIGNING_SECRET env var",
+      "// Step 5: Post notification to Slack channel",
+      "await fetch(process.env.SLACK_WEBHOOK_URL!, {",
+      "  method: 'POST',",
+      "  headers: { 'Content-Type': 'application/json' },",
+      "  body: JSON.stringify({ text: `New user signed up: $" + "{event.data.id}` }),",
+      "});",
+      "```",
+    ]);
+
+    expect(
+      validateSecurityRules([skill], {
+        enabledRuleIds: ["secret-exfiltration-instruction", "network-exfiltration-command"],
+      }),
+    ).toEqual([]);
+  });
+
   it("reports network transfer tooling near secret-reading guidance", () => {
     const skill = buildRecord("network-exfiltration-skill", [
       "---",

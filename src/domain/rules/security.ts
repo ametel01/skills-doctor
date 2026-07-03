@@ -144,6 +144,10 @@ const ASK_FIRST_OPERATIONAL_BYPASS_PATTERN =
 
 const COMMAND_SENSITIVE_SOURCE_PATTERN =
   /(?:^|[\s"'`|])(?:\.env(?:\b|[./_-])|[~/./A-Za-z0-9_-]*(?:credentials|secrets?|tokens?|private[_-]?keys?|session[_-]?files?|npm[_-]?tokens?|github[_-]?tokens?|cloud[_-]?credentials?|aws[_-]?credentials?|gcp[_-]?credentials?)(?:\b|[./_-]))/i;
+const LOCAL_WEBHOOK_SECRET_SETUP_PATTERN =
+  /\b(webhook signing secret|signing secret|CLERK_WEBHOOK_SIGNING_SECRET)\b.{0,120}\b(dashboard|local|\.env|env var|verify|verification|signature|mismatch|middleware|route)\b|\b(dashboard|local|\.env|env var|verify|verification|signature|mismatch|middleware|route)\b.{0,120}\b(webhook signing secret|signing secret|CLERK_WEBHOOK_SIGNING_SECRET)\b/i;
+const DESTINATION_CREDENTIAL_PATTERN =
+  /\b[A-Z0-9_]*WEBHOOK_URL\b|\bprocess\.env\.[A-Z0-9_]*WEBHOOK_URL\b/i;
 const INLINE_COMMAND_PATTERN = /`([^`\n]+)`/g;
 const COMMAND_FENCE_LANGUAGE_PATTERN = /^(?:shell|sh|bash|zsh|fish|console|terminal)$/i;
 const FENCE_MARKER_PATTERN = /^\s*(```|~~~)\s*([A-Za-z0-9_-]+)?/;
@@ -485,9 +489,10 @@ const findNetworkExfiltrationCommandLine = (
 
 const hasBoundedExfiltrationEvidence = (candidate: MarkdownSecurityCandidate): boolean => {
   if (isPreventiveLine(candidate.text)) return false;
+  if (isLocalSecretSetupOrVerificationLine(candidate.text)) return false;
   if (!hasExfiltrationTransferAction(candidate)) return false;
   if (!hasSuspiciousExfiltrationDestination(candidate)) return false;
-  return candidate.nearbyLines.some((line) => SECRET_SOURCE_PATTERN.test(line.text));
+  return candidate.nearbyLines.some((line) => isTransferableSecretSourceLine(line.text));
 };
 
 const hasArbitrarySecretTransferCommand = (candidate: MarkdownSecurityCandidate): boolean => {
@@ -507,8 +512,22 @@ const hasCommandSensitiveSourceInBoundedContext = (
   candidate: MarkdownSecurityCandidate,
 ): boolean => {
   if (candidate.commandContext.hasSensitiveSource) return true;
-  return candidate.nearbyLines.some((line) => SECRET_SOURCE_PATTERN.test(line.text));
+  return candidate.nearbyLines.some((line) => isTransferableSecretSourceLine(line.text));
 };
+
+const isTransferableSecretSourceLine = (text: string): boolean =>
+  SECRET_SOURCE_PATTERN.test(text) &&
+  !isLocalSecretSetupOrVerificationLine(text) &&
+  !isDestinationCredentialOnlyLine(text);
+
+const isLocalSecretSetupOrVerificationLine = (text: string): boolean =>
+  LOCAL_WEBHOOK_SECRET_SETUP_PATTERN.test(text);
+
+const isDestinationCredentialOnlyLine = (text: string): boolean =>
+  DESTINATION_CREDENTIAL_PATTERN.test(text) &&
+  !/\b(cat|read|load|collect|print|echo|dump|upload|send|post|forward|transmit|exfiltrate)\b/i.test(
+    text,
+  );
 
 const hasExfiltrationTransferAction = (candidate: MarkdownSecurityCandidate): boolean =>
   TRANSFER_PATTERN.test(candidate.text) ||
