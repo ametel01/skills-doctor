@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added derived security capability facts for package artifacts, including secret access, network egress, remote execution, persistence, approval bypass, destructive actions, broad tools, MCP access, and obfuscation indicators.
 - Added package artifact discovery metadata to scan results, including script/resource/config files and symlink status.
 - Added package security model types for future artifact, capability, priority, and cross-file evidence reporting.
 - Added a full-screen interactive TTY dashboard with scan progress, usage metrics, cleanup candidates, and keyboard-driven next-step actions.

@@ -6,16 +6,16 @@
 - User gap summary from 2026-07-03
 
 ## Current Status
-- Status: Step 3 complete.
-- Current step: Step 4: Build Shared Capability Detectors.
-- Next step: Step 4: Build Shared Capability Detectors.
+- Status: Step 4 complete.
+- Current step: Step 5: Migrate Security Validation To Package-Level Evaluation.
+- Next step: Step 5: Migrate Security Validation To Package-Level Evaluation.
 
 ## Step Checklist
 - [x] Step 0: Progress and Changelog Tracking Setup
 - [x] Step 1: Clean Up The Security Spec Source Document
 - [x] Step 2: Introduce Skill Package And Artifact Models
 - [x] Step 3: Add Package Artifact Discovery
-- [ ] Step 4: Build Shared Capability Detectors
+- [x] Step 4: Build Shared Capability Detectors
 - [ ] Step 5: Migrate Security Validation To Package-Level Evaluation
 - [ ] Step 6: Implement P0 Blocker Rules
 - [ ] Step 7: Implement P1 High-Risk Rules
@@ -83,7 +83,20 @@ After each completed step, update this file with:
 - Changelog: Added an `Added` entry for package artifact discovery metadata.
 - Commit: Step 3 commit (`feat: discover security artifacts in skill packages`).
 
+### Step 4: Build Shared Capability Detectors
+- Summary: Added shared deterministic capability detectors for command execution, destructive actions, persistence, secret access, network egress, external dependencies, permission bypass, broad tools, MCP access, obfuscation, hidden artifacts, and escaping symlinks. `scanSkillRoots()` now populates `SkillPackage.capabilities`.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run typecheck` passed.
+  - `bun test test/security-capabilities.test.ts test/domain-scan.test.ts` passed: 18 tests.
+  - `bun run test` passed: 21 files, 218 tests.
+  - `bun run build` passed.
+- Changelog: Added an `Added` entry for derived security capability facts.
+- Commit: Step 4 commit (`feat: derive security capability facts from artifacts`).
+
 ## Update Log
+- 2026-07-03: Completed Step 4 validation and prepared the capability detector commit.
 - 2026-07-03: Completed Step 3 validation and prepared the package artifact discovery commit.
 - 2026-07-03: Completed Step 2 validation and prepared the package security model commit.
 - 2026-07-03: Completed Step 1 validation and prepared the security spec cleanup commit.

@@ -190,8 +190,9 @@ type ResourceStatus = "inside" | "missing" | "escapes";
 
 The package security model is additive and supports integrations that need to
 reason about more than one `SKILL.md` file. Existing callers can continue to use
-`SkillRecord` and `validateSecurityRules(skills)`. Package-level scanning uses
-these types as it expands artifact discovery and cross-file evidence.
+`SkillRecord` and `validateSecurityRules(skills)`. `scanSkillRoots()` includes
+package records when artifact discovery runs, and each package can include
+derived capability facts for later package-level security rules.
 
 ```ts
 type SkillPackage = {
@@ -229,6 +230,10 @@ type CapabilityFact = {
 `self_modifies`, `bypasses_approval`, `destructive_action`, `obfuscation`,
 `broad_tool_access`, `external_dependency`, `mcp_access`, and
 `hidden_artifact`.
+
+Capability facts are deterministic heuristic observations. They are not proof
+that a skill author intended harm; they are evidence inputs for security rules
+and review workflows.
 
 `SecurityPriority` values are `P0`, `P1`, and `P2`. Future package-level
 security rules populate this priority on security findings while preserving the

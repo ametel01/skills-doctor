@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { discoverSkillArtifacts } from "./discover-skill-artifacts.js";
 import { parseSkillContent } from "./parse-skill.js";
+import { deriveCapabilityFacts } from "./security/capabilities.js";
 import {
   type DisabledSkillSelectors,
   normalizeSkillPath,
@@ -179,10 +180,14 @@ const readSkillTask = async (task: SkillReadTask): Promise<SkillReadResult> => {
   };
 };
 
-const buildSkillPackage = async (skill: SkillRecord): Promise<SkillPackage> => ({
-  skill,
-  artifacts: await discoverSkillArtifacts(skill),
-});
+const buildSkillPackage = async (skill: SkillRecord): Promise<SkillPackage> => {
+  const artifacts = await discoverSkillArtifacts(skill);
+  const skillPackage = { skill, artifacts };
+  return {
+    ...skillPackage,
+    capabilities: deriveCapabilityFacts(skillPackage),
+  };
+};
 
 const buildDisabledSkillFilter = (
   disabledSkills: DisabledSkillSelectors | undefined,

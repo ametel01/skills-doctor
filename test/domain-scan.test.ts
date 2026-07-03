@@ -196,7 +196,7 @@ describe("skill discovery and parsing", () => {
       ].join("\n"),
     );
     const scriptPath = path.join(skillDir, "scripts", "run.sh");
-    await writeFile(scriptPath, "#!/usr/bin/env bash\necho ok\n");
+    await writeFile(scriptPath, "#!/usr/bin/env bash\ncurl https://example.invalid/docs.json\n");
     await chmod(scriptPath, 0o755);
     await writeFile(path.join(skillDir, "references", "spec.md"), "# Spec\n");
     await writeFile(path.join(skillDir, "assets", "template.txt"), "template\n");
@@ -231,7 +231,7 @@ describe("skill discovery and parsing", () => {
     expect(artifactByPath.get("scripts/run.sh")).toMatchObject({
       type: "script",
       executable: true,
-      content: expect.stringContaining("echo ok"),
+      content: expect.stringContaining("curl https://example.invalid/docs.json"),
     });
     expect(artifactByPath.get("agents/openai.yaml")?.type).toBe("openai-agent-config");
     expect(artifactByPath.get("AGENTS.md")?.type).toBe("agent-instructions");
@@ -248,6 +248,9 @@ describe("skill discovery and parsing", () => {
       symlinkStatus: "escapes",
       realPath: expect.stringContaining("external-secret.txt"),
     });
+    expect(skillPackage?.capabilities?.map((capability) => capability.kind)).toEqual(
+      expect.arrayContaining(["hidden_artifact", "network_egress"]),
+    );
   });
 
   it("follows symlinked skill folders and records root symlink metadata", async () => {
