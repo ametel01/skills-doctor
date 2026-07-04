@@ -276,76 +276,81 @@ const validateResources = async (
     ...new Set((skill.content.match(RESOURCE_REFERENCE_PATTERN) ?? []).map(normalizeReferencePath)),
   ].filter((referencePath) => referencePath.length > 0);
 
-  for (const referencePath of referencedPaths) {
-    if (hasParentTraversal(referencePath)) {
-      findings.push(
-        createFinding(skill, {
-          ruleId: "resource-reference-escapes-skill",
-          severity: "warning",
-          category: resourceCategory(referencePath),
-          title: "Resource reference escapes the skill directory",
-          message:
-            "The skill references a resource outside the skill directory. Resource references must remain inside scripts/, references/, or assets/ for this skill.",
-          suggestion:
-            "Use a path rooted inside the skill (for example references/file.md) without '..' segments.",
-          line: findReferenceLine(skill.content, referencePath),
-        }),
-      );
-      continue;
-    }
+  const findingsByReference = await Promise.all(
+    referencedPaths.map(async (referencePath) => {
+      const referenceFindings: Finding[] = [];
+      if (hasParentTraversal(referencePath)) {
+        referenceFindings.push(
+          createFinding(skill, {
+            ruleId: "resource-reference-escapes-skill",
+            severity: "warning",
+            category: resourceCategory(referencePath),
+            title: "Resource reference escapes the skill directory",
+            message:
+              "The skill references a resource outside the skill directory. Resource references must remain inside scripts/, references/, or assets/ for this skill.",
+            suggestion:
+              "Use a path rooted inside the skill (for example references/file.md) without '..' segments.",
+            line: findReferenceLine(skill.content, referencePath),
+          }),
+        );
+        return referenceFindings;
+      }
 
-    const resourceStatus = await resolveResourceStatus(skill, referencePath, options);
-    if (resourceStatus === "escapes") {
-      findings.push(
-        createFinding(skill, {
-          ruleId: "resource-reference-escapes-skill",
-          severity: "warning",
-          category: resourceCategory(referencePath),
-          title: "Resource reference escapes the skill directory",
-          message:
-            "The skill references a resource outside the skill directory. Resource references must remain inside scripts/, references/, or assets/ for this skill.",
-          suggestion:
-            "Use a path rooted inside the skill (for example references/file.md) without '..' segments.",
-          line: findReferenceLine(skill.content, referencePath),
-        }),
-      );
-      continue;
-    }
+      const resourceStatus = await resolveResourceStatus(skill, referencePath, options);
+      if (resourceStatus === "escapes") {
+        referenceFindings.push(
+          createFinding(skill, {
+            ruleId: "resource-reference-escapes-skill",
+            severity: "warning",
+            category: resourceCategory(referencePath),
+            title: "Resource reference escapes the skill directory",
+            message:
+              "The skill references a resource outside the skill directory. Resource references must remain inside scripts/, references/, or assets/ for this skill.",
+            suggestion:
+              "Use a path rooted inside the skill (for example references/file.md) without '..' segments.",
+            line: findReferenceLine(skill.content, referencePath),
+          }),
+        );
+        return referenceFindings;
+      }
 
-    if (resourceStatus === "missing") {
-      findings.push(
-        createFinding(skill, {
-          ruleId: "missing-referenced-resource",
-          severity: "warning",
-          category: resourceCategory(referencePath),
-          title: "Referenced resource does not exist",
-          message: `The skill references ${referencePath}, but that path does not exist inside the skill directory.`,
-          suggestion: "Create the referenced file or remove the stale reference.",
-          line: findReferenceLine(skill.content, referencePath),
-        }),
-      );
-      continue;
-    }
+      if (resourceStatus === "missing") {
+        referenceFindings.push(
+          createFinding(skill, {
+            ruleId: "missing-referenced-resource",
+            severity: "warning",
+            category: resourceCategory(referencePath),
+            title: "Referenced resource does not exist",
+            message: `The skill references ${referencePath}, but that path does not exist inside the skill directory.`,
+            suggestion: "Create the referenced file or remove the stale reference.",
+            line: findReferenceLine(skill.content, referencePath),
+          }),
+        );
+        return referenceFindings;
+      }
 
-    if (referencePath.startsWith("scripts/") && !body.includes("--help")) {
-      findings.push(
-        createFinding(skill, {
-          ruleId: "script-without-help-guidance",
-          severity: "warning",
-          category: "scripts",
-          title: "Script reference lacks help guidance",
-          message:
-            "Script instructions should document usage or mention --help so agents can learn the interface.",
-          suggestion: "Add a short usage example and document that the script supports --help.",
-          line: findReferenceLine(skill.content, referencePath),
-        }),
-      );
-    }
+      if (referencePath.startsWith("scripts/") && !body.includes("--help")) {
+        referenceFindings.push(
+          createFinding(skill, {
+            ruleId: "script-without-help-guidance",
+            severity: "warning",
+            category: "scripts",
+            title: "Script reference lacks help guidance",
+            message:
+              "Script instructions should document usage or mention --help so agents can learn the interface.",
+            suggestion: "Add a short usage example and document that the script supports --help.",
+            line: findReferenceLine(skill.content, referencePath),
+          }),
+        );
+      }
 
-    if (referencePath.startsWith("scripts/")) {
-      findings.push(...(await validateScriptInterface(skill, referencePath, body)));
-    }
-  }
+      if (referencePath.startsWith("scripts/")) {
+        referenceFindings.push(...(await validateScriptInterface(skill, referencePath, body)));
+      }
+      return referenceFindings;
+    }),
+  );
+  findings.push(...findingsByReference.flat());
 
   if (INTERACTIVE_SCRIPT_PATTERN.test(body)) {
     findings.push(

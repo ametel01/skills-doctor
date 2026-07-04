@@ -51,17 +51,19 @@ export const discoverSkillRoots = async (
     })),
   ];
 
+  const candidatesWithStatus = await Promise.all(
+    candidates.map(async (candidate) => ({
+      candidate,
+      exists: await isDirectory(candidate.rootPath),
+    })),
+  );
+
   const roots: SkillRoot[] = [];
   const diagnostics: Diagnostic[] = [];
 
-  for (const candidate of candidates) {
-    const exists = await isDirectory(candidate.rootPath);
-    if (exists) {
-      roots.push(candidate);
-      continue;
-    }
-
-    if (candidate.source === "custom") {
+  for (const { candidate, exists } of candidatesWithStatus) {
+    if (exists) roots.push(candidate);
+    else if (candidate.source === "custom") {
       diagnostics.push({
         code: "skill-root-not-found",
         severity: "warning",

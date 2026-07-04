@@ -255,16 +255,20 @@ const countConfidence = (findings: readonly Finding[], confidence: FindingConfid
   findings.filter((finding) => finding.category === "security" && finding.confidence === confidence)
     .length;
 
-const formatSecurityConfidence = (counts: Readonly<Record<FindingConfidence, number>>): string =>
-  (["high", "medium", "low"] as const)
-    .filter((confidence) => counts[confidence] > 0)
-    .map((confidence) => `${confidence}: ${counts[confidence]}`)
-    .join(", ");
+const formatSecurityConfidence = (counts: Readonly<Record<FindingConfidence, number>>): string => {
+  const parts: string[] = [];
+  for (const confidence of ["high", "medium", "low"] as const) {
+    if (counts[confidence] > 0) parts.push(`${confidence}: ${counts[confidence]}`);
+  }
+  return parts.join(", ");
+};
 
 const formatSecurityPriorities = (counts: Readonly<Record<SecurityPriority, number>>): string => {
-  const parts = (["P0", "P1", "P2"] as const)
-    .filter((priority) => counts[priority] > 0)
-    .map((priority) => `${formatSecuritySeverity(priority)}: ${counts[priority]}`);
+  const parts: string[] = [];
+  for (const priority of ["P0", "P1", "P2"] as const) {
+    if (counts[priority] > 0)
+      parts.push(`${formatSecuritySeverity(priority)}: ${counts[priority]}`);
+  }
   return parts.length === 0 ? "" : `severity ${parts.join(", ")}`;
 };
 

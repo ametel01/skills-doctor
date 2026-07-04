@@ -61,46 +61,50 @@ const walkSkillArtifacts = async (
   skillDir: string,
   rootRealPath: string | undefined,
 ): Promise<readonly SkillArtifact[]> => {
-  const artifacts: SkillArtifact[] = [];
   const visitedDirectories = new Set<string>();
 
-  const walk = async (directoryPath: string): Promise<void> => {
+  const walk = async (directoryPath: string): Promise<readonly SkillArtifact[]> => {
     const directoryRealPath = await realpath(directoryPath).catch(() => undefined);
     if (directoryRealPath !== undefined) {
-      if (visitedDirectories.has(directoryRealPath)) return;
+      if (visitedDirectories.has(directoryRealPath)) return [];
       visitedDirectories.add(directoryRealPath);
     }
 
     const entries = await readdir(directoryPath, { withFileTypes: true }).catch(() => []);
     const sortedEntries = [...entries].sort((left, right) => left.name.localeCompare(right.name));
-    for (const entry of sortedEntries) {
-      if (IGNORED_DIRECTORY_NAMES.has(entry.name)) continue;
-      const artifactPath = path.join(directoryPath, entry.name);
-      const relativePath = normalizeRelativePath(path.relative(skillDir, artifactPath));
-      const artifact = await readArtifact(skillDir, rootRealPath, artifactPath, relativePath);
-      if (artifact !== undefined) artifacts.push(artifact);
+    const artifactsByEntry = await Promise.all(
+      sortedEntries.map(async (entry) => {
+        if (IGNORED_DIRECTORY_NAMES.has(entry.name)) return [];
+        const entryArtifacts: SkillArtifact[] = [];
+        const artifactPath = path.join(directoryPath, entry.name);
+        const relativePath = normalizeRelativePath(path.relative(skillDir, artifactPath));
+        const artifact = await readArtifact(skillDir, rootRealPath, artifactPath, relativePath);
+        if (artifact !== undefined) entryArtifacts.push(artifact);
 
-      const entryStats = await lstat(artifactPath).catch(() => undefined);
-      if (entryStats === undefined) continue;
-      if (entryStats.isDirectory()) {
-        await walk(artifactPath);
-        continue;
-      }
-      if (!entryStats.isSymbolicLink()) continue;
-      const targetRealPath = await realpath(artifactPath).catch(() => undefined);
-      if (
-        targetRealPath !== undefined &&
-        rootRealPath !== undefined &&
-        isPathInside(rootRealPath, targetRealPath)
-      ) {
-        const targetStats = await stat(artifactPath).catch(() => undefined);
-        if (targetStats?.isDirectory() === true) await walk(artifactPath);
-      }
-    }
+        const entryStats = await lstat(artifactPath).catch(() => undefined);
+        if (entryStats === undefined) return entryArtifacts;
+        if (entryStats.isDirectory()) {
+          entryArtifacts.push(...(await walk(artifactPath)));
+          return entryArtifacts;
+        }
+        if (!entryStats.isSymbolicLink()) return entryArtifacts;
+        const targetRealPath = await realpath(artifactPath).catch(() => undefined);
+        if (
+          targetRealPath !== undefined &&
+          rootRealPath !== undefined &&
+          isPathInside(rootRealPath, targetRealPath)
+        ) {
+          const targetStats = await stat(artifactPath).catch(() => undefined);
+          if (targetStats?.isDirectory() === true)
+            entryArtifacts.push(...(await walk(artifactPath)));
+        }
+        return entryArtifacts;
+      }),
+    );
+    return artifactsByEntry.flat();
   };
 
-  await walk(skillDir);
-  return artifacts;
+  return walk(skillDir);
 };
 
 const readArtifact = async (

@@ -98,17 +98,38 @@ export const analyzeSkillUsage = async (
   const events: MatchedUsageEvent[] = [];
   let readableSourceCount = 0;
 
-  for (const sourcePath of sourcePaths) {
-    const content = await readFile(sourcePath, "utf8").catch((error: unknown) => {
+  const sourceContents = await Promise.all(
+    sourcePaths.map(async (sourcePath) => {
+      try {
+        return { sourcePath, content: await readFile(sourcePath, "utf8") };
+      } catch (error: unknown) {
+        return {
+          sourcePath,
+          diagnostic: {
+            code: "usage-source-unreadable",
+            severity: "warning",
+            message: error instanceof Error ? error.message : `Unable to read ${sourcePath}`,
+            path: sourcePath,
+          } satisfies Diagnostic,
+        };
+      }
+    }),
+  );
+
+  for (const { sourcePath, content, diagnostic } of sourceContents) {
+    if (diagnostic !== undefined) {
+      diagnostics.push(diagnostic);
+      continue;
+    }
+    if (content === undefined) {
       diagnostics.push({
         code: "usage-source-unreadable",
         severity: "warning",
-        message: error instanceof Error ? error.message : `Unable to read ${sourcePath}`,
+        message: `Unable to read ${sourcePath}`,
         path: sourcePath,
       });
-      return undefined;
-    });
-    if (content === undefined) continue;
+      continue;
+    }
 
     readableSourceCount += 1;
     events.push(...parseUsageSource({ sourcePath, content, aliasMap, phraseMap, diagnostics }));
@@ -449,7 +470,14 @@ const extractAssistantText = (record: unknown): string => {
 
 const collectText = (value: unknown): string => {
   if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map(collectText).filter(Boolean).join("\n");
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => {
+        const text = collectText(item);
+        return text ? [text] : [];
+      })
+      .join("\n");
+  }
   if (!isRecord(value)) return "";
   return collectText(value.text ?? value.content);
 };
@@ -539,9 +567,11 @@ const duplicateSkillNames = (catalog: readonly CatalogSkill[]): ReadonlySet<stri
   for (const skill of catalog) {
     counts.set(skill.skillName, (counts.get(skill.skillName) ?? 0) + 1);
   }
-  return new Set(
-    [...counts.entries()].filter(([, count]) => count > 1).map(([skillName]) => skillName),
-  );
+  const duplicateNames = new Set<string>();
+  for (const [skillName, count] of counts) {
+    if (count > 1) duplicateNames.add(skillName);
+  }
+  return duplicateNames;
 };
 
 const compareUsageSummaries = (left: SkillUsageSummary, right: SkillUsageSummary): number => {

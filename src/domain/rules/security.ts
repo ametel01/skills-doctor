@@ -808,13 +808,15 @@ const buildEvidence = (
 ): Finding["evidence"] => {
   const startLine = Math.max(1, lineNumber - EVIDENCE_CONTEXT_LINES);
   const endLine = Math.min(lines.length, lineNumber + EVIDENCE_CONTEXT_LINES);
-  const excerpt = lines
-    .filter((line) => line.number >= startLine && line.number <= endLine)
-    .map((line) => ({
+  const excerpt = [];
+  for (const line of lines) {
+    if (line.number < startLine || line.number > endLine) continue;
+    excerpt.push({
       line: line.number,
       text: redactEvidenceText(line.text),
       highlighted: line.number === lineNumber,
-    }));
+    });
+  }
   return {
     path: skill.skillPath,
     startLine,
@@ -1839,9 +1841,10 @@ const buildCommandLineContext = (
 };
 
 const readCommandTexts = (lineText: string, isCommandFenceLine: boolean): readonly string[] => {
-  const inlineCommands = [...lineText.matchAll(INLINE_COMMAND_PATTERN)]
-    .map((match) => match[1]?.trim() ?? "")
-    .filter((command) => command.length > 0);
+  const inlineCommands = [...lineText.matchAll(INLINE_COMMAND_PATTERN)].flatMap((match) => {
+    const command = match[1]?.trim() ?? "";
+    return command.length > 0 ? [command] : [];
+  });
   if (inlineCommands.length > 0) return inlineCommands;
   if (isCommandFenceLine && COMMAND_LIKE_PATTERN.test(lineText))
     return [stripShellPrompt(lineText)];
@@ -1851,8 +1854,10 @@ const readCommandTexts = (lineText: string, isCommandFenceLine: boolean): readon
 const readCommandSegments = (commandText: string): readonly CommandSegmentContext[] =>
   commandText
     .split(/\s*(?:\||&&|;)\s*/)
-    .map((segment) => segment.trim())
-    .filter((segment) => segment.length > 0)
+    .flatMap((segment) => {
+      const trimmed = segment.trim();
+      return trimmed.length > 0 ? [trimmed] : [];
+    })
     .map((segment, index, segments) => classifyCommandSegment(segment, index, segments.length > 1));
 
 const classifyCommandSegment = (

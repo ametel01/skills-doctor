@@ -91,6 +91,10 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
   const diagnosticErrorCount = countDiagnosticSeverity(input.scan.diagnostics, "error");
   const hasErrorDiagnostics = diagnosticErrorCount > 0;
   const qualityFindingsBySkillPath = indexFindingsBySkillPath(qualityFindings);
+  const diagnosticErrorCodes: string[] = [];
+  for (const diagnostic of input.scan.diagnostics) {
+    if (diagnostic.severity === "error") diagnosticErrorCodes.push(diagnostic.code);
+  }
 
   return {
     schemaVersion: 1,
@@ -109,11 +113,7 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
     errorCount,
     warningCount,
     adviceCount,
-    score: calculateScore(scoreFindings, {
-      diagnosticErrorCodes: input.scan.diagnostics
-        .filter((diagnostic) => diagnostic.severity === "error")
-        .map((diagnostic) => diagnostic.code),
-    }),
+    score: calculateScore(scoreFindings, { diagnosticErrorCodes }),
     skills: input.scan.skills.map((skill) => {
       const skillFindings = qualityFindingsBySkillPath.get(skill.skillPath) ?? [];
       return {

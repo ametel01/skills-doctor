@@ -55,23 +55,26 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
     );
     if (entries.length === 0) continue;
 
-    const tasks = entries
-      .filter(
-        (entry) => (entry.isDirectory() || entry.isSymbolicLink()) && !entry.name.startsWith("."),
-      )
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map((entry, entryIndex) => {
-        const skillDir = path.join(root.rootPath, entry.name);
-        return {
-          root,
-          rootIndex,
-          entryIndex,
-          directoryName: entry.name,
-          skillDir,
-          skillPath: path.join(skillDir, "SKILL.md"),
-        };
-      })
-      .filter((task) => !disabledSkillFilter.hasPath(task.skillPath));
+    const skillEntries = [];
+    for (const entry of entries) {
+      if ((entry.isDirectory() || entry.isSymbolicLink()) && !entry.name.startsWith(".")) {
+        skillEntries.push(entry);
+      }
+    }
+    skillEntries.sort((left, right) => left.name.localeCompare(right.name));
+    const tasks = [];
+    for (const [entryIndex, entry] of skillEntries.entries()) {
+      const skillDir = path.join(root.rootPath, entry.name);
+      const task = {
+        root,
+        rootIndex,
+        entryIndex,
+        directoryName: entry.name,
+        skillDir,
+        skillPath: path.join(skillDir, "SKILL.md"),
+      };
+      if (!disabledSkillFilter.hasPath(task.skillPath)) tasks.push(task);
+    }
     rootPlans.push({ rootIndex, diagnostics: [], tasks });
   }
 

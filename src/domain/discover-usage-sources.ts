@@ -126,19 +126,17 @@ const findJsonlFiles = async (input: {
   );
   if (entries === undefined) return [];
 
-  const files: CandidateFile[] = [];
-  for (const entry of entries) {
-    const entryPath = path.join(input.directory, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await findJsonlFiles({ ...input, directory: entryPath })));
-      continue;
-    }
-    if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
-    const candidate = await fileIfExists(entryPath, input.since, input.diagnostics);
-    if (candidate !== undefined) files.push(candidate);
-  }
+  const filesByEntry = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(input.directory, entry.name);
+      if (entry.isDirectory()) return findJsonlFiles({ ...input, directory: entryPath });
+      if (!entry.isFile() || !entry.name.endsWith(".jsonl")) return [];
+      const candidate = await fileIfExists(entryPath, input.since, input.diagnostics);
+      return candidate === undefined ? [] : [candidate];
+    }),
+  );
 
-  return files.sort(compareCandidateFiles);
+  return filesByEntry.flat().sort(compareCandidateFiles);
 };
 
 const fileIfExists = async (
@@ -181,27 +179,36 @@ const detectJsonlPressure = async (input: {
   readonly maxFileBytes: number;
   readonly diagnostics: Diagnostic[];
 }): Promise<JsonlPressure> => {
+  const pressureByFile = await Promise.all(
+    input.files.map(async (file) => {
+      const content = await readTail(file.filePath, input.maxFileBytes).catch((error: unknown) => {
+        input.diagnostics.push({
+          code: "usage-source-unreadable",
+          severity: "warning",
+          message: error instanceof Error ? error.message : `Unable to read ${file.filePath}`,
+          path: file.filePath,
+        });
+        return undefined;
+      });
+      if (content === undefined) return { warningCount: 0, warningTimestamps: [] };
+
+      let warningCount = 0;
+      const warningTimestamps: string[] = [];
+      for (const line of content.split(/\r?\n/)) {
+        if (!line.includes(CONTEXT_BUDGET_WARNING)) continue;
+        warningCount += 1;
+        const timestamp = extractTimestampFromJsonLine(line);
+        if (timestamp !== undefined) warningTimestamps.push(timestamp);
+      }
+      return { warningCount, warningTimestamps };
+    }),
+  );
+
   let warningCount = 0;
   const warningTimestamps: string[] = [];
-
-  for (const file of input.files) {
-    const content = await readTail(file.filePath, input.maxFileBytes).catch((error: unknown) => {
-      input.diagnostics.push({
-        code: "usage-source-unreadable",
-        severity: "warning",
-        message: error instanceof Error ? error.message : `Unable to read ${file.filePath}`,
-        path: file.filePath,
-      });
-      return undefined;
-    });
-    if (content === undefined) continue;
-
-    for (const line of content.split(/\r?\n/)) {
-      if (!line.includes(CONTEXT_BUDGET_WARNING)) continue;
-      warningCount += 1;
-      const timestamp = extractTimestampFromJsonLine(line);
-      if (timestamp !== undefined) warningTimestamps.push(timestamp);
-    }
+  for (const pressure of pressureByFile) {
+    warningCount += pressure.warningCount;
+    warningTimestamps.push(...pressure.warningTimestamps);
   }
 
   return {
