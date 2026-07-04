@@ -340,7 +340,8 @@ const SECURITY_RULES: readonly SecurityRule[] = [
     ],
     findLine: (lines) =>
       findFirstLine(lines, (line) => {
-        if (isHarmfulPromptIntentLine(line.text)) return true;
+        if (isHarmfulPromptIntentLine(line.text))
+          return isRealSecuritySignal(line, "prompt_override", "medium");
         if (isDefensivePromptIntentLine(line.text)) return false;
         return false;
       }),
@@ -431,6 +432,7 @@ const SECURITY_RULES: readonly SecurityRule[] = [
         lines,
         (line) =>
           !isPreventiveLine(line.text) &&
+          isRealSecuritySignal(line, "destructive_command", "medium") &&
           (BROAD_DESTRUCTIVE_PATTERN.test(line.text) ||
             PERMISSION_WEAKENING_PATTERN.test(line.text)),
       ),
@@ -472,7 +474,10 @@ const SECURITY_RULES: readonly SecurityRule[] = [
     findLine: (lines) =>
       findFirstLine(
         lines,
-        (line) => !isPreventiveLine(line.text) && isRemoteExecutionBootstrapLine(line),
+        (line) =>
+          !isPreventiveLine(line.text) &&
+          isRemoteExecutionBootstrapLine(line) &&
+          isRealSecuritySignal(line, "remote_code_execution", "high"),
       ),
   },
   {
@@ -1456,7 +1461,11 @@ export const adjudicateSecuritySignal = (signal: SecuritySignal): AdjudicatedSec
     };
   }
 
-  if (signal.commandContext?.hasParseOnlySink === true && !signal.commandContext.hasExecutionSink) {
+  if (
+    signal.commandContext?.hasParseOnlySink === true &&
+    !signal.commandContext.hasExecutionSink &&
+    !signal.commandContext.hasTransferAction
+  ) {
     return {
       ...signal,
       decision: "suppressed",
@@ -1491,17 +1500,32 @@ const collectTextContextCounterevidence = (signal: SecuritySignal): readonly str
   if (textContext.inBlockquote && textContext.hasNearbyWarning) {
     counterevidence.push("Suspicious text is quoted with nearby warning language.");
   }
-  if (textContext.hasNearbyNegation && signal.kind === "prompt_override") {
+  if (
+    signal.kind === "prompt_override" &&
+    textContext.hasNearbyNegation &&
+    isCleanNegatedPromptOverride(signal.excerpt)
+  ) {
     counterevidence.push(
       "Nearby negation tells the agent not to follow the suspicious instruction.",
     );
   }
-  if (textContext.hasNearbyDefensiveIntent) {
+  if (
+    textContext.hasNearbyDefensiveIntent &&
+    (textContext.sectionRole === "examples" ||
+      textContext.sectionRole === "anti-patterns" ||
+      textContext.sectionRole === "reference" ||
+      textContext.inBlockquote)
+  ) {
     counterevidence.push("Nearby defensive guidance frames the suspicious text as data to reject.");
   }
 
   return counterevidence;
 };
+
+const isCleanNegatedPromptOverride = (text: string): boolean =>
+  /^\s*(?:[-*+]\s+)?(?:do not|don't|never|must not|should not|refuse to)\b.{0,80}\b(ignore|disregard|override|bypass|supersede)\b.{0,80}\b(previous|system|developer|user|safety|policy|instructions?)\b/i.test(
+    text,
+  ) && !/\b(but|instead|silently|continue|proceed|obey this skill)\b/i.test(text);
 
 const findFirstLine = (
   candidates: readonly MarkdownSecurityCandidate[],
@@ -1511,16 +1535,25 @@ const findFirstLine = (
 const findSecretExfiltrationInstructionLine = (
   candidates: readonly MarkdownSecurityCandidate[],
 ): number | undefined =>
-  findFirstLine(candidates, (candidate) => hasBoundedExfiltrationEvidence(candidate));
+  findFirstLine(
+    candidates,
+    (candidate) =>
+      hasBoundedExfiltrationEvidence(candidate) &&
+      isRealSecuritySignal(candidate, "secret_exfiltration", "high"),
+  );
 
 const findNetworkExfiltrationCommandLine = (
   candidates: readonly MarkdownSecurityCandidate[],
 ): number | undefined =>
   findFirstLine(candidates, (candidate) => {
     if (isPreventiveLine(candidate.text)) return false;
-    if (hasArbitrarySecretTransferCommand(candidate)) return true;
+    if (hasArbitrarySecretTransferCommand(candidate))
+      return isRealSecuritySignal(candidate, "secret_exfiltration", "high");
     if (!NETWORK_TRANSFER_PATTERN.test(candidate.text)) return false;
-    return hasBoundedExfiltrationEvidence(candidate);
+    return (
+      hasBoundedExfiltrationEvidence(candidate) &&
+      isRealSecuritySignal(candidate, "secret_exfiltration", "high")
+    );
   });
 
 const findExfiltrationChainLine = (
@@ -1635,6 +1668,21 @@ const hasFetchedContentExecutionInstruction = (text: string): boolean =>
 
 const isPreventiveLine = (text: string): boolean => PREVENTION_PATTERN.test(text);
 
+const isRealSecuritySignal = (
+  candidate: MarkdownSecurityCandidate,
+  kind: SecuritySignalKind,
+  confidence: FindingConfidence,
+): boolean =>
+  adjudicateSecuritySignal({
+    kind,
+    artifactPath: "",
+    line: candidate.number,
+    excerpt: candidate.text,
+    confidence,
+    textContext: candidate.textContext,
+    commandContext: candidate.commandContext,
+  }).decision === "real";
+
 const isHarmfulPromptIntentLine = (text: string): boolean =>
   !isOperationalConfirmationFlagLine(text) &&
   !isDefensiveUntrustedInstructionContentLine(text) &&
@@ -1685,7 +1733,8 @@ const buildTextContext = (input: {
     inBlockquote: /^\s*>/.test(input.line.text),
     isListItem: /^\s*(?:[-*+]|\d+[.)])\s+/.test(input.line.text),
     isExample:
-      sectionRole === "examples" || /\b(examples?|e\.g\.|for example)\b/i.test(input.line.text),
+      sectionRole === "examples" ||
+      /\b(for example|e\.g\.|examples?\s+(?:of|show|include|:))\b/i.test(input.line.text),
     isAntiPattern:
       sectionRole === "anti-patterns" || /\banti[- ]?patterns?\b/i.test(input.line.text),
     hasNearbyNegation: input.nearbyLines.some((line) =>

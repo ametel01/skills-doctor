@@ -8,8 +8,8 @@
 ## Current Status
 
 - Status: In progress.
-- Current step: Step 4 - Migrate Natural-Language-Sensitive Rules.
-- Next step: Step 5 - Improve Capability Chain Adjudication.
+- Current step: Step 5 - Improve Capability Chain Adjudication.
+- Next step: Step 6 - Align Reports, Repair Prompts, and Documentation.
 
 ## Step Checklist
 
@@ -17,7 +17,7 @@
 - [x] Step 1: Baseline Gates and Characterization Fixtures
 - [x] Step 2: Add Markdown Text Context Extraction
 - [x] Step 3: Introduce Security Signals and Adjudication
-- [ ] Step 4: Migrate Natural-Language-Sensitive Rules
+- [x] Step 4: Migrate Natural-Language-Sensitive Rules
 - [ ] Step 5: Improve Capability Chain Adjudication
 - [ ] Step 6: Align Reports, Repair Prompts, and Documentation
 - [ ] Step 7: Final Verification and Cleanup
@@ -87,10 +87,24 @@ After each completed step, update this file with:
 - Changelog: No changelog entry added because this step added internal adjudication plumbing without changing emitted findings.
 - Commit: Step 3 commit (`feat: adjudicate security signals before findings`).
 
+### Step 4: Migrate Natural-Language-Sensitive Rules
+
+- Summary: Routed prompt override, exfiltration-chain, remote-code-execution, and destructive-command body checks through deterministic signal adjudication. Converted the four natural-language false-positive characterization tests from expected failures into normal passing tests while preserving operational prompt override, command exfiltration, remote execution, and destructive-command true positives.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run test -- test/security-rules.test.ts test/reporting.test.ts test/cli-scan.test.ts` passed: 3 files, 132 tests.
+  - `bun run test` passed: 22 files, 266 tests.
+  - `bun run typecheck` passed.
+  - `bun run build` passed.
+- Changelog: Added a `Fixed` entry for reduced prompt-injection false positives in negated guidance, quoted examples, anti-patterns, and research notes.
+- Commit: Step 4 commit (`fix: reduce security false positives with text context`).
+
 ## Update Log
 
 - 2026-07-04: Completed Step 0 tracking refresh and validation.
 - 2026-07-04: Completed Step 1 baseline verification and natural-language characterization fixtures.
 - 2026-07-04: Completed Step 2 Markdown text context extraction and validation.
 - 2026-07-04: Completed Step 3 security signal adjudication layer and validation.
+- 2026-07-04: Completed Step 4 natural-language-sensitive rule migration and validation.
 - 2026-07-04: Started implementation from `PLAN.md`; Step 0 tracking refresh is in progress.

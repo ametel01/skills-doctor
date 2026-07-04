@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Reduced security false positives for prompt-injection text that appears as negated guidance, quoted examples, anti-patterns, or research notes while preserving operational prompt override, exfiltration, remote execution, and destructive-command findings.
+
 ## [0.6.0] - 2026-07-04
 
 ### Added
