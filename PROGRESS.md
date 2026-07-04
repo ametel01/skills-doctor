@@ -8,8 +8,8 @@
 ## Current Status
 
 - Status: In progress.
-- Current step: Step 6 - Align Reports, Repair Prompts, and Documentation.
-- Next step: Step 7 - Final Verification and Cleanup.
+- Current step: Step 7 - Final Verification and Cleanup.
+- Next step: Final completion audit.
 
 ## Step Checklist
 
@@ -19,7 +19,7 @@
 - [x] Step 3: Introduce Security Signals and Adjudication
 - [x] Step 4: Migrate Natural-Language-Sensitive Rules
 - [x] Step 5: Improve Capability Chain Adjudication
-- [ ] Step 6: Align Reports, Repair Prompts, and Documentation
+- [x] Step 6: Align Reports, Repair Prompts, and Documentation
 - [ ] Step 7: Final Verification and Cleanup
 
 ## Update Rule
@@ -113,6 +113,20 @@ After each completed step, update this file with:
 - Changelog: Added a `Fixed` entry for same-artifact package exfiltration chains and related capability summaries.
 - Commit: Step 5 commit (`fix: adjudicate package security capability chains`).
 
+### Step 6: Align Reports, Repair Prompts, and Documentation
+
+- Summary: Updated the repair handoff prompt to describe findings as static analyzer diagnostics that require agent judgment, documented deterministic Markdown context and same-artifact package exfiltration behavior in rules/API docs, and marked the implemented first slice in the natural-language analyzer design note while leaving LLM review deferred.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run test -- test/handoff.test.ts test/reporting.test.ts test/cli-scan.test.ts` passed: 3 files, 72 tests.
+  - `bun run test` passed: 22 files, 269 tests.
+  - `bun run typecheck` passed.
+  - `bun run build` passed.
+  - `bun run pack:dry-run` passed: 142 files, unpacked size 0.48MB.
+- Changelog: Added a `Changed` entry for static-analyzer repair handoff guidance.
+- Commit: Step 6 commit (`docs: document context-aware security analysis`).
+
 ## Update Log
 
 - 2026-07-04: Completed Step 0 tracking refresh and validation.
@@ -121,4 +135,5 @@ After each completed step, update this file with:
 - 2026-07-04: Completed Step 3 security signal adjudication layer and validation.
 - 2026-07-04: Completed Step 4 natural-language-sensitive rule migration and validation.
 - 2026-07-04: Completed Step 5 package capability-chain adjudication and validation.
+- 2026-07-04: Completed Step 6 repair prompt and documentation alignment with validation.
 - 2026-07-04: Started implementation from `PLAN.md`; Step 0 tracking refresh is in progress.

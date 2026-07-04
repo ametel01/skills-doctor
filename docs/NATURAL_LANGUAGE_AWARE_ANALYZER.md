@@ -5,6 +5,26 @@ turning it into an opaque verdict engine. The scanner should still be
 deterministic by default, but its internal model should distinguish suspicious
 text from actionable findings.
 
+## Implemented First Slice
+
+The first deterministic slice is implemented:
+
+- `MarkdownSecurityCandidate` now carries `TextContext` for heading path,
+  section role, fenced code blocks, blockquotes, list items, examples,
+  anti-patterns, nearby negation, warning language, and defensive intent.
+- Security rules can create internal signals and adjudicate them as `real`,
+  `review`, `likely_false_positive`, or `suppressed` before public findings are
+  emitted.
+- Prompt override, exfiltration, remote-code-execution, and
+  destructive-command checks use context adjudication for the high-noise body
+  paths.
+- Package-level exfiltration requires connected `reads_secrets` and
+  `network_egress` facts from the same non-`SKILL.md` artifact.
+- The public `Finding` and report schema remain compatible; internal signal and
+  adjudication types are not exported from the package root.
+
+The optional LLM review layer remains deferred.
+
 ## Design Direction
 
 The core change is to move from direct rule emission to a staged pipeline:
@@ -153,9 +173,9 @@ The safer shape is:
 This uses model judgment where natural language is genuinely ambiguous while
 keeping the core analyzer reproducible.
 
-## Recommended First Slice
+## Original Recommended First Slice
 
-The highest-leverage first implementation slice is:
+The source recommendation for the first implementation slice was:
 
 1. Add a `TextContext` extractor for Markdown sections, code blocks, quotes,
    examples, and nearby negation.
@@ -165,5 +185,6 @@ The highest-leverage first implementation slice is:
    and counterevidence.
 4. Add the false-positive fixture corpus before broadening the rule set.
 
-That sequence improves judgment while preserving the current public report
-shape and keeping the scanner deterministic.
+That sequence has been implemented for the highest-noise security paths while
+preserving the current public report shape and keeping the scanner
+deterministic.

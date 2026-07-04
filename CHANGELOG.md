@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Updated repair handoff prompts to tell agents that findings are static analyzer diagnostics and should be judged for real issues or false positives before editing.
+
 ### Fixed
 
 - Required package-level secret exfiltration findings to connect secret-read and network-egress facts from the same artifact, and included all related chain capabilities in the finding summary.

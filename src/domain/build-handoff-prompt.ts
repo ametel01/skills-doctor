@@ -38,6 +38,9 @@ export const buildHandoffPrompt = (input: BuildHandoffPromptInput): string => {
   lines.push(
     "",
     "Repair rules grounded in docs/SKILLS_SPEC.md:",
+    "- Treat findings as static analyzer diagnostics, not definitive proof that the skill is broken or malicious.",
+    "- Use judgment before editing: inspect the cited files, evidence, confidence, rationale, and counterevidence, then decide whether each finding is real, partially applicable, or a false positive.",
+    "- Fix real issues with the smallest skill-spec-aligned change; leave likely false positives or intentionally acceptable patterns unchanged and explain that decision in your final report.",
     "- Preserve unrelated user changes and existing skill intent.",
     "- Edit skill files directly; do not invent new requirements outside the skill spec.",
     "- Keep SKILL.md concise and move large examples, scripts, and references into progressively disclosed files.",

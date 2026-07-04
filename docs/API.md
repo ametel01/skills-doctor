@@ -381,10 +381,15 @@ the scanner can resolve a specific source line. Security findings include
 Security findings may also include `confidence`, `rationale`, and
 `counterevidence` so callers can distinguish high-confidence source/action/sink
 stories from medium-confidence harmful-language matches and display the filters
-that were considered. Evidence excerpts redact common secret-token patterns.
+that were considered. The scanner applies deterministic Markdown context before
+emitting findings, so negated guidance, quoted examples, anti-pattern sections,
+and research notes can suppress prompt-injection-style matches without changing
+the public `Finding` shape. Evidence excerpts redact common secret-token patterns.
 Package-level security findings may also include `priority`, `capabilities`,
 and `evidenceChain` fields. These are optional so existing `schemaVersion: 1`
 reports remain compatible when package-level scanning is not active.
+Package-level exfiltration findings require connected secret-read and
+network-egress capability facts from the same non-`SKILL.md` artifact.
 P2 security hygiene findings contribute to `score`; P0 and P1 security findings
 remain separate from quality scoring and default severity gates.
 Use `buildSecurityReviewIncidents()` for human review surfaces that should

@@ -196,6 +196,14 @@ Security findings include optional confidence metadata:
 - `low`: supported by the report schema for future review hints. Current
   built-in security rules do not emit low-confidence findings.
 
+Security rules use deterministic Markdown context and counterevidence before
+emitting findings. For example, prompt-injection text in negated guidance,
+quoted examples, anti-pattern sections, or research notes is treated differently
+from the same text in operational workflow instructions. Package-level
+exfiltration findings require connected secret-read and network-egress
+capability facts from the same non-`SKILL.md` artifact; unrelated package files
+do not form one exfiltration chain.
+
 Security findings are separate review warnings. They are counted in
 `findingCount` and `securityFindingCount`, but they are excluded from per-skill
 quality counts. P0 security findings fail default exit-code gates; P1 and P2

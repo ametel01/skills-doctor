@@ -33,6 +33,9 @@ describe("handoff prompt", () => {
     expect(prompt).toContain("Selected roots: codex: /repo/.agents/skills");
     expect(prompt).toContain("/repo/.agents/skills/review-pr/SKILL.md:3");
     expect(prompt).toContain("docs/SKILLS_SPEC.md");
+    expect(prompt).toContain("static analyzer diagnostics");
+    expect(prompt).toContain("false positive");
+    expect(prompt).toContain("confidence, rationale, and counterevidence");
     expect(prompt).toContain("Preserve unrelated user changes");
     expect(prompt).toContain("Verify by rerunning `skills-doctor`");
     expect(prompt).toContain("Full findings report: /tmp/skills-doctor-report");
