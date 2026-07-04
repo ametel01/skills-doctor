@@ -1083,16 +1083,15 @@ const buildPackageExfiltrationFinding = (
 ): Finding | undefined => {
   const ruleId: SecurityRuleId = "SKILL004_EXFIL_CHAIN";
   if (enabled !== undefined && !enabled.has(ruleId)) return undefined;
-  const secretFact = facts.find(
-    (fact) => fact.artifactPath !== skillPackage.skill.skillPath && fact.kind === "reads_secrets",
+  const chain = findCapabilityPairOnSameArtifact(
+    facts.filter((fact) => fact.artifactPath !== skillPackage.skill.skillPath),
+    "reads_secrets",
+    "network_egress",
   );
-  const networkFact = facts.find(
-    (fact) => fact.artifactPath !== skillPackage.skill.skillPath && fact.kind === "network_egress",
-  );
-  if (secretFact === undefined || networkFact === undefined) return undefined;
+  if (chain === undefined) return undefined;
   return buildCapabilityFinding(
     skillPackage,
-    networkFact,
+    chain.secondary,
     {
       ruleId,
       severity: "warning",
@@ -1109,8 +1108,22 @@ const buildPackageExfiltrationFinding = (
         "Official service API authentication, parse-only local commands, and local destinations are ignored unless secret material is also sent to an unrelated external sink.",
       ],
     },
-    [secretFact, networkFact],
+    [chain.primary, chain.secondary],
   );
+};
+
+const findCapabilityPairOnSameArtifact = (
+  facts: readonly CapabilityFact[],
+  primaryKind: CapabilityKind,
+  secondaryKind: CapabilityKind,
+): { readonly primary: CapabilityFact; readonly secondary: CapabilityFact } | undefined => {
+  for (const primary of facts.filter((fact) => fact.kind === primaryKind)) {
+    const secondary = facts.find(
+      (fact) => fact.kind === secondaryKind && fact.artifactPath === primary.artifactPath,
+    );
+    if (secondary !== undefined) return { primary, secondary };
+  }
+  return undefined;
 };
 
 const P1_RISKY_CAPABILITIES = new Set<CapabilityKind>([
@@ -1345,7 +1358,7 @@ const buildCapabilityFinding = (
   skillName: readSkillName(skillPackage.skill),
   line: fact.line,
   evidence: fact.evidence,
-  capabilities: [fact.kind],
+  capabilities: [...new Set(evidenceFacts.map((evidenceFact) => evidenceFact.kind))],
   evidenceChain: {
     summary: fact.description ?? rule.rationale,
     items: evidenceFacts.map((evidenceFact) => ({

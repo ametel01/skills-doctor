@@ -8,8 +8,8 @@
 ## Current Status
 
 - Status: In progress.
-- Current step: Step 5 - Improve Capability Chain Adjudication.
-- Next step: Step 6 - Align Reports, Repair Prompts, and Documentation.
+- Current step: Step 6 - Align Reports, Repair Prompts, and Documentation.
+- Next step: Step 7 - Final Verification and Cleanup.
 
 ## Step Checklist
 
@@ -18,7 +18,7 @@
 - [x] Step 2: Add Markdown Text Context Extraction
 - [x] Step 3: Introduce Security Signals and Adjudication
 - [x] Step 4: Migrate Natural-Language-Sensitive Rules
-- [ ] Step 5: Improve Capability Chain Adjudication
+- [x] Step 5: Improve Capability Chain Adjudication
 - [ ] Step 6: Align Reports, Repair Prompts, and Documentation
 - [ ] Step 7: Final Verification and Cleanup
 
@@ -100,6 +100,19 @@ After each completed step, update this file with:
 - Changelog: Added a `Fixed` entry for reduced prompt-injection false positives in negated guidance, quoted examples, anti-patterns, and research notes.
 - Commit: Step 4 commit (`fix: reduce security false positives with text context`).
 
+### Step 5: Improve Capability Chain Adjudication
+
+- Summary: Tightened package-level `SKILL004_EXFIL_CHAIN` to require connected `reads_secrets` and `network_egress` capability facts from the same non-`SKILL.md` artifact, preserved standalone secret-access findings, and expanded capability finding summaries to include all evidence-chain capability kinds. Added package-level tests for same-artifact exfiltration, unrelated artifact facts, local parse-only handling, and combined broad-tool/external-dependency denylist risk.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run test -- test/security-capabilities.test.ts test/security-rules.test.ts test/reporting.test.ts` passed: 3 files, 103 tests.
+  - `bun run test` passed: 22 files, 269 tests.
+  - `bun run typecheck` passed.
+  - `bun run build` passed.
+- Changelog: Added a `Fixed` entry for same-artifact package exfiltration chains and related capability summaries.
+- Commit: Step 5 commit (`fix: adjudicate package security capability chains`).
+
 ## Update Log
 
 - 2026-07-04: Completed Step 0 tracking refresh and validation.
@@ -107,4 +120,5 @@ After each completed step, update this file with:
 - 2026-07-04: Completed Step 2 Markdown text context extraction and validation.
 - 2026-07-04: Completed Step 3 security signal adjudication layer and validation.
 - 2026-07-04: Completed Step 4 natural-language-sensitive rule migration and validation.
+- 2026-07-04: Completed Step 5 package capability-chain adjudication and validation.
 - 2026-07-04: Started implementation from `PLAN.md`; Step 0 tracking refresh is in progress.
