@@ -8,14 +8,14 @@
 ## Current Status
 
 - Status: In progress.
-- Current step: Step 2 - Add Markdown Text Context Extraction.
-- Next step: Step 3 - Introduce Security Signals and Adjudication.
+- Current step: Step 3 - Introduce Security Signals and Adjudication.
+- Next step: Step 4 - Migrate Natural-Language-Sensitive Rules.
 
 ## Step Checklist
 
 - [x] Step 0: Progress and Changelog Tracking Setup
 - [x] Step 1: Baseline Gates and Characterization Fixtures
-- [ ] Step 2: Add Markdown Text Context Extraction
+- [x] Step 2: Add Markdown Text Context Extraction
 - [ ] Step 3: Introduce Security Signals and Adjudication
 - [ ] Step 4: Migrate Natural-Language-Sensitive Rules
 - [ ] Step 5: Improve Capability Chain Adjudication
@@ -61,8 +61,22 @@ After each completed step, update this file with:
 - Changelog: No changelog entry added because this step only added characterization coverage.
 - Commit: Step 1 commit (`test: characterize natural language security contexts`).
 
+### Step 2: Add Markdown Text Context Extraction
+
+- Summary: Enriched `MarkdownSecurityCandidate` with `TextContext`, including heading path, section role, code-fence language, blockquote/list markers, example and anti-pattern flags, nearby negation, warning language, and defensive intent. Added assertions to the existing Markdown context test without changing emitted findings yet.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run test -- test/security-rules.test.ts` passed: 1 file, 75 passing tests, 4 expected-failing characterization tests.
+  - `bun run test` passed: 22 files, 260 passing tests, 4 expected-failing characterization tests.
+  - `bun run typecheck` passed.
+  - `bun run build` passed.
+- Changelog: No changelog entry added because this step added internal context plumbing without changing emitted findings.
+- Commit: Step 2 commit (`feat: add markdown context for security candidates`).
+
 ## Update Log
 
 - 2026-07-04: Completed Step 0 tracking refresh and validation.
 - 2026-07-04: Completed Step 1 baseline verification and natural-language characterization fixtures.
+- 2026-07-04: Completed Step 2 Markdown text context extraction and validation.
 - 2026-07-04: Started implementation from `PLAN.md`; Step 0 tracking refresh is in progress.

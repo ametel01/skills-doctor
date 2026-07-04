@@ -55,12 +55,35 @@ type SourceLine = {
   readonly text: string;
 };
 
+export type TextSectionRole =
+  | "instructions"
+  | "examples"
+  | "anti-patterns"
+  | "safety"
+  | "reference"
+  | "unknown";
+
+export type TextContext = {
+  readonly headingPath: readonly string[];
+  readonly sectionRole: TextSectionRole;
+  readonly inCodeFence: boolean;
+  readonly codeFenceLanguage: string | undefined;
+  readonly inBlockquote: boolean;
+  readonly isListItem: boolean;
+  readonly isExample: boolean;
+  readonly isAntiPattern: boolean;
+  readonly hasNearbyNegation: boolean;
+  readonly hasNearbyWarning: boolean;
+  readonly hasNearbyDefensiveIntent: boolean;
+};
+
 export type MarkdownSecurityCandidate = SourceLine & {
   readonly previousLines: readonly SourceLine[];
   readonly nextLines: readonly SourceLine[];
   readonly nearbyLines: readonly SourceLine[];
   readonly sectionHeading: string | undefined;
   readonly inCodeFence: boolean;
+  readonly textContext: TextContext;
   readonly tableRow: MarkdownTableRowContext | undefined;
   readonly commandContext: CommandLineContext;
 };
@@ -1334,26 +1357,42 @@ const MARKDOWN_NEARBY_LINE_RADIUS = 2;
 export const readMarkdownSecurityCandidates = (
   lines: readonly SourceLine[],
 ): readonly MarkdownSecurityCandidate[] => {
-  let sectionHeading: string | undefined;
-  let activeFence: { readonly marker: string; readonly isCommandFence: boolean } | undefined;
+  let headingPath: readonly { readonly level: number; readonly title: string }[] = [];
+  let activeFence:
+    | { readonly marker: string; readonly language: string; readonly isCommandFence: boolean }
+    | undefined;
   const candidates: MarkdownSecurityCandidate[] = [];
 
   for (const [index, line] of lines.entries()) {
-    const heading = readMarkdownSectionHeading(line.text);
-    if (heading !== undefined) sectionHeading = heading;
+    const heading = readMarkdownHeading(line.text);
+    if (heading !== undefined) {
+      headingPath = [
+        ...headingPath.filter((candidate) => candidate.level < heading.level),
+        heading,
+      ];
+    }
 
     const candidateInCodeFence = activeFence !== undefined;
     const candidateInCommandFence = activeFence?.isCommandFence === true;
     const previousLines = lines.slice(Math.max(0, index - MARKDOWN_NEARBY_LINE_RADIUS), index);
     const nextLines = lines.slice(index + 1, index + 1 + MARKDOWN_NEARBY_LINE_RADIUS);
+    const nearbyLines = [...previousLines, line, ...nextLines];
+    const textContext = buildTextContext({
+      line,
+      nearbyLines,
+      headingPath: headingPath.map((item) => item.title),
+      inCodeFence: candidateInCodeFence,
+      codeFenceLanguage: activeFence?.language,
+    });
 
     candidates.push({
       ...line,
       previousLines,
       nextLines,
-      nearbyLines: [...previousLines, line, ...nextLines],
-      sectionHeading,
+      nearbyLines,
+      sectionHeading: headingPath.at(-1)?.title,
       inCodeFence: candidateInCodeFence,
+      textContext,
       tableRow: readMarkdownTableRow(line.text),
       commandContext: buildCommandLineContext(line.text, candidateInCommandFence),
     });
@@ -1366,6 +1405,7 @@ export const readMarkdownSecurityCandidates = (
         const language = fence[2] ?? "";
         activeFence = {
           marker: fence[1] ?? "",
+          language,
           isCommandFence: COMMAND_FENCE_LANGUAGE_PATTERN.test(language),
         };
       }
@@ -1541,9 +1581,68 @@ const isOperationalConfirmationFlagLine = (text: string): boolean =>
 const isDefensiveUntrustedInstructionContentLine = (text: string): boolean =>
   DEFENSIVE_UNTRUSTED_INSTRUCTION_CONTENT_PATTERN.test(text);
 
-const readMarkdownSectionHeading = (text: string): string | undefined => {
+const buildTextContext = (input: {
+  readonly line: SourceLine;
+  readonly nearbyLines: readonly SourceLine[];
+  readonly headingPath: readonly string[];
+  readonly inCodeFence: boolean;
+  readonly codeFenceLanguage: string | undefined;
+}): TextContext => {
+  const sectionRole = classifySectionRole(input.headingPath);
+  return {
+    headingPath: input.headingPath,
+    sectionRole,
+    inCodeFence: input.inCodeFence,
+    codeFenceLanguage: input.codeFenceLanguage,
+    inBlockquote: /^\s*>/.test(input.line.text),
+    isListItem: /^\s*(?:[-*+]|\d+[.)])\s+/.test(input.line.text),
+    isExample:
+      sectionRole === "examples" || /\b(examples?|e\.g\.|for example)\b/i.test(input.line.text),
+    isAntiPattern:
+      sectionRole === "anti-patterns" || /\banti[- ]?patterns?\b/i.test(input.line.text),
+    hasNearbyNegation: input.nearbyLines.some((line) =>
+      /\b(do not|don't|never|must not|should not|refuse to)\b/i.test(line.text),
+    ),
+    hasNearbyWarning: input.nearbyLines.some((line) =>
+      /\b(unsafe|malicious|attack|suspicious|warning|untrusted|do not follow)\b/i.test(line.text),
+    ),
+    hasNearbyDefensiveIntent: input.nearbyLines.some(
+      (line) =>
+        isPreventiveLine(line.text) ||
+        isDefensivePromptIntentLine(line.text) ||
+        /\b(treat as data|not instructions?|documentation only|record it as)\b/i.test(line.text),
+    ),
+  };
+};
+
+const classifySectionRole = (headingPath: readonly string[]): TextSectionRole => {
+  const text = headingPath.join(" / ").toLowerCase();
+  if (/\b(anti[- ]?patterns?|bad examples?|unsafe examples?)\b/.test(text)) return "anti-patterns";
+  if (/\b(examples?|fixtures?)\b/.test(text)) return "examples";
+  if (/\b(safety|security|hard rules|boundar(?:y|ies)|permissions?|confirmation)\b/.test(text))
+    return "safety";
+  if (
+    /\b(research|notes?|references?|docs?|documentation|troubleshooting|error signatures)\b/.test(
+      text,
+    )
+  )
+    return "reference";
+  if (/\b(workflow|steps?|procedure|instructions?|checks?|cli|invocation)\b/.test(text))
+    return "instructions";
+  return "unknown";
+};
+
+const readMarkdownHeading = (
+  text: string,
+): { readonly level: number; readonly title: string } | undefined => {
   const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(text.trim());
-  return match?.[2]?.trim();
+  const marker = match?.[1];
+  const title = match?.[2]?.trim();
+  if (marker === undefined || title === undefined) return undefined;
+  return {
+    level: marker.length,
+    title,
+  };
 };
 
 const readMarkdownTableRow = (text: string): MarkdownTableRowContext | undefined => {
