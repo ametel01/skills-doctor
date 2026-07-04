@@ -88,6 +88,35 @@ export type MarkdownSecurityCandidate = SourceLine & {
   readonly commandContext: CommandLineContext;
 };
 
+export type SecuritySignalKind =
+  | "prompt_override"
+  | "secret_exfiltration"
+  | "remote_code_execution"
+  | "destructive_command"
+  | "package_capability_chain";
+
+export type SecurityAdjudicationDecision =
+  | "real"
+  | "review"
+  | "likely_false_positive"
+  | "suppressed";
+
+export type SecuritySignal = {
+  readonly kind: SecuritySignalKind;
+  readonly artifactPath: string;
+  readonly line?: number | undefined;
+  readonly excerpt: string;
+  readonly confidence: FindingConfidence;
+  readonly textContext: TextContext;
+  readonly commandContext?: CommandLineContext | undefined;
+};
+
+export type AdjudicatedSecuritySignal = SecuritySignal & {
+  readonly decision: SecurityAdjudicationDecision;
+  readonly rationale: string;
+  readonly counterevidence: readonly string[];
+};
+
 export type MarkdownTableRowContext = {
   readonly rowText: string;
   readonly cells: readonly string[];
@@ -1413,6 +1442,65 @@ export const readMarkdownSecurityCandidates = (
   }
 
   return candidates;
+};
+
+export const adjudicateSecuritySignal = (signal: SecuritySignal): AdjudicatedSecuritySignal => {
+  const contextCounterevidence = collectTextContextCounterevidence(signal);
+  if (contextCounterevidence.length > 0) {
+    return {
+      ...signal,
+      decision: "likely_false_positive",
+      rationale:
+        "The suspicious text appears in non-operational, defensive, or bounded context rather than as an instruction to execute.",
+      counterevidence: contextCounterevidence,
+    };
+  }
+
+  if (signal.commandContext?.hasParseOnlySink === true && !signal.commandContext.hasExecutionSink) {
+    return {
+      ...signal,
+      decision: "suppressed",
+      rationale: "The command context parses or inspects data without an execution sink.",
+      counterevidence: ["Command flow is parse-only and has no execution sink."],
+    };
+  }
+
+  return {
+    ...signal,
+    decision: "real",
+    rationale: "No deterministic counterevidence suppressed this signal.",
+    counterevidence: [],
+  };
+};
+
+const collectTextContextCounterevidence = (signal: SecuritySignal): readonly string[] => {
+  const counterevidence: string[] = [];
+  const { textContext } = signal;
+
+  if (textContext.sectionRole === "examples" || textContext.isExample) {
+    counterevidence.push("Suspicious text appears in an example context.");
+  }
+  if (textContext.sectionRole === "anti-patterns" || textContext.isAntiPattern) {
+    counterevidence.push("Suspicious text appears in an anti-pattern context.");
+  }
+  if (textContext.sectionRole === "reference" && textContext.hasNearbyWarning) {
+    counterevidence.push(
+      "Suspicious text appears in reference or research notes with warning context.",
+    );
+  }
+  if (textContext.inBlockquote && textContext.hasNearbyWarning) {
+    counterevidence.push("Suspicious text is quoted with nearby warning language.");
+  }
+  if (textContext.hasNearbyNegation && signal.kind === "prompt_override") {
+    counterevidence.push(
+      "Nearby negation tells the agent not to follow the suspicious instruction.",
+    );
+  }
+  if (textContext.hasNearbyDefensiveIntent) {
+    counterevidence.push("Nearby defensive guidance frames the suspicious text as data to reject.");
+  }
+
+  return counterevidence;
 };
 
 const findFirstLine = (

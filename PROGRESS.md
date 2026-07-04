@@ -8,15 +8,15 @@
 ## Current Status
 
 - Status: In progress.
-- Current step: Step 3 - Introduce Security Signals and Adjudication.
-- Next step: Step 4 - Migrate Natural-Language-Sensitive Rules.
+- Current step: Step 4 - Migrate Natural-Language-Sensitive Rules.
+- Next step: Step 5 - Improve Capability Chain Adjudication.
 
 ## Step Checklist
 
 - [x] Step 0: Progress and Changelog Tracking Setup
 - [x] Step 1: Baseline Gates and Characterization Fixtures
 - [x] Step 2: Add Markdown Text Context Extraction
-- [ ] Step 3: Introduce Security Signals and Adjudication
+- [x] Step 3: Introduce Security Signals and Adjudication
 - [ ] Step 4: Migrate Natural-Language-Sensitive Rules
 - [ ] Step 5: Improve Capability Chain Adjudication
 - [ ] Step 6: Align Reports, Repair Prompts, and Documentation
@@ -74,9 +74,23 @@ After each completed step, update this file with:
 - Changelog: No changelog entry added because this step added internal context plumbing without changing emitted findings.
 - Commit: Step 2 commit (`feat: add markdown context for security candidates`).
 
+### Step 3: Introduce Security Signals and Adjudication
+
+- Summary: Added internal security signal, adjudication decision, and adjudicated signal types plus a deterministic adjudicator for non-operational examples, anti-patterns, reference notes, blockquotes, nearby negation, defensive intent, and parse-only command flows. Added direct tests for likely-false-positive and real prompt-override signal decisions without changing emitted findings yet.
+- Validation:
+  - `bun run format:check` passed.
+  - `bun run lint` passed.
+  - `bun run test -- test/security-rules.test.ts test/security-capabilities.test.ts` passed: 2 files, 79 passing tests, 4 expected-failing characterization tests.
+  - `bun run test` passed: 22 files, 262 passing tests, 4 expected-failing characterization tests.
+  - `bun run typecheck` passed.
+  - `bun run build` passed.
+- Changelog: No changelog entry added because this step added internal adjudication plumbing without changing emitted findings.
+- Commit: Step 3 commit (`feat: adjudicate security signals before findings`).
+
 ## Update Log
 
 - 2026-07-04: Completed Step 0 tracking refresh and validation.
 - 2026-07-04: Completed Step 1 baseline verification and natural-language characterization fixtures.
 - 2026-07-04: Completed Step 2 Markdown text context extraction and validation.
+- 2026-07-04: Completed Step 3 security signal adjudication layer and validation.
 - 2026-07-04: Started implementation from `PLAN.md`; Step 0 tracking refresh is in progress.
