@@ -6,7 +6,7 @@ import { isCommandAvailable } from "./is-command-available.js";
 import type { PromptAdapter } from "./prompts.js";
 import { BACK_TO_MAIN_MENU_VALUE, backToMainMenuChoice } from "./prompts.js";
 
-export const REPAIR_AGENT_IDS = ["claude", "codex"] as const;
+const REPAIR_AGENT_IDS = ["claude", "codex"] as const;
 
 export type RepairAgentId = (typeof REPAIR_AGENT_IDS)[number];
 
