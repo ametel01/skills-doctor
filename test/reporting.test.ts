@@ -459,7 +459,7 @@ describe("scan reports", () => {
       },
     });
 
-    expect(Object.keys(JSON.parse(JSON.stringify(withoutUsage)))).not.toContain("usage");
+    expect(Object.keys(structuredClone(withoutUsage))).not.toContain("usage");
     expect(withUsage.usage).toMatchObject({
       sourcePaths: ["/tmp/session.jsonl"],
       readableSourceCount: 1,

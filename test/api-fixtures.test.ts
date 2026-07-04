@@ -168,7 +168,7 @@ describe("fixture scanner coverage", () => {
 
   it("keeps JSON report shape stable", async () => {
     const report = await scanFixture("weak-descriptions");
-    const json = JSON.parse(JSON.stringify(report)) as ScanReport;
+    const json = structuredClone(report) as ScanReport;
 
     expect(Object.keys(json)).toEqual([
       "schemaVersion",
