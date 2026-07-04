@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Cleared React Doctor warnings for immutable sorting helpers, independent Codex usage pressure reads, and security detector patterns that were mistaken for plugin updater execution.
 - Cleared React Doctor performance warnings by parallelizing independent filesystem reads and combining redundant array passes in scan, usage, report, and rule helpers.
 - Required package-level secret exfiltration findings to connect secret-read and network-egress facts from the same artifact, and included all related chain capabilities in the finding summary.
 - Reduced security false positives for prompt-injection text that appears as negated guidance, quoted examples, anti-patterns, or research notes while preserving operational prompt override, exfiltration, remote execution, and destructive-command findings.

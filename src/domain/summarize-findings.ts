@@ -155,7 +155,7 @@ export const buildSecurityReviewIncidents = (
 
   return [...groups.values()]
     .map((groupFindings) => {
-      const sortedFindings = [...groupFindings].sort(compareSecurityFindingsForReview);
+      const sortedFindings = groupFindings.toSorted(compareSecurityFindingsForReview);
       const primaryFinding = sortedFindings[0] ?? groupFindings[0];
       if (primaryFinding === undefined) {
         throw new Error("Security incident group must contain at least one finding.");

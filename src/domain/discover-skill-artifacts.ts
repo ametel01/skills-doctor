@@ -71,7 +71,7 @@ const walkSkillArtifacts = async (
     }
 
     const entries = await readdir(directoryPath, { withFileTypes: true }).catch(() => []);
-    const sortedEntries = [...entries].sort((left, right) => left.name.localeCompare(right.name));
+    const sortedEntries = entries.toSorted((left, right) => left.name.localeCompare(right.name));
     const artifactsByEntry = await Promise.all(
       sortedEntries.map(async (entry) => {
         if (IGNORED_DIRECTORY_NAMES.has(entry.name)) return [];

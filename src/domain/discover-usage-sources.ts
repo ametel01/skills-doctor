@@ -83,17 +83,22 @@ export const discoverUsageSources = async (
     ...(historyFile === undefined ? [] : [historyFile.filePath]),
   ];
 
-  const jsonlPressure = await detectJsonlPressure({
-    files: [...sessionFiles, ...(historyFile === undefined ? [] : [historyFile])],
-    maxFileBytes,
-    diagnostics,
-  });
-  const sqlitePressure = await readSqlitePressure({
-    sqlitePath,
-    since,
-    readSqlitePressure: input.readSqlitePressure,
-    diagnostics,
-  });
+  const jsonlDiagnostics: Diagnostic[] = [];
+  const sqliteDiagnostics: Diagnostic[] = [];
+  const [jsonlPressure, sqlitePressure] = await Promise.all([
+    detectJsonlPressure({
+      files: [...sessionFiles, ...(historyFile === undefined ? [] : [historyFile])],
+      maxFileBytes,
+      diagnostics: jsonlDiagnostics,
+    }),
+    readSqlitePressure({
+      sqlitePath,
+      since,
+      readSqlitePressure: input.readSqlitePressure,
+      diagnostics: sqliteDiagnostics,
+    }),
+  ]);
+  diagnostics.push(...jsonlDiagnostics, ...sqliteDiagnostics);
 
   return {
     usageSourcePaths,

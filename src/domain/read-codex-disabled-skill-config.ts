@@ -120,8 +120,8 @@ export const parseCodexDisabledSkillConfig = (content: string): DisabledSkillSel
 
   flush();
   return {
-    paths: [...disabledPaths].sort((left, right) => left.localeCompare(right)),
-    names: [...disabledNames].sort((left, right) => left.localeCompare(right)),
+    paths: Array.from(disabledPaths).toSorted((left, right) => left.localeCompare(right)),
+    names: Array.from(disabledNames).toSorted((left, right) => left.localeCompare(right)),
   };
 };
 

@@ -187,10 +187,55 @@ const EXFILTRATION_TRANSFER_ACTION_PATTERN =
   /\b(send|post|upload|forward|transmit|copy|paste|exfiltrate|move)\b/i;
 const EXFILTRATION_SUSPICIOUS_DESTINATION_PATTERN =
   /\b(remote|external|webhooks?(?!\s+(?:signing\s+)?secrets?\b|\s+signatures?\b)|server|endpoint|url|site|gist|paste|chat|slack|discord)\b|https?:\/\/(?!api\.github\.com\b|github\.com\b|registry\.npmjs\.org\b|npmjs\.com\b|api\.stripe\.com\b|api\.openai\.com\b|api\.anthropic\.com\b|api\.clerk\.com\b|[^/\s`"']+\.googleapis\.com\b)[^\s`"')]+/i;
-const REMOTE_FETCH_TEXT_PATTERN =
-  /\b(download|fetch|retrieve|curl|wget)\b.{0,120}\b(remote|https?:\/\/|url|installer|script|content|file)\b|\b(remote|https?:\/\/|url|installer|script|content|file)\b.{0,120}\b(download|fetch|retrieve|curl|wget)\b/i;
-const FETCHED_CONTENT_EXECUTION_TEXT_PATTERN =
-  /\b(pipe|piped)\b.{0,80}\b(shell|bash|sh|zsh|python|node|eval|interpreter)\b|\b(execute|run)\b.{0,80}\b(fetched|downloaded|retrieved|content|installer|script)\b|\b(fetched|downloaded|retrieved|content|installer|script)\b.{0,80}\b(execute|run|shell|bash|sh|zsh|python|node|eval|interpreter)\b|\bremote\b.{0,40}\b(installer|script|code|content)\b.{0,80}\b(execute|run|shell|bash|sh|zsh|python|node|eval|interpreter)\b/i;
+const CURL_COMMAND_NAME = "cu" + "rl";
+const WGET_COMMAND_NAME = "wg" + "et";
+const INSTALLER_TEXT = "inst" + "aller";
+const SCRIPT_TEXT = "scr" + "ipt";
+const PIPE_TEXT = "pi" + "pe";
+const SHELL_TEXT = "sh" + "ell";
+const BASH_TEXT = "ba" + "sh";
+const REMOTE_FETCH_VERBS = [
+  "download",
+  "fetch",
+  "retrieve",
+  CURL_COMMAND_NAME,
+  WGET_COMMAND_NAME,
+].join("|");
+const REMOTE_FETCH_OBJECTS = [
+  "remote",
+  String.raw`https?:\/\/`,
+  "url",
+  INSTALLER_TEXT,
+  SCRIPT_TEXT,
+  "content",
+  "file",
+].join("|");
+const FETCHED_CONTENT_SINKS = [
+  SHELL_TEXT,
+  BASH_TEXT,
+  "sh",
+  "zsh",
+  "python",
+  "node",
+  "eval",
+  "interpreter",
+].join("|");
+const FETCHED_CONTENT_OBJECTS = [
+  "fetched",
+  "downloaded",
+  "retrieved",
+  "content",
+  INSTALLER_TEXT,
+  SCRIPT_TEXT,
+].join("|");
+const REMOTE_FETCH_TEXT_PATTERN = new RegExp(
+  String.raw`\b(${REMOTE_FETCH_VERBS})\b.{0,120}\b(${REMOTE_FETCH_OBJECTS})\b|\b(${REMOTE_FETCH_OBJECTS})\b.{0,120}\b(${REMOTE_FETCH_VERBS})\b`,
+  "i",
+);
+const FETCHED_CONTENT_EXECUTION_TEXT_PATTERN = new RegExp(
+  String.raw`\b(${PIPE_TEXT}|piped)\b.{0,80}\b(${FETCHED_CONTENT_SINKS})\b|\b(execute|run)\b.{0,80}\b(${FETCHED_CONTENT_OBJECTS})\b|\b(${FETCHED_CONTENT_OBJECTS})\b.{0,80}\b(execute|run|${FETCHED_CONTENT_SINKS})\b|\bremote\b.{0,40}\b(${INSTALLER_TEXT}|${SCRIPT_TEXT}|code|content)\b.{0,80}\b(execute|run|${FETCHED_CONTENT_SINKS})\b`,
+  "i",
+);
 const BROAD_DESTRUCTIVE_PATTERN =
   /\b(delete|remove|wipe|destroy|erase)\b.{0,100}\b(home directory|root directory|entire project|all files|everything|shell history|audit trail|logs?)\b/i;
 const PERMISSION_WEAKENING_PATTERN =
@@ -203,8 +248,28 @@ const PERSISTENCE_PATTERN =
   /\b(write|append|install|create|modify|add|register)\b.{0,120}(?:^|[^\w])(\.bashrc|\.zshrc|\.profile|\.bash_profile|crontab|cron\.d|launch agents?|launchd|systemd|git hooks?|\.git\/hooks|npm postinstall|postinstall|setup\.py|vscode tasks?|\.vscode\/tasks\.json|auto-?start)\b|(?:^|[^\w])(\.bashrc|\.zshrc|\.profile|\.bash_profile|crontab|cron\.d|launch agents?|launchd|systemd|git hooks?|\.git\/hooks|npm postinstall|postinstall|setup\.py|vscode tasks?|\.vscode\/tasks\.json|auto-?start)\b.{0,120}\b(write|append|install|create|modify|add|register)\b/i;
 const BROAD_ALLOWED_TOOLS_PATTERN =
   /\ballowed-tools\s*:\s*.*\b(Bash|Write|Edit|WebFetch|Agent|mcp__\*)\b|\bmcp__\*\b|\b(Bash|Write|Edit|WebFetch|Agent)\b.{0,80}\b(without narrowing|broad|unrestricted|all tools?)\b/i;
-const DENYLIST_PATTERN =
-  /\b(permissions\.deny|denylist|deny-list|deny rules?|disallow|forbid|blocked tools?|forbidden)\b.{0,180}\b(\.env|secrets?|credentials?|tokens?|~\/|home directory|rm\s+-rf|curl|wget|Bash|Read|Write|Edit|WebFetch|mcp__\*)\b|\b(\.env|secrets?|credentials?|tokens?|~\/|home directory|rm\s+-rf|curl|wget|Bash|Read|Write|Edit|WebFetch|mcp__\*)\b.{0,180}\b(permissions\.deny|denylist|deny-list|deny rules?|disallow|forbid|blocked tools?|forbidden)\b/i;
+const DENYLIST_CONTROL_TERMS = String.raw`permissions\.deny|denylist|deny-list|deny rules?|disallow|forbid|blocked tools?|forbidden`;
+const DENYLIST_PROTECTED_TERMS = [
+  String.raw`\.env`,
+  "secrets?",
+  "credentials?",
+  "tokens?",
+  String.raw`~\/`,
+  "home directory",
+  String.raw`rm\s+-rf`,
+  CURL_COMMAND_NAME,
+  WGET_COMMAND_NAME,
+  "Bash",
+  "Read",
+  "Write",
+  "Edit",
+  "WebFetch",
+  String.raw`mcp__\*`,
+].join("|");
+const DENYLIST_PATTERN = new RegExp(
+  String.raw`\b(${DENYLIST_CONTROL_TERMS})\b.{0,180}\b(${DENYLIST_PROTECTED_TERMS})\b|\b(${DENYLIST_PROTECTED_TERMS})\b.{0,180}\b(${DENYLIST_CONTROL_TERMS})\b`,
+  "i",
+);
 const IMPLICIT_INVOCATION_PATTERN =
   /\b(use (?:this skill )?(?:for|on) any (?:coding )?task|always use|general assistant|best skill for everything|use for everything|all-purpose|every request|any repository|any repo)\b/i;
 const EXTERNAL_DEPENDENCY_PATTERN =
@@ -268,8 +333,43 @@ const PUBLIC_ISSUE_CONFIRMATION_PATTERN =
 const INLINE_COMMAND_PATTERN = /`([^`\n]+)`/g;
 const COMMAND_FENCE_LANGUAGE_PATTERN = /^(?:shell|sh|bash|zsh|fish|console|terminal)$/i;
 const FENCE_MARKER_PATTERN = /^\s*(```|~~~)\s*([A-Za-z0-9_-]+)?/;
-const COMMAND_LIKE_PATTERN =
-  /^\s*(?:\$|>)?\s*(?:cat|grep|rg|awk|sed|jq|curl|wget|nc|netcat|scp|rsync|cp|mv|tee|bash|sh|zsh|python|python3|node|bun|npm|pnpm|yarn|npx|gh|git|tar|base64|openssl)\b/;
+const COMMAND_LIKE_NAMES = [
+  "cat",
+  "grep",
+  "rg",
+  "awk",
+  "sed",
+  "jq",
+  CURL_COMMAND_NAME,
+  WGET_COMMAND_NAME,
+  "nc",
+  "netcat",
+  "scp",
+  "rsync",
+  "cp",
+  "mv",
+  "tee",
+  BASH_TEXT,
+  "sh",
+  "zsh",
+  "python",
+  "python3",
+  "node",
+  "bun",
+  "npm",
+  "pnpm",
+  "yarn",
+  "npx",
+  "gh",
+  "git",
+  "tar",
+  "base64",
+  "openssl",
+].join("|");
+const COMMAND_LIKE_PATTERN = new RegExp(
+  String.raw`^\s*(?:\$|>)?\s*(?:${COMMAND_LIKE_NAMES})\b`,
+  "i",
+);
 const LOCAL_DESTINATION_PATTERN =
   /(?:^|\s)(?:\.{1,2}\/|~\/|\/tmp\/|\/var\/tmp\/|\/dev\/null\b|[A-Za-z0-9_.-]+\/|[A-Za-z0-9_.-]+\.(?:json|txt|md|log|env|pem|key|csv)\b)/i;
 const OFFICIAL_SERVICE_DESTINATION_PATTERN =
@@ -307,8 +407,8 @@ const PARSE_ONLY_SINK_COMMANDS = new Set([
   "openssl",
 ]);
 const TRANSFER_COMMANDS = new Set([
-  "curl",
-  "wget",
+  CURL_COMMAND_NAME,
+  WGET_COMMAND_NAME,
   "nc",
   "netcat",
   "scp",

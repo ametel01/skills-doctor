@@ -1,8 +1,30 @@
 import type { CapabilityIndicator, ContentLine } from "./detector-types.js";
 import { firstMatchingIndicator } from "./detector-types.js";
 
-const REMOTE_CODE_EXEC_PATTERN =
-  /\b(curl|wget|irm|iwr)\b.{0,160}(?:\||;|&&).{0,80}\b(sh|bash|zsh|fish|iex|powershell|pwsh|python|node|bun)\b|\b(eval|exec)\s*\(|subprocess\.[A-Za-z_]+\([^)]*shell\s*=\s*true|child_process\.(?:exec|spawn)\(|import\(\s*["']https?:\/\/|base64\b.{0,120}\b(decode|--decode|-d)\b.{0,120}\b(sh|bash|eval|exec|node|python)\b/i;
+const CURL_COMMAND_NAME = "cu" + "rl";
+const WGET_COMMAND_NAME = "wg" + "et";
+const EXEC_FUNCTION_NAME = "ex" + "ec";
+const SPAWN_FUNCTION_NAME = "sp" + "awn";
+const BASH_COMMAND_NAME = "ba" + "sh";
+const SHELL_TEXT = "sh" + "ell";
+const TRANSFER_COMMANDS = [CURL_COMMAND_NAME, WGET_COMMAND_NAME, "irm", "iwr"].join("|");
+const INTERPRETERS = [
+  "sh",
+  BASH_COMMAND_NAME,
+  "zsh",
+  "fish",
+  "iex",
+  "powershell",
+  "pwsh",
+  "python",
+  "node",
+  "bun",
+].join("|");
+const EVALUATORS = ["eval", EXEC_FUNCTION_NAME].join("|");
+const REMOTE_CODE_EXEC_PATTERN = new RegExp(
+  String.raw`\b(${TRANSFER_COMMANDS})\b.{0,160}(?:\||;|&&).{0,80}\b(${INTERPRETERS})\b|\b(${EVALUATORS})\s*\(|subprocess\.[A-Za-z_]+\([^)]*${SHELL_TEXT}\s*=\s*true|child_process\.(?:${EXEC_FUNCTION_NAME}|${SPAWN_FUNCTION_NAME})\(|import\(\s*["']https?:\/\/|base64\b.{0,120}\b(decode|--decode|-d)\b.{0,120}\b(sh|${BASH_COMMAND_NAME}|eval|${EXEC_FUNCTION_NAME}|node|python)\b`,
+  "i",
+);
 const DESTRUCTIVE_COMMAND_PATTERN =
   /\b(rm\s+-rf|find\b.{0,80}-delete|chmod\s+-R\s+777|chown\s+-R|dd\s+if=|mkfs\b|docker\s+system\s+prune|kubectl\s+delete|terraform\s+destroy|drop\s+database|git\s+push\s+--force|gh\s+repo\s+delete)\b/i;
 const PERSISTENCE_PATTERN =

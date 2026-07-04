@@ -116,7 +116,7 @@ const groupFindingsBySkill = (findings: readonly Finding[]): readonly FindingGro
 };
 
 const sortFindings = (findings: readonly Finding[]): readonly Finding[] =>
-  [...findings].sort(
+  findings.toSorted(
     (left, right) =>
       severityScore(right) - severityScore(left) ||
       left.skillPath.localeCompare(right.skillPath) ||
