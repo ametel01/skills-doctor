@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-07-05
+
 ### Added
 
 - Added static eval file validation for malformed or weak `evals/evals.json` files, including invalid JSON, invalid shape, missing prompts, missing expected output, weak assertions, and missing baseline guidance.
