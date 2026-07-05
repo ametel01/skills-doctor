@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added static eval file validation for malformed or weak `evals/evals.json` files, including invalid JSON, invalid shape, missing prompts, missing expected output, weak assertions, and missing baseline guidance.
+- Added local/global same-name skill shadowing warnings so users can see when a project skill likely overrides a user-level skill.
+- Added deeper static script-interface findings for missing implementation help support, undocumented structured output, missing stderr diagnostics guidance, and potentially unbounded script output.
+
+### Fixed
+
+- Aligned the packaged `skills-doctor` Agent Skill wrapper with scanner standards by using installed CLI commands and adding realistic wrapper evals.
+
 ## [0.6.1] - 2026-07-05
 
 ### Changed

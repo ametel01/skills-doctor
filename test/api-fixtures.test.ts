@@ -166,6 +166,24 @@ describe("fixture scanner coverage", () => {
     ).toHaveLength(2);
   });
 
+  it("keeps the packaged Skills Doctor wrapper scanner-clean for known wrapper issues", async () => {
+    const skillsRoot = fileURLToPath(new URL("../skills", import.meta.url));
+    const scan = await scanSkillRoots({
+      roots: [{ ecosystem: "custom", rootPath: skillsRoot, source: "custom" }],
+    });
+    const ruleIds = scan.findings.map((finding) => finding.ruleId);
+
+    expect(ruleIds).not.toEqual(
+      expect.arrayContaining([
+        "weak-description-trigger",
+        "missing-skill-evals",
+        "unpinned-package-runner",
+        "SKILL204_UNPINNED_TOOLS",
+      ]),
+    );
+    expect(scan.findings).toEqual([]);
+  });
+
   it("keeps JSON report shape stable", async () => {
     const report = await scanFixture("weak-descriptions");
     const json = structuredClone(report) as ScanReport;

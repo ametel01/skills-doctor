@@ -1305,8 +1305,7 @@ const writeSkill = async (skillDir: string, name: string): Promise<void> => {
 };
 
 const writeStrongSkill = async (skillDir: string, name: string): Promise<void> => {
-  await mkdir(path.join(skillDir, "evals"), { recursive: true });
-  await writeFile(path.join(skillDir, "evals", "evals.json"), "{}\n");
+  await writeValidEvals(skillDir, name);
   await writeFile(
     path.join(skillDir, "SKILL.md"),
     [
@@ -1325,8 +1324,7 @@ const writeStrongSkill = async (skillDir: string, name: string): Promise<void> =
 };
 
 const writeLongSkill = async (skillDir: string, name: string): Promise<void> => {
-  await mkdir(path.join(skillDir, "evals"), { recursive: true });
-  await writeFile(path.join(skillDir, "evals", "evals.json"), "{}\n");
+  await writeValidEvals(skillDir, name);
   await writeFile(
     path.join(skillDir, "SKILL.md"),
     [
@@ -1341,6 +1339,32 @@ const writeLongSkill = async (skillDir: string, name: string): Promise<void> => 
       "- Compare results with expected output.",
       "",
     ].join("\n"),
+  );
+};
+
+const writeValidEvals = async (skillDir: string, name: string): Promise<void> => {
+  await mkdir(path.join(skillDir, "evals"), { recursive: true });
+  await writeFile(
+    path.join(skillDir, "evals", "evals.json"),
+    `${JSON.stringify(
+      {
+        skill_name: name,
+        baseline_guidance: "Compare the response with and without the skill.",
+        evals: [
+          {
+            id: "usage-aware-cli-scan",
+            prompt: `Use ${name} to inspect fixture inputs and summarize expected output.`,
+            expected_output:
+              "The agent activates the skill, inspects the fixture inputs, and reports the expected output comparison.",
+            assertions: [
+              "Response follows the documented workflow and names the expected output comparison.",
+            ],
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
   );
 };
 

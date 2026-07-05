@@ -1,6 +1,15 @@
-[
-  {
-    "prompt": "Review this pull request diff for correctness risks.",
-    "expected": "Findings are grouped by severity and cite exact files."
-  }
-]
+{
+  "skill_name": "review-pr",
+  "baseline_guidance": "Compare findings against a review without the skill and the previous skill version.",
+  "evals": [
+    {
+      "id": "review-correctness-risk",
+      "prompt": "Review this pull request diff for correctness risks and missing tests before merge.",
+      "expected_output": "Findings are grouped by severity, cite exact files, and separate correctness risks from style-only notes.",
+      "assertions": [
+        "Response lists bug-risk findings before summary context.",
+        "Response cites exact file paths for each reported issue."
+      ]
+    }
+  ]
+}

@@ -24,6 +24,17 @@ const RESOURCE_REFERENCE_PATTERN = /\b(scripts|references|assets)\/[A-Za-z0-9._/
 const SCRIPT_RISKY_OPERATION_PATTERN =
   /\b(rm\s+-rf|find\b.{0,80}-delete|drop\s+database|terraform\s+(?:apply|destroy)|kubectl\s+(?:apply|delete)|gh\s+(?:repo\s+delete|issue|pr)|git\s+push\s+--force|deploy|publish|send\s+email|payments?)\b/i;
 const SCRIPT_SAFETY_FLAG_PATTERN = /--dry-run|--confirm|--force|--yes|--preview/i;
+const SCRIPT_HELP_IMPLEMENTATION_PATTERN =
+  /--help|\busage:|\bshow_help\b|\bprint_help\b|argparse|commander|yargs|click\.command|if\s*\(?\s*\$1\s*(?:=|==)\s*["']--help["']|process\.argv\.includes\(["']--help["']\)/i;
+const SCRIPT_OUTPUT_CONTRACT_PATTERN =
+  /\b(json|jsonl|csv|tsv|yaml|xml|markdown|human-readable|summary|stdout|output file|--output|writes? to|saves? to)\b/i;
+const SCRIPT_STRUCTURED_OUTPUT_PATTERN =
+  /\b(json|jsonl|csv|tsv|yaml|xml)\b|JSON\.stringify|json\.dump|csv\.writer|console\.log\(\s*JSON|stringify/i;
+const SCRIPT_STDERR_PATTERN = /\bstderr\b|console\.error|process\.stderr|sys\.stderr|>&2|1>&2/i;
+const SCRIPT_UNBOUNDED_OUTPUT_PATTERN =
+  /\b(print|dump|emit|list|cat|write|output)\b.{0,80}\b(all|every|entire|full|recursive|unbounded)\b|\b(find|ls|grep|rg)\b.{0,80}\b(-R|--recursive|\.)\b/i;
+const SCRIPT_OUTPUT_BOUND_PATTERN =
+  /\b(--output|--limit|--max|--page|--offset|pagination|summary|sample|head|tail)\b/i;
 
 export type ResourceStatus = "inside" | "missing" | "escapes";
 
@@ -35,7 +46,14 @@ export type QualityRuleOptions = {
     | ((skill: SkillRecord, referencePath: string) => Promise<ResourceStatus>)
     | undefined;
   readonly evalsExist?: ((skill: SkillRecord) => Promise<boolean>) | undefined;
+  readonly inspectEvals?: ((skill: SkillRecord) => Promise<EvalInspection>) | undefined;
 };
+
+export type EvalInspection =
+  | { readonly status: "missing" }
+  | { readonly status: "unreadable"; readonly message: string }
+  | { readonly status: "invalid-json"; readonly message: string }
+  | { readonly status: "valid"; readonly value: unknown };
 
 export const validateQualityRules = async (
   skills: readonly SkillRecord[],
@@ -44,7 +62,11 @@ export const validateQualityRules = async (
   const perSkillFindings = await Promise.all(
     skills.map((skill) => validateSkillQuality(skill, options)),
   );
-  return [...perSkillFindings.flat(), ...validateCrossEcosystem(skills)];
+  return [
+    ...perSkillFindings.flat(),
+    ...validateCrossEcosystem(skills),
+    ...validateLocalGlobalShadowing(skills),
+  ];
 };
 
 const validateSkillQuality = async (
@@ -431,6 +453,83 @@ const validateScriptInterface = async (
     );
   }
 
+  if (body.includes("--help") && !SCRIPT_HELP_IMPLEMENTATION_PATTERN.test(content)) {
+    findings.push(
+      createFinding(skill, {
+        ruleId: "script-implementation-without-help",
+        severity: "advice",
+        category: "scripts",
+        title: "Script guidance mentions --help but implementation does not",
+        message:
+          "The skill tells agents to inspect --help, but the referenced script has no apparent help handler or usage text.",
+        suggestion:
+          "Add a --help branch, usage text, or a standard argument parser to the script implementation.",
+        line: findReferenceLine(skill.content, referencePath),
+      }),
+    );
+  }
+
+  const guidance = scriptGuidanceForReference(skill.content, referencePath);
+  const structuredOutput =
+    SCRIPT_STRUCTURED_OUTPUT_PATTERN.test(guidance) ||
+    SCRIPT_STRUCTURED_OUTPUT_PATTERN.test(content);
+  if (structuredOutput && !SCRIPT_OUTPUT_CONTRACT_PATTERN.test(guidance)) {
+    findings.push(
+      createFinding(skill, {
+        ruleId: "script-output-contract-missing",
+        severity: "advice",
+        category: "scripts",
+        title: "Script output contract is underspecified",
+        message:
+          "The referenced script appears to produce structured output, but the skill guidance does not document the output format or destination.",
+        suggestion:
+          "State whether the script emits JSON, JSONL, CSV, TSV, a human-readable summary, or writes to a named output file.",
+        line: findReferenceLine(skill.content, referencePath),
+      }),
+    );
+  }
+
+  if (
+    structuredOutput &&
+    !SCRIPT_STDERR_PATTERN.test(guidance) &&
+    !SCRIPT_STDERR_PATTERN.test(content)
+  ) {
+    findings.push(
+      createFinding(skill, {
+        ruleId: "script-diagnostics-channel-missing",
+        severity: "advice",
+        category: "scripts",
+        title: "Structured script diagnostics channel is undocumented",
+        message:
+          "Structured-output scripts should keep progress and diagnostics separate from stdout data.",
+        suggestion:
+          "Document that diagnostics and progress go to stderr while structured data stays on stdout or in the output file.",
+        line: findReferenceLine(skill.content, referencePath),
+      }),
+    );
+  }
+
+  if (
+    (SCRIPT_UNBOUNDED_OUTPUT_PATTERN.test(guidance) ||
+      SCRIPT_UNBOUNDED_OUTPUT_PATTERN.test(content)) &&
+    !SCRIPT_OUTPUT_BOUND_PATTERN.test(guidance) &&
+    !SCRIPT_OUTPUT_BOUND_PATTERN.test(content)
+  ) {
+    findings.push(
+      createFinding(skill, {
+        ruleId: "script-output-unbounded",
+        severity: "advice",
+        category: "scripts",
+        title: "Script output may be unbounded",
+        message:
+          "The referenced script appears able to emit large output without documented bounds.",
+        suggestion:
+          "Add --output, --limit, pagination, offset, sample, or summary controls and document the default.",
+        line: findReferenceLine(skill.content, referencePath),
+      }),
+    );
+  }
+
   return findings;
 };
 
@@ -441,19 +540,206 @@ const validateEvals = async (
 ): Promise<Finding[]> => {
   if (!isNonTrivialSkill(body)) return [];
 
-  if (await evalsExist(skill, options)) return [];
+  const inspection = await inspectEvals(skill, options);
+  if (inspection.status === "missing") {
+    return [
+      createFinding(skill, {
+        ruleId: "missing-skill-evals",
+        severity: "advice",
+        category: "evals",
+        title: "Non-trivial skill has no evals",
+        message:
+          "Non-trivial skills should include evals/evals.json or an explicit evaluation plan.",
+        suggestion:
+          "Add evals/evals.json with realistic prompts, expected outputs, and assertions for important behavior.",
+      }),
+    ];
+  }
 
-  return [
-    createFinding(skill, {
-      ruleId: "missing-skill-evals",
-      severity: "advice",
-      category: "evals",
-      title: "Non-trivial skill has no evals",
-      message: "Non-trivial skills should include evals/evals.json or an explicit evaluation plan.",
-      suggestion:
-        "Add evals/evals.json with realistic prompts, expected outputs, and assertions for important behavior.",
-    }),
-  ];
+  if (inspection.status === "unreadable" || inspection.status === "invalid-json") {
+    return [
+      createFinding(skill, {
+        ruleId: "invalid-evals-json",
+        severity: "warning",
+        category: "evals",
+        title: "Eval file cannot be read as JSON",
+        message: `evals/evals.json is ${inspection.status === "unreadable" ? "unreadable" : "not valid JSON"}: ${inspection.message}`,
+        suggestion:
+          "Store valid JSON with skill_name, evals[], realistic prompts, expected outputs, and assertions.",
+      }),
+    ];
+  }
+
+  return validateEvalFileValue(skill, inspection.value);
+};
+
+const validateEvalFileValue = (skill: SkillRecord, value: unknown): Finding[] => {
+  const findings: Finding[] = [];
+
+  if (!isObjectRecord(value)) {
+    return [
+      invalidEvalsShapeFinding(
+        skill,
+        "evals/evals.json should be a JSON object with skill_name and evals[].",
+      ),
+    ];
+  }
+
+  const skillName = value.skill_name;
+  const evalCases = value.evals;
+  if (typeof skillName !== "string" || skillName.trim().length === 0) {
+    findings.push(
+      invalidEvalsShapeFinding(skill, "evals/evals.json is missing a non-empty skill_name."),
+    );
+  }
+  if (!Array.isArray(evalCases) || evalCases.length === 0) {
+    findings.push(
+      invalidEvalsShapeFinding(skill, "evals/evals.json is missing a non-empty evals[] array."),
+    );
+    return findings;
+  }
+
+  let hasMatureEvalMaterial = false;
+  let hasBaselineGuidance = hasBaselineGuidanceText(value);
+
+  for (const [index, evalCase] of evalCases.entries()) {
+    if (!isObjectRecord(evalCase)) {
+      findings.push(invalidEvalsShapeFinding(skill, `Eval case ${index + 1} should be an object.`));
+      continue;
+    }
+
+    const prompt = readString(evalCase.prompt);
+    if (prompt === undefined || prompt.trim().length === 0 || isWeakEvalText(prompt)) {
+      findings.push(
+        createFinding(skill, {
+          ruleId: "eval-missing-prompt",
+          severity: "warning",
+          category: "evals",
+          title: "Eval case lacks a realistic prompt",
+          message: `Eval case ${index + 1} should include a non-empty user-style prompt.`,
+          suggestion: "Write the prompt as an actual user request that should activate the skill.",
+        }),
+      );
+    }
+
+    const expectedOutput = readString(evalCase.expected_output);
+    if (
+      expectedOutput === undefined ||
+      expectedOutput.trim().length === 0 ||
+      isWeakEvalText(expectedOutput)
+    ) {
+      findings.push(
+        createFinding(skill, {
+          ruleId: "eval-missing-expected-output",
+          severity: "warning",
+          category: "evals",
+          title: "Eval case lacks expected output",
+          message: `Eval case ${index + 1} should describe the expected successful output.`,
+          suggestion:
+            "Add a concrete expected_output that names the behavior, artifact, or decision to verify.",
+        }),
+      );
+    }
+
+    if ("files" in evalCase && !validEvalFiles(evalCase.files)) {
+      findings.push(
+        invalidEvalsShapeFinding(
+          skill,
+          `Eval case ${index + 1} has malformed files; use non-empty relative paths.`,
+        ),
+      );
+    }
+
+    if ("assertions" in evalCase) {
+      if (!validAssertions(evalCase.assertions)) {
+        findings.push(
+          createFinding(skill, {
+            ruleId: "eval-weak-assertions",
+            severity: "warning",
+            category: "evals",
+            title: "Eval assertions are empty or vague",
+            message: `Eval case ${index + 1} has assertions that are empty, malformed, or too vague.`,
+            suggestion:
+              "Use concrete string assertions such as required sections, output fields, decisions, or safety checks.",
+          }),
+        );
+      } else {
+        hasMatureEvalMaterial = true;
+      }
+    }
+
+    if (
+      prompt !== undefined &&
+      prompt.trim().length > 20 &&
+      expectedOutput !== undefined &&
+      expectedOutput.trim().length > 20
+    ) {
+      hasMatureEvalMaterial = true;
+    }
+    hasBaselineGuidance = hasBaselineGuidance || hasBaselineGuidanceText(evalCase);
+  }
+
+  if (hasMatureEvalMaterial && !hasBaselineGuidance) {
+    findings.push(
+      createFinding(skill, {
+        ruleId: "eval-missing-baseline-guidance",
+        severity: "advice",
+        category: "evals",
+        title: "Eval file lacks baseline comparison guidance",
+        message:
+          "The eval file includes mature eval material but does not describe baseline or previous-version comparison.",
+        suggestion:
+          "Add baseline, previous_version, or comparison guidance so eval runs can show whether the skill improved output.",
+      }),
+    );
+  }
+
+  return findings;
+};
+
+const invalidEvalsShapeFinding = (skill: SkillRecord, message: string): Finding =>
+  createFinding(skill, {
+    ruleId: "invalid-evals-shape",
+    severity: "warning",
+    category: "evals",
+    title: "Eval file has invalid shape",
+    message,
+    suggestion:
+      "Use an object with skill_name and a non-empty evals[] array of cases containing prompt and expected_output.",
+  });
+
+const isObjectRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isWeakEvalText = (value: string): boolean =>
+  /^(ok|good|works?|fine|success|successful|pass|passes|n\/a|todo|tbd)$/i.test(value.trim());
+
+const validEvalFiles = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every(
+    (entry) =>
+      typeof entry === "string" &&
+      entry.trim().length > 0 &&
+      !path.isAbsolute(entry) &&
+      !hasParentTraversal(entry),
+  );
+
+const validAssertions = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every(
+    (entry) => typeof entry === "string" && entry.trim().length > 8 && !isWeakEvalText(entry),
+  );
+
+const hasBaselineGuidanceText = (value: unknown): boolean => {
+  if (typeof value === "string") {
+    return /\b(baseline|previous[-\s]?version|before\/after|compare|comparison|without the skill)\b/i.test(
+      value,
+    );
+  }
+  if (Array.isArray(value)) return value.some(hasBaselineGuidanceText);
+  if (!isObjectRecord(value)) return false;
+  return Object.values(value).some(hasBaselineGuidanceText);
 };
 
 const validateCrossEcosystem = (skills: readonly SkillRecord[]): Finding[] => {
@@ -488,6 +774,43 @@ const validateCrossEcosystem = (skills: readonly SkillRecord[]): Finding[] => {
           message: `The skill "${name}" exists in both Claude and Codex/agents roots but has different SKILL.md content.`,
           suggestion:
             "Review whether the divergence is intentional. If the skill is shared, align the contents across ecosystems.",
+        }),
+      );
+    }
+  }
+
+  return findings;
+};
+
+const validateLocalGlobalShadowing = (skills: readonly SkillRecord[]): Finding[] => {
+  const findings: Finding[] = [];
+  const byEcosystemAndName = new Map<string, SkillRecord[]>();
+
+  for (const skill of skills) {
+    if (!skill.parseResult.ok) continue;
+    if (skill.source !== "local" && skill.source !== "global") continue;
+    const name = readString(skill.parseResult.frontmatter.data.name);
+    if (name === undefined) continue;
+    const key = `${skill.ecosystem}\u0000${name}`;
+    byEcosystemAndName.set(key, [...(byEcosystemAndName.get(key) ?? []), skill]);
+  }
+
+  for (const [key, namedSkills] of byEcosystemAndName) {
+    const [ecosystem, name] = key.split("\u0000");
+    const localSkills = namedSkills.filter((skill) => skill.source === "local");
+    const globalSkills = namedSkills.filter((skill) => skill.source === "global");
+    if (localSkills.length === 0 || globalSkills.length === 0) continue;
+
+    const localPaths = localSkills.map((skill) => skill.skillPath).sort();
+    for (const globalSkill of globalSkills) {
+      findings.push(
+        createFinding(globalSkill, {
+          ruleId: "local-global-skill-shadowing",
+          severity: "warning",
+          category: "portability",
+          title: "Global skill is shadowed by a project skill",
+          message: `The ${ecosystem ?? "selected"} skill "${name ?? globalSkill.directoryName}" exists in both local and global roots. Project-level skills conventionally override user-level skills.`,
+          suggestion: `Review the global skill at ${globalSkill.skillPath}; it is likely shadowed by local skill path(s): ${localPaths.join(", ")}.`,
         }),
       );
     }
@@ -553,6 +876,13 @@ const findBodyLine = (
 const findReferenceLine = (content: string, referencePath: string): number | undefined =>
   findContentLine(content, referencePath);
 
+const scriptGuidanceForReference = (content: string, referencePath: string): string => {
+  const lines = content.split(/\r?\n/);
+  const index = lines.findIndex((line) => line.includes(referencePath));
+  if (index < 0) return content;
+  return lines.slice(Math.max(0, index - 2), Math.min(lines.length, index + 4)).join("\n");
+};
+
 const findFirstBodyLine = (body: string, frontMatterLineCount: number): number | undefined => {
   const lines = body.split(/\r?\n/);
   if (lines.length === 0) return undefined;
@@ -617,9 +947,54 @@ const resolveResourceStatus = async (
   return isPathInside(resolvedSkillDir, resolvedTarget) ? "inside" : "escapes";
 };
 
-const evalsExist = async (skill: SkillRecord, options: QualityRuleOptions): Promise<boolean> => {
-  if (options.evalsExist !== undefined) return options.evalsExist(skill);
-  return exists(path.join(skill.skillDir, "evals", "evals.json"));
+const inspectEvals = async (
+  skill: SkillRecord,
+  options: QualityRuleOptions,
+): Promise<EvalInspection> => {
+  if (options.inspectEvals !== undefined) return options.inspectEvals(skill);
+  if (options.evalsExist !== undefined) {
+    return (await options.evalsExist(skill))
+      ? { status: "valid", value: buildLegacyValidEvalValue(skill) }
+      : { status: "missing" };
+  }
+
+  const evalsPath = path.join(skill.skillDir, "evals", "evals.json");
+  if (!(await exists(evalsPath))) return { status: "missing" };
+  let content: string;
+  try {
+    content = await readFile(evalsPath, "utf8");
+  } catch (error) {
+    return {
+      status: "unreadable",
+      message: error instanceof Error ? error.message : "Unable to read file.",
+    };
+  }
+  try {
+    return { status: "valid", value: JSON.parse(content) as unknown };
+  } catch (error) {
+    return {
+      status: "invalid-json",
+      message: error instanceof Error ? error.message : "Unable to parse JSON.",
+    };
+  }
+};
+
+const buildLegacyValidEvalValue = (skill: SkillRecord): unknown => {
+  const skillName = skill.parseResult.ok
+    ? readString(skill.parseResult.frontmatter.data.name)
+    : undefined;
+  return {
+    skill_name: skillName ?? skill.directoryName,
+    evals: [
+      {
+        prompt: `Use ${skillName ?? skill.directoryName} to complete a realistic user task.`,
+        expected_output:
+          "The agent activates the skill, follows its workflow, and produces the requested artifact or decision.",
+        assertions: ["Agent chooses the skill for the task and follows the documented workflow."],
+        baseline_guidance: "Compare the response with and without the skill.",
+      },
+    ],
+  };
 };
 
 const isPathInside = (parentPath: string, targetPath: string): boolean => {

@@ -54,6 +54,7 @@ export {
 } from "./domain/read-codex-disabled-skill-config.js";
 export { type RuleCatalogEntry, ruleCatalog } from "./domain/rule-catalog.js";
 export {
+  type EvalInspection,
   type QualityRuleOptions,
   type ResourceStatus,
   validateQualityRules,

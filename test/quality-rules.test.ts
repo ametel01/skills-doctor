@@ -243,6 +243,90 @@ describe("quality rules", () => {
     expect(ruleIds).not.toContain("missing-referenced-resource");
   });
 
+  it("reports scripts whose implementation lacks documented --help support", async () => {
+    const skillDir = path.join(directory, "missing-help-implementation-skill");
+    await mkdir(path.join(skillDir, "scripts"), { recursive: true });
+    await writeFile(path.join(skillDir, "scripts", "tool.py"), "print('ok')\n");
+    const skill = buildRecordAt(skillDir, "missing-help-implementation-skill", [
+      "---",
+      "name: missing-help-implementation-skill",
+      "description: Use this skill when checking script help implementations.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Run scripts/tool.py --help before using it.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).toContain("script-implementation-without-help");
+  });
+
+  it("accepts structured-output scripts with output and diagnostics guidance", async () => {
+    const skillDir = path.join(directory, "structured-script-skill");
+    await mkdir(path.join(skillDir, "scripts"), { recursive: true });
+    await writeFile(
+      path.join(skillDir, "scripts", "report.mjs"),
+      [
+        "if (process.argv.includes('--help')) console.log('Usage: report --input file');",
+        "console.error('reading input');",
+        "console.log(JSON.stringify({ ok: true }));",
+      ].join("\n"),
+    );
+    const skill = buildRecordAt(skillDir, "structured-script-skill", [
+      "---",
+      "name: structured-script-skill",
+      "description: Use this skill when checking structured script guidance.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Run scripts/report.mjs --help first.",
+      "- It emits JSON to stdout and sends diagnostics or progress to stderr.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).not.toContain("script-implementation-without-help");
+    expect(ruleIds).not.toContain("script-output-contract-missing");
+    expect(ruleIds).not.toContain("script-diagnostics-channel-missing");
+    expect(ruleIds).not.toContain("script-output-unbounded");
+  });
+
+  it("reports structured script output without guidance and unbounded output", async () => {
+    const skillDir = path.join(directory, "unbounded-script-skill");
+    await mkdir(path.join(skillDir, "scripts"), { recursive: true });
+    await writeFile(
+      path.join(skillDir, "scripts", "dump.mjs"),
+      [
+        "if (process.argv.includes('--help')) console.log('Usage: dump');",
+        "const allRecords = [{ id: 1 }];",
+        "for (const record of allRecords) console.log(JSON.stringify(record));",
+      ].join("\n"),
+    );
+    const skill = buildRecordAt(skillDir, "unbounded-script-skill", [
+      "---",
+      "name: unbounded-script-skill",
+      "description: Use this skill when checking unbounded script output.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Run scripts/dump.mjs --help and then dump all records.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).toEqual(
+      expect.arrayContaining([
+        "script-output-contract-missing",
+        "script-diagnostics-channel-missing",
+        "script-output-unbounded",
+      ]),
+    );
+  });
+
   it("uses injected resource checks without reading the filesystem", async () => {
     const skill = buildRecord("memory-resource-skill", [
       "---",
@@ -296,6 +380,112 @@ describe("quality rules", () => {
     expect(existingRuleIds).not.toContain("missing-skill-evals");
   });
 
+  it("reports invalid eval JSON for non-trivial skills", async () => {
+    const skillDir = path.join(directory, "invalid-json-evals-skill");
+    await mkdir(path.join(skillDir, "evals"), { recursive: true });
+    await writeFile(path.join(skillDir, "evals", "evals.json"), "{not json\n");
+    const skill = buildRecordAt(skillDir, "invalid-json-evals-skill", [
+      "---",
+      "name: invalid-json-evals-skill",
+      "description: Use this skill when checking invalid eval JSON.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Follow a concrete workflow step.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).toContain("invalid-evals-json");
+    expect(ruleIds).not.toContain("missing-skill-evals");
+  });
+
+  it("reports invalid eval shape when the file is an empty object", async () => {
+    const skillDir = path.join(directory, "empty-evals-skill");
+    await writeEvals(skillDir, {});
+    const skill = buildRecordAt(skillDir, "empty-evals-skill", [
+      "---",
+      "name: empty-evals-skill",
+      "description: Use this skill when checking empty eval files.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Follow a concrete workflow step.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).toContain("invalid-evals-shape");
+    expect(ruleIds).not.toContain("missing-skill-evals");
+  });
+
+  it("reports missing eval prompts and expected outputs", async () => {
+    const skillDir = path.join(directory, "weak-evals-skill");
+    await writeEvals(skillDir, {
+      skill_name: "weak-evals-skill",
+      evals: [{ prompt: "", expected_output: "works", assertions: ["good"] }],
+    });
+    const skill = buildRecordAt(skillDir, "weak-evals-skill", [
+      "---",
+      "name: weak-evals-skill",
+      "description: Use this skill when checking weak eval cases.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Follow a concrete workflow step.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).toEqual(
+      expect.arrayContaining([
+        "eval-missing-prompt",
+        "eval-missing-expected-output",
+        "eval-weak-assertions",
+      ]),
+    );
+  });
+
+  it("accepts valid eval files with expected outputs, files, assertions, and baselines", async () => {
+    const skillDir = path.join(directory, "valid-evals-skill");
+    await writeEvals(skillDir, {
+      skill_name: "valid-evals-skill",
+      baseline_guidance:
+        "Compare the result with the previous-version output and a no-skill baseline.",
+      evals: [
+        {
+          id: "audit-local-skills",
+          prompt:
+            "Audit my local Agent Skills for quality findings and summarize repair priorities.",
+          expected_output:
+            "The response reports scanner findings, groups repairs by severity, and names the skill paths that need work.",
+          files: ["evals/files/local-scan.json"],
+          assertions: [
+            "Response uses scanner findings as the source of truth.",
+            "Response names at least one concrete repair priority from the report.",
+          ],
+        },
+      ],
+    });
+    const skill = buildRecordAt(skillDir, "valid-evals-skill", [
+      "---",
+      "name: valid-evals-skill",
+      "description: Use this skill when checking valid eval cases.",
+      "---",
+      "",
+      "## Workflow",
+      "",
+      "- Follow a concrete workflow step.",
+    ]);
+
+    const ruleIds = (await validateQualityRules([skill])).map((finding) => finding.ruleId);
+
+    expect(ruleIds.filter((ruleId) => ruleId.includes("eval"))).toEqual([]);
+  });
+
   it("reports divergent same-name skills across Claude and Codex roots", async () => {
     await writeSkill({
       root: path.join(directory, ".claude", "skills", "shared-skill"),
@@ -317,7 +507,7 @@ describe("quality rules", () => {
     );
   });
 
-  it("does not report divergence across local and global same-name skills", async () => {
+  it("reports local/global shadowing without cross-ecosystem divergence", async () => {
     const homeDir = path.join(directory, "home");
     await mkdir(path.join(homeDir, ".agents", "skills", "global-shared"), { recursive: true });
     await mkdir(path.join(directory, ".agents", "skills", "global-shared"), { recursive: true });
@@ -348,10 +538,56 @@ describe("quality rules", () => {
 
     const discovered = await discoverSkillRoots({ cwd: directory, homeDir });
     const scan = await scanSkillRoots({ roots: discovered.roots });
+    const shadowing = scan.findings.find(
+      (finding) => finding.ruleId === "local-global-skill-shadowing",
+    );
 
     expect(scan.findings.map((finding) => finding.ruleId)).not.toContain(
       "cross-ecosystem-skill-divergence",
     );
+    expect(shadowing).toMatchObject({
+      ruleId: "local-global-skill-shadowing",
+      category: "portability",
+      severity: "warning",
+      skillPath: path.join(homeDir, ".agents", "skills", "global-shared", "SKILL.md"),
+    });
+    expect(shadowing?.message).toContain("Project-level skills conventionally override");
+    expect(shadowing?.suggestion).toContain(
+      path.join(directory, ".agents", "skills", "global-shared", "SKILL.md"),
+    );
+  });
+
+  it("does not report shadowing across same-name custom roots", async () => {
+    const first = {
+      ...buildRecordAt(path.join(directory, "custom-a", "same-name"), "same-name", [
+        "---",
+        "name: same-name",
+        "description: Use this skill when checking custom root behavior.",
+        "---",
+        "",
+        "## Workflow",
+        "- Use the first custom version.",
+      ]),
+      rootPath: path.join(directory, "custom-a"),
+      source: "custom" as const,
+    };
+    const second = {
+      ...buildRecordAt(path.join(directory, "custom-b", "same-name"), "same-name", [
+        "---",
+        "name: same-name",
+        "description: Use this skill when checking custom root behavior.",
+        "---",
+        "",
+        "## Workflow",
+        "- Use the second custom version.",
+      ]),
+      rootPath: path.join(directory, "custom-b"),
+      source: "custom" as const,
+    };
+
+    const ruleIds = (await validateQualityRules([first, second])).map((finding) => finding.ruleId);
+
+    expect(ruleIds).not.toContain("local-global-skill-shadowing");
   });
 
   it("flags resource references that escape the skill directory", async () => {
@@ -589,5 +825,13 @@ const writeSkill = async (input: {
       "",
       input.body,
     ].join("\n"),
+  );
+};
+
+const writeEvals = async (skillDir: string, value: unknown): Promise<void> => {
+  await mkdir(path.join(skillDir, "evals"), { recursive: true });
+  await writeFile(
+    path.join(skillDir, "evals", "evals.json"),
+    `${JSON.stringify(value, null, 2)}\n`,
   );
 };

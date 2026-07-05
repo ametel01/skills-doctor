@@ -1,0 +1,33 @@
+{
+  "skill_name": "skills-doctor",
+  "baseline_guidance": "Compare responses with and without this wrapper to confirm the agent chooses the CLI, starts read-only, and preserves repair consent.",
+  "evals": [
+    {
+      "id": "audit-local-skills",
+      "prompt": "Audit my local Agent Skills for quality and security issues and summarize what needs repair.",
+      "expected_output": "The agent runs or recommends a read-only skills-doctor JSON scan first, treats scanner findings as canonical, and summarizes repair priorities from the report.",
+      "assertions": [
+        "Response starts with a read-only scan using skills-doctor --json.",
+        "Response treats scan findings as the source of truth for repair scope."
+      ]
+    },
+    {
+      "id": "machine-readable-findings",
+      "prompt": "Give me machine-readable Skills Doctor findings that another tool can consume.",
+      "expected_output": "The agent uses skills-doctor --json --json-compact or an equivalent JSON mode and keeps human logs out of the machine-readable output.",
+      "assertions": [
+        "Response chooses skills-doctor --json --json-compact for embedded automation.",
+        "Response preserves JSON output for downstream tooling."
+      ]
+    },
+    {
+      "id": "repair-handoff-consent",
+      "prompt": "Launch the Skills Doctor repair handoff for these skill findings.",
+      "expected_output": "The agent confirms explicit user consent before launching the interactive skills-doctor repair flow and prefers a read-only audit first if one has not run.",
+      "assertions": [
+        "Response asks for explicit consent before interactive repair handoff.",
+        "Response does not launch repair before a read-only scan or approval."
+      ]
+    }
+  ]
+}

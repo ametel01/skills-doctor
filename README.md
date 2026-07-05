@@ -40,13 +40,13 @@ Skills Doctor is also available as an agent-facing skill wrapper at `skills/skil
 
 Use the `skills-doctor` skill when people ask for an agent workflow to:
 
-- audit skills with `npx skills-doctor@latest --json` for deterministic, machine-readable output.
-- launch interactive repair handoff through `npx skills-doctor@latest` after explicit consent.
+- audit skills with `skills-doctor --json` for deterministic, machine-readable output.
+- launch interactive repair handoff through `skills-doctor` after explicit consent.
 
 The CLI is the primary source of rule logic and output shape.
 The skill wrapper is a convenience entrypoint so agents can discover and invoke the same scanner from within skill workflows.
 When installed from npm, the wrapper is shipped at `node_modules/skills-doctor/skills/skills-doctor/SKILL.md`.
-Copy or reference that file from an agent skill directory when you want an agent to discover the workflow, but keep scans delegated to `npx skills-doctor@latest` or the installed `skills-doctor` binary.
+Copy or reference that file from an agent skill directory when you want an agent to discover the workflow, but keep scans delegated to the installed `skills-doctor` binary.
 
 ## What It Scans
 
@@ -85,8 +85,9 @@ the Agent Skills standards from <https://agentskills.io/home>, including:
 - non-generic skill bodies with concrete workflow structure
 - progressive disclosure for large or referenced material
 - referenced `references/`, `scripts/`, and `assets/` files
-- script guidance that is non-interactive and reproducible
-- eval guidance for non-trivial skills
+- script guidance that is non-interactive, reproducible, documented, and bounded
+- eval file quality for non-trivial skills, including JSON shape, realistic prompts, expected outputs, assertions, and baseline guidance
+- local/global same-name skills where project-level skills likely shadow user-level skills
 - divergent same-name skills across Claude and Codex/agents roots
 - suspicious security patterns across the skill package, including prompt
   override, permission bypass, secret access, exfiltration chains, destructive
@@ -229,6 +230,12 @@ counts, timestamps, confidence, diagnostics, and recommendations, but not raw
 Codex prompts or assistant transcript text.
 
 ## Release Checklist
+
+Refresh the consolidated upstream Agent Skills reference when source docs change:
+
+```bash
+node scripts/build-agentskills-unified-doc.mjs
+```
 
 Before tagging a release:
 

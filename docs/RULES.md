@@ -51,6 +51,10 @@ Rules are grouped by the scanner category. Severity and intent can be refined he
 | `interactive-script-guidance` | warning | scripts | Script guidance appears interactive. |
 | `interactive-script-implementation` | warning | scripts | Referenced script implementation appears interactive. |
 | `risky-script-without-safety-flag` | warning | scripts | Referenced script has risky operations without safety flags. |
+| `script-implementation-without-help` | advice | scripts | Skill guidance mentions `--help` but the referenced script lacks apparent help support. |
+| `script-output-contract-missing` | advice | scripts | Structured script output is not documented in nearby skill guidance. |
+| `script-diagnostics-channel-missing` | advice | scripts | Structured-output script guidance does not separate diagnostics from data. |
+| `script-output-unbounded` | advice | scripts | Script guidance or implementation suggests large output without bounds. |
 | `unpinned-package-runner` | advice | scripts | Unpinned package-runner command is used. |
 
 ## Resources and portability
@@ -60,6 +64,13 @@ Rules are grouped by the scanner category. Severity and intent can be refined he
 | `missing-referenced-resource` | warning | references/scripts/assets | Referenced `scripts/`, `references/`, or `assets/` file does not exist in-skill. |
 | `resource-reference-escapes-skill` | warning | references/scripts/assets | Resource references attempt directory traversal outside the skill directory. |
 | `missing-skill-evals` | advice | evals | Non-trivial skill lacks `evals/evals.json`. |
+| `invalid-evals-json` | warning | evals | `evals/evals.json` is unreadable or not valid JSON. |
+| `invalid-evals-shape` | warning | evals | `evals/evals.json` lacks required root fields or valid eval case shape. |
+| `eval-missing-prompt` | warning | evals | An eval case lacks a non-empty realistic prompt. |
+| `eval-missing-expected-output` | warning | evals | An eval case lacks a concrete `expected_output`. |
+| `eval-weak-assertions` | warning | evals | Eval assertions are empty, malformed, or too vague. |
+| `eval-missing-baseline-guidance` | advice | evals | Mature eval material lacks baseline or previous-version comparison guidance. |
+| `local-global-skill-shadowing` | warning | portability | A global skill is likely shadowed by a same-name project-local skill. |
 | `cross-ecosystem-skill-divergence` | warning | cross-ecosystem | Same-name skills diverge across Claude/Codex within the same scope. |
 
 ## Security

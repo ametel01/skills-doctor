@@ -72,9 +72,10 @@ Rules and scoring:
 - `buildMissingSkillFinding(input)`: builds the structural missing-skill
   finding used for unreadable or missing skill files.
 - `validateQualityRules(skills, options?)`: validates descriptions, body quality,
-  progressive disclosure, resources, scripts, eval guidance, and
-  cross-ecosystem divergence. `options` can inject resource and eval existence
-  checks for in-memory or alternate filesystem integrations.
+  progressive disclosure, resources, script interfaces, eval file quality,
+  local/global shadowing, and cross-ecosystem divergence. `options` can inject
+  resource status and eval inspection checks for in-memory or alternate
+  filesystem integrations.
 - `validateSecurityRules(skills, options?)`: validates deterministic security
   heuristics for suspicious `SKILL.md` instructions such as instruction
   subversion, secret exfiltration, network exfiltration, remote execution,
@@ -125,6 +126,7 @@ Exported types include:
 - `ContextBudgetPressure`
 - `ContextPressureLevel`
 - `Diagnostic`
+- `EvalInspection`
 - `Finding`
 - `FindingCategory`
 - `FindingConfidence`
@@ -171,16 +173,29 @@ The scanner reads local skill files. It does not upload file contents or call a
 hosted model.
 
 By default, `validateQualityRules()` performs filesystem checks for referenced
-resources and eval files. A `SkillRecord` passed to this function should have a
-real `skillDir` when you expect resource, script, asset, or eval checks to be
-accurate.
+resources, readable scripts, and eval files. A `SkillRecord` passed to this
+function should have a real `skillDir` when you expect resource, script, asset,
+or eval checks to be accurate.
 
 For in-memory or alternate filesystem integrations, pass `QualityRuleOptions`:
 
 ```ts
 const findings = await validateQualityRules(skills, {
   resourceExists: async (_skill, referencePath) => referencePath === "references/spec.md",
-  evalsExist: async () => true,
+  inspectEvals: async () => ({
+    status: "valid",
+    value: {
+      skill_name: "example",
+      baseline_guidance: "Compare the result with and without the skill.",
+      evals: [
+        {
+          prompt: "Use this skill for a realistic user task.",
+          expected_output: "The agent follows the skill workflow and returns the requested result.",
+          assertions: ["Response follows the documented workflow for the task."],
+        },
+      ],
+    },
+  }),
 });
 ```
 
@@ -191,6 +206,10 @@ skill directory:
 ```ts
 type ResourceStatus = "inside" | "missing" | "escapes";
 ```
+
+`evalsExist` remains available for lightweight compatibility; `inspectEvals`
+lets integrations supply parsed eval content or explicit missing, unreadable,
+or invalid-JSON states without reading from disk.
 
 ## Package Security Model
 

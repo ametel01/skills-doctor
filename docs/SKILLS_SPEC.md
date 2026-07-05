@@ -606,6 +606,18 @@ Example:
 }
 ```
 
+Skills Doctor statically checks non-trivial skills for an `evals/evals.json`
+file with valid JSON, a root `skill_name`, a non-empty `evals` array,
+realistic non-empty `prompt` and `expected_output` strings, well-formed
+relative `files` paths when present, and non-vague string assertions when
+assertions are supplied. If mature eval material is present, it also advises
+authors to include baseline or previous-version comparison guidance.
+
+The scanner does not run trigger evals, output evals, grading scripts, timing
+collection, or benchmark generation. Files such as `timing.json`,
+`grading.json`, and `benchmark.json` are run artifacts, not required package
+inputs.
+
 Rules for test prompts:
 
 - Start with 2 to 3 cases.
@@ -882,6 +894,13 @@ Output rules:
 - For large output that cannot be paginated, require an `--output` file or an
   explicit `-` opt-in for stdout.
 
+Skills Doctor checks these script rules statically. It verifies referenced
+script files exist, flags interactive implementations, reports risky operations
+without safety flags, warns when `SKILL.md` says to use `--help` but the script
+has no apparent help handler, and advises on structured-output scripts whose
+nearby guidance does not document output format, stderr diagnostics, or output
+bounds. It does not execute scripts or prove all runtime interfaces are correct.
+
 Reliability rules:
 
 - Make scripts idempotent where possible.
@@ -1006,6 +1025,10 @@ Discovery:
 - Non-skill files such as `README.md` in a skills directory are ignored.
 - Clients may skip directories like `.git/` and `node_modules/`.
 - Clients may impose max-depth and max-directory limits.
+- When a project-local skill and a user-global skill share the same name in the
+  same ecosystem, project-level skills conventionally take precedence. Skills
+  Doctor still scans both records and reports a portability warning on the
+  shadowed global skill so authors know which copy is likely inactive.
 
 Parsing:
 

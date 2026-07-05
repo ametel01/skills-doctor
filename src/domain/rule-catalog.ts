@@ -220,6 +220,31 @@ export const ruleCatalog = [
     description: "Referenced script has risky operations without safety flags.",
   },
   {
+    ruleId: "script-implementation-without-help",
+    severity: "advice",
+    categories: ["scripts"],
+    description:
+      "Skill guidance mentions --help but the referenced script lacks apparent help support.",
+  },
+  {
+    ruleId: "script-output-contract-missing",
+    severity: "advice",
+    categories: ["scripts"],
+    description: "Structured script output is not documented in nearby skill guidance.",
+  },
+  {
+    ruleId: "script-diagnostics-channel-missing",
+    severity: "advice",
+    categories: ["scripts"],
+    description: "Structured-output script guidance does not separate diagnostics from data.",
+  },
+  {
+    ruleId: "script-output-unbounded",
+    severity: "advice",
+    categories: ["scripts"],
+    description: "Script guidance or implementation suggests large output without bounds.",
+  },
+  {
     ruleId: "unpinned-package-runner",
     severity: "advice",
     categories: ["scripts"],
@@ -242,6 +267,48 @@ export const ruleCatalog = [
     severity: "advice",
     categories: ["evals"],
     description: "Non-trivial skill lacks evals/evals.json.",
+  },
+  {
+    ruleId: "invalid-evals-json",
+    severity: "warning",
+    categories: ["evals"],
+    description: "evals/evals.json is unreadable or not valid JSON.",
+  },
+  {
+    ruleId: "invalid-evals-shape",
+    severity: "warning",
+    categories: ["evals"],
+    description: "evals/evals.json lacks required root fields or valid eval case shape.",
+  },
+  {
+    ruleId: "eval-missing-prompt",
+    severity: "warning",
+    categories: ["evals"],
+    description: "An eval case lacks a non-empty realistic prompt.",
+  },
+  {
+    ruleId: "eval-missing-expected-output",
+    severity: "warning",
+    categories: ["evals"],
+    description: "An eval case lacks a concrete expected_output.",
+  },
+  {
+    ruleId: "eval-weak-assertions",
+    severity: "warning",
+    categories: ["evals"],
+    description: "Eval assertions are empty, malformed, or too vague.",
+  },
+  {
+    ruleId: "eval-missing-baseline-guidance",
+    severity: "advice",
+    categories: ["evals"],
+    description: "Mature eval material lacks baseline or previous-version comparison guidance.",
+  },
+  {
+    ruleId: "local-global-skill-shadowing",
+    severity: "warning",
+    categories: ["portability"],
+    description: "A global skill is likely shadowed by a same-name project-local skill.",
   },
   {
     ruleId: "SKILL001_PROMPT_OVERRIDE",

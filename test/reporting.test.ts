@@ -68,7 +68,28 @@ describe("scan reports", () => {
   it("keeps security findings separate from quality issue failures", async () => {
     const skillDir = path.join(directory, ".agents", "skills", "security-warning-skill");
     await mkdir(path.join(skillDir, "evals"), { recursive: true });
-    await writeFile(path.join(skillDir, "evals", "evals.json"), "{}\n");
+    await writeFile(
+      path.join(skillDir, "evals", "evals.json"),
+      `${JSON.stringify(
+        {
+          skill_name: "security-warning-skill",
+          baseline_guidance: "Compare the response with and without the skill.",
+          evals: [
+            {
+              id: "security-report-warning",
+              prompt: "Use the security warning skill to validate report failure separation.",
+              expected_output:
+                "The agent follows the workflow and the report keeps security findings separate from quality failures.",
+              assertions: [
+                "Response preserves the security finding while keeping quality issue counts separate.",
+              ],
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+    );
     await writeFile(
       path.join(skillDir, "SKILL.md"),
       [

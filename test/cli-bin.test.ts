@@ -276,7 +276,28 @@ describe("CLI bin", () => {
     await mkdir(skillDir, { recursive: true });
     if (input.evals) {
       await mkdir(path.join(skillDir, "evals"), { recursive: true });
-      await writeFile(path.join(skillDir, "evals", "evals.json"), "{}\n");
+      await writeFile(
+        path.join(skillDir, "evals", "evals.json"),
+        `${JSON.stringify(
+          {
+            skill_name: input.name,
+            baseline_guidance: "Compare the response with and without the skill.",
+            evals: [
+              {
+                id: "packaged-cli-scan",
+                prompt: `Use ${input.name} for a realistic packaged CLI scan task.`,
+                expected_output:
+                  "The agent activates the skill, follows the documented workflow, and reports the scan result.",
+                assertions: [
+                  "Response follows the skill workflow and names the scan result clearly.",
+                ],
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+      );
     }
     await writeFile(
       path.join(skillDir, "SKILL.md"),
