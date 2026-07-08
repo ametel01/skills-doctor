@@ -797,7 +797,9 @@ const runCleanupAgentFlow = async (
     }
     input.write(`${usageLabel("Selected", Boolean(input.color))} ${agent.displayName}.\n`);
     input.write(
-      `${usageLabel("Launch preview", Boolean(input.color))}: ${formatRepairAgentPreview(agent.id)}\n`,
+      `${usageLabel("Launch preview", Boolean(input.color))}: ${formatRepairAgentPreview(agent.id, {
+        usesPromptFile: handoff.promptPath !== undefined,
+      })}\n`,
     );
     writeCleanupHandoffSummary(handoff, input.write, { color: input.color });
     const shouldLaunch = await input.prompts.confirm(`Launch ${agent.displayName} now?`, false);
@@ -808,7 +810,7 @@ const runCleanupAgentFlow = async (
 
     let exitCode: number;
     try {
-      exitCode = await input.launchAgent(agent.id, handoff.prompt, input.cwd);
+      exitCode = await input.launchAgent(agent.id, handoff.prompt, input.cwd, handoff.promptPath);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       input.write(`Cleanup agent launch failed: ${message}\n`);
@@ -896,7 +898,9 @@ const runUsageRecommendationAgentFlow = async (
     }
     input.write(`${usageLabel("Selected", Boolean(input.color))} ${agent.displayName}.\n`);
     input.write(
-      `${usageLabel("Launch preview", Boolean(input.color))}: ${formatRepairAgentPreview(agent.id)}\n`,
+      `${usageLabel("Launch preview", Boolean(input.color))}: ${formatRepairAgentPreview(agent.id, {
+        usesPromptFile: handoff.promptPath !== undefined,
+      })}\n`,
     );
     writeCleanupHandoffSummary(handoff, input.write, { color: input.color });
     const shouldLaunch = await input.prompts.confirm(`Launch ${agent.displayName} now?`, false);
@@ -907,7 +911,7 @@ const runUsageRecommendationAgentFlow = async (
 
     let exitCode: number;
     try {
-      exitCode = await input.launchAgent(agent.id, handoff.prompt, input.cwd);
+      exitCode = await input.launchAgent(agent.id, handoff.prompt, input.cwd, handoff.promptPath);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       input.write(`Usage recommendation agent launch failed: ${message}\n`);
@@ -1072,7 +1076,9 @@ const runRepairAgentFlow = async (
     }
     input.write(`${usageLabel("Selected", Boolean(input.color))} ${agent.displayName}.\n`);
     input.write(
-      `${usageLabel("Launch preview", Boolean(input.color))}: ${formatRepairAgentPreview(agent.id)}\n`,
+      `${usageLabel("Launch preview", Boolean(input.color))}: ${formatRepairAgentPreview(agent.id, {
+        usesPromptFile: handoff.promptPath !== undefined,
+      })}\n`,
     );
     writeRepairHandoffSummary(handoff, input.write, { color: input.color });
     const shouldLaunch = await input.prompts.confirm(`Launch ${agent.displayName} now?`, false);
@@ -1083,7 +1089,7 @@ const runRepairAgentFlow = async (
 
     let exitCode: number;
     try {
-      exitCode = await input.launchAgent(agent.id, handoff.prompt, input.cwd);
+      exitCode = await input.launchAgent(agent.id, handoff.prompt, input.cwd, handoff.promptPath);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       input.write(`Agent launch failed: ${message}\n`);

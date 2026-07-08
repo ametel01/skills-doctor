@@ -146,8 +146,11 @@ next to the normal navigation keys.
 
 Launch mappings:
 
-- Claude: `claude --dangerously-skip-permissions <prompt>`
-- Codex: `codex --yolo <prompt>`
+- Claude: `claude --dangerously-skip-permissions <prompt-file>`
+- Codex: `codex --yolo <prompt-file>`
+
+If prompt-file writing fails, the same launch commands fall back to an inline
+`<prompt>` argument.
 
 Skills Doctor does not edit skill files during the scan phase. Repairs are made
 only by the local agent after you confirm the handoff.
