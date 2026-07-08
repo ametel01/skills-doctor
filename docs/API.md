@@ -64,7 +64,9 @@ Discovery and scanning:
 - `parseSkillContent(content)`: parses one `SKILL.md` string into frontmatter
   and body data.
 - `analyzeSkillUsage(input)`: ranks scanned skills by detected local Codex
-  usage and returns conservative cleanup recommendations.
+  usage and returns conservative cleanup recommendations. It reads a bounded
+  tail of each usage source by default; pass `maxFileBytes` to tune the
+  per-source byte limit.
 
 Rules and scoring:
 

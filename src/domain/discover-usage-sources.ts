@@ -1,3 +1,4 @@
+import type { Dirent, Stats } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -31,6 +32,13 @@ export type ReadCodexSqlitePressure = (input: {
   readonly since: Date;
 }) => Promise<readonly CodexPressureRow[]>;
 
+type UsageSourceFileSystem = {
+  readonly readdir?: (
+    directory: string,
+  ) => Promise<readonly Pick<Dirent, "name" | "isDirectory" | "isFile">[]>;
+  readonly stat?: (filePath: string) => Promise<Pick<Stats, "isFile" | "mtime">>;
+};
+
 export type DiscoverUsageSourcesInput = {
   readonly homeDir?: string | undefined;
   readonly now?: Date | undefined;
@@ -39,6 +47,8 @@ export type DiscoverUsageSourcesInput = {
   readonly maxSessionFiles?: number | undefined;
   readonly maxFileBytes?: number | undefined;
   readonly readSqlitePressure?: ReadCodexSqlitePressure | undefined;
+  /** @internal Test-only filesystem adapter; production callers should use the real local Codex paths. */
+  readonly fileSystem?: UsageSourceFileSystem | undefined;
 };
 
 export type DiscoverUsageSourcesResult = {
@@ -65,19 +75,28 @@ export const discoverUsageSources = async (
   const now = input.now ?? new Date();
   const since =
     input.since ?? daysBefore(now, input.recentWindowDays ?? DEFAULT_RECENT_WINDOW_DAYS);
-  const maxSessionFiles = input.maxSessionFiles ?? DEFAULT_MAX_SESSION_FILES;
-  const maxFileBytes = input.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
+  const maxSessionFiles = normalizeNonNegativeInteger(
+    input.maxSessionFiles ?? DEFAULT_MAX_SESSION_FILES,
+    DEFAULT_MAX_SESSION_FILES,
+  );
+  const maxFileBytes = normalizePositiveInteger(
+    input.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
+    DEFAULT_MAX_FILE_BYTES,
+  );
   const codexDir = path.join(homeDir, ".codex");
   const sessionsDir = path.join(codexDir, "sessions");
   const historyPath = path.join(codexDir, "history.jsonl");
   const sqlitePath = path.join(codexDir, "logs_2.sqlite");
   const diagnostics: Diagnostic[] = [];
 
-  const sessionFiles = (await findJsonlFiles({ directory: sessionsDir, since, diagnostics })).slice(
-    0,
-    maxSessionFiles,
-  );
-  const historyFile = await fileIfExists(historyPath, since, diagnostics);
+  const sessionFiles = await findJsonlFiles({
+    directory: sessionsDir,
+    since,
+    maxFiles: maxSessionFiles,
+    diagnostics,
+    fileSystem: input.fileSystem,
+  });
+  const historyFile = await fileIfExists(historyPath, since, diagnostics, input.fileSystem);
   const usageSourcePaths = [
     ...sessionFiles.map((candidate) => candidate.filePath),
     ...(historyFile === undefined ? [] : [historyFile.filePath]),
@@ -96,6 +115,7 @@ export const discoverUsageSources = async (
       since,
       readSqlitePressure: input.readSqlitePressure,
       diagnostics: sqliteDiagnostics,
+      fileSystem: input.fileSystem,
     }),
   ]);
   diagnostics.push(...jsonlDiagnostics, ...sqliteDiagnostics);
@@ -114,42 +134,101 @@ export const discoverUsageSources = async (
 const findJsonlFiles = async (input: {
   readonly directory: string;
   readonly since: Date;
+  readonly maxFiles: number;
   readonly diagnostics: Diagnostic[];
+  readonly fileSystem: UsageSourceFileSystem | undefined;
 }): Promise<readonly CandidateFile[]> => {
-  const entries = await readdir(input.directory, { withFileTypes: true }).catch(
-    (error: unknown) => {
-      if (getErrorCode(error) !== "ENOENT") {
-        input.diagnostics.push({
-          code: "usage-source-unreadable",
-          severity: "warning",
-          message: error instanceof Error ? error.message : `Unable to read ${input.directory}`,
-          path: input.directory,
-        });
-      }
-      return undefined;
-    },
-  );
-  if (entries === undefined) return [];
+  if (input.maxFiles <= 0) return [];
 
-  const filesByEntry = await Promise.all(
-    entries.map(async (entry) => {
-      const entryPath = path.join(input.directory, entry.name);
-      if (entry.isDirectory()) return findJsonlFiles({ ...input, directory: entryPath });
-      if (!entry.isFile() || !entry.name.endsWith(".jsonl")) return [];
-      const candidate = await fileIfExists(entryPath, input.since, input.diagnostics);
-      return candidate === undefined ? [] : [candidate];
-    }),
-  );
+  const state: DiscoveryState = {
+    candidates: [],
+  };
+  await collectJsonlFiles({
+    ...input,
+    state,
+  });
+  return state.candidates.sort(compareCandidateFiles).slice(0, input.maxFiles);
+};
 
-  return filesByEntry.flat().sort(compareCandidateFiles);
+type DiscoveryState = {
+  candidates: CandidateFile[];
+};
+
+const collectJsonlFiles = async (input: {
+  readonly directory: string;
+  readonly since: Date;
+  readonly maxFiles: number;
+  readonly diagnostics: Diagnostic[];
+  readonly fileSystem: UsageSourceFileSystem | undefined;
+  readonly state: DiscoveryState;
+}): Promise<void> => {
+  if (input.state.candidates.length >= input.maxFiles) return;
+
+  const entries = await readDirectory(input.directory, input.fileSystem, input.diagnostics);
+  if (entries === undefined) return;
+
+  const sortedEntries = [...entries].sort(compareDiscoveryEntries);
+  for (const entry of sortedEntries) {
+    if (input.state.candidates.length >= input.maxFiles) return;
+    if (!entry.isDirectory()) continue;
+    const entryPath = path.join(input.directory, entry.name);
+    await collectJsonlFiles({ ...input, directory: entryPath });
+  }
+
+  const candidateFiles = sortedEntries.filter(
+    (entry) => entry.isFile() && entry.name.endsWith(".jsonl"),
+  );
+  for (const entry of candidateFiles) {
+    const entryPath = path.join(input.directory, entry.name);
+    if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+    const candidate = await fileIfExists(
+      entryPath,
+      input.since,
+      input.diagnostics,
+      input.fileSystem,
+    );
+    if (candidate !== undefined) addCandidate(input.state.candidates, candidate, input.maxFiles);
+  }
+};
+
+const addCandidate = (
+  candidates: CandidateFile[],
+  candidate: CandidateFile,
+  maxFiles: number,
+): void => {
+  candidates.push(candidate);
+  candidates.sort(compareCandidateFiles);
+  candidates.splice(maxFiles);
+};
+
+const readDirectory = async (
+  directory: string,
+  fileSystem: UsageSourceFileSystem | undefined,
+  diagnostics: Diagnostic[],
+): Promise<readonly Pick<Dirent, "name" | "isDirectory" | "isFile">[] | undefined> => {
+  const read =
+    fileSystem?.readdir ?? ((target: string) => readdir(target, { withFileTypes: true }));
+  return read(directory).catch((error: unknown) => {
+    if (getErrorCode(error) !== "ENOENT") {
+      diagnostics.push({
+        code: "usage-source-unreadable",
+        severity: "warning",
+        message: error instanceof Error ? error.message : `Unable to read ${directory}`,
+        path: directory,
+      });
+    }
+    return undefined;
+  });
 };
 
 const fileIfExists = async (
   filePath: string,
   since: Date,
   diagnostics: Diagnostic[],
+  fileSystem: UsageSourceFileSystem | undefined,
 ): Promise<CandidateFile | undefined> => {
-  const stats = await stat(filePath).catch((error: unknown) => {
+  const readStats = fileSystem?.stat ?? stat;
+  const stats = await readStats(filePath).catch((error: unknown) => {
     if (getErrorCode(error) !== "ENOENT") {
       diagnostics.push({
         code: "usage-source-unreadable",
@@ -229,8 +308,10 @@ const readSqlitePressure = async (input: {
   readonly since: Date;
   readonly readSqlitePressure: ReadCodexSqlitePressure | undefined;
   readonly diagnostics: Diagnostic[];
+  readonly fileSystem: UsageSourceFileSystem | undefined;
 }): Promise<readonly CodexPressureRow[]> => {
-  const stats = await stat(input.sqlitePath).catch(() => undefined);
+  const readStats = input.fileSystem?.stat ?? stat;
+  const stats = await readStats(input.sqlitePath).catch(() => undefined);
   if (stats === undefined || !stats.isFile()) return [];
   if (input.readSqlitePressure === undefined) return [];
 
@@ -344,6 +425,11 @@ const compareCandidateFiles = (left: CandidateFile, right: CandidateFile): numbe
   return left.filePath.localeCompare(right.filePath);
 };
 
+const compareDiscoveryEntries = (
+  left: Pick<Dirent, "name" | "isDirectory" | "isFile">,
+  right: Pick<Dirent, "name" | "isDirectory" | "isFile">,
+): number => right.name.localeCompare(left.name);
+
 const latestTimestamp = (timestamps: readonly (string | undefined)[]): string | undefined => {
   const sorted = timestamps
     .filter((timestamp): timestamp is string => timestamp !== undefined)
@@ -363,6 +449,16 @@ const maxNumber = (values: readonly (number | undefined)[]): number | undefined 
 const latestDefined = (
   values: readonly (string | number | undefined)[],
 ): string | number | undefined => values.findLast((value) => value !== undefined);
+
+const normalizeNonNegativeInteger = (value: number, fallback: number): number => {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.floor(value));
+};
+
+const normalizePositiveInteger = (value: number, fallback: number): number => {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.floor(value));
+};
 
 const getErrorCode = (error: unknown): string | undefined =>
   typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import path from "node:path";
 import type { Diagnostic, SkillRecord } from "./types.js";
 
@@ -65,6 +65,7 @@ export type AnalyzeSkillUsageInput = {
   readonly usageSourcePaths?: readonly string[] | undefined;
   readonly now?: Date | undefined;
   readonly recentWindowDays?: number | undefined;
+  readonly maxFileBytes?: number | undefined;
   readonly frequentUseThreshold?: number | undefined;
   readonly descriptionCostThreshold?: number | undefined;
 };
@@ -83,7 +84,15 @@ type MatchedUsageEvent = SkillUsageEvent & {
   readonly dedupeMarker: string;
 };
 
+type UsageSourceContentResult = {
+  readonly sourcePath: string;
+  readonly content?: string | undefined;
+  readonly isTailTruncated?: boolean | undefined;
+  readonly diagnostic?: Diagnostic | undefined;
+};
+
 const DEFAULT_RECENT_WINDOW_DAYS = 30;
+const DEFAULT_MAX_FILE_BYTES = 1_000_000;
 const DEFAULT_FREQUENT_USE_THRESHOLD = 5;
 const DEFAULT_DESCRIPTION_COST_THRESHOLD = 280;
 
@@ -97,11 +106,18 @@ export const analyzeSkillUsage = async (
   const phraseMap = buildPhraseMap(catalog);
   const events: MatchedUsageEvent[] = [];
   let readableSourceCount = 0;
+  const maxFileBytes = normalizePositiveInteger(
+    input.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
+    DEFAULT_MAX_FILE_BYTES,
+  );
 
-  const sourceContents = await Promise.all(
+  const sourceContents: UsageSourceContentResult[] = await Promise.all(
     sourcePaths.map(async (sourcePath) => {
       try {
-        return { sourcePath, content: await readFile(sourcePath, "utf8") };
+        return {
+          sourcePath,
+          ...(await readUsageSourceTail(sourcePath, maxFileBytes)),
+        } satisfies UsageSourceContentResult;
       } catch (error: unknown) {
         return {
           sourcePath,
@@ -111,12 +127,12 @@ export const analyzeSkillUsage = async (
             message: error instanceof Error ? error.message : `Unable to read ${sourcePath}`,
             path: sourcePath,
           } satisfies Diagnostic,
-        };
+        } satisfies UsageSourceContentResult;
       }
     }),
   );
 
-  for (const { sourcePath, content, diagnostic } of sourceContents) {
+  for (const { sourcePath, content, isTailTruncated = false, diagnostic } of sourceContents) {
     if (diagnostic !== undefined) {
       diagnostics.push(diagnostic);
       continue;
@@ -132,7 +148,16 @@ export const analyzeSkillUsage = async (
     }
 
     readableSourceCount += 1;
-    events.push(...parseUsageSource({ sourcePath, content, aliasMap, phraseMap, diagnostics }));
+    events.push(
+      ...parseUsageSource({
+        sourcePath,
+        content,
+        isTailTruncated,
+        aliasMap,
+        phraseMap,
+        diagnostics,
+      }),
+    );
   }
 
   const dedupedEvents: MatchedUsageEvent[] = [];
@@ -160,6 +185,7 @@ export const analyzeSkillUsage = async (
 const parseUsageSource = (input: {
   readonly sourcePath: string;
   readonly content: string;
+  readonly isTailTruncated: boolean;
   readonly aliasMap: ReadonlyMap<string, readonly CatalogSkill[]>;
   readonly phraseMap: ReadonlyMap<string, readonly CatalogSkill[]>;
   readonly diagnostics: Diagnostic[];
@@ -171,7 +197,12 @@ const parseUsageSource = (input: {
     const trimmed = line.trim();
     if (trimmed.length === 0) continue;
 
-    const record = parseJsonLine(trimmed, input.sourcePath, input.diagnostics);
+    const record = parseJsonLine(
+      trimmed,
+      input.sourcePath,
+      input.diagnostics,
+      input.isTailTruncated && lineIndex === 0,
+    );
     if (record === undefined) continue;
 
     const assistantText = extractAssistantText(record);
@@ -199,10 +230,12 @@ const parseJsonLine = (
   line: string,
   sourcePath: string,
   diagnostics: Diagnostic[],
+  suppressDiagnostic = false,
 ): unknown | undefined => {
   try {
     return JSON.parse(line) as unknown;
   } catch (error) {
+    if (suppressDiagnostic) return undefined;
     diagnostics.push({
       code: "usage-source-invalid-json",
       severity: "warning",
@@ -210,6 +243,25 @@ const parseJsonLine = (
       path: sourcePath,
     });
     return undefined;
+  }
+};
+
+const readUsageSourceTail = async (
+  sourcePath: string,
+  maxBytes: number,
+): Promise<{ readonly content: string; readonly isTailTruncated: boolean }> => {
+  const handle = await open(sourcePath, "r");
+  try {
+    const stats = await handle.stat();
+    const byteLength = Math.min(stats.size, maxBytes);
+    const buffer = Buffer.alloc(byteLength);
+    await handle.read(buffer, 0, byteLength, stats.size - byteLength);
+    return {
+      content: buffer.toString("utf8"),
+      isTailTruncated: stats.size > byteLength,
+    };
+  } finally {
+    await handle.close();
   }
 };
 
@@ -643,6 +695,11 @@ const normalizeTextForPhraseSearch = (value: string): string =>
 
 const containsPhrase = (normalizedText: string, phrase: string): boolean =>
   normalizedText.includes(` ${phrase} `);
+
+const normalizePositiveInteger = (value: number, fallback: number): number => {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.floor(value));
+};
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

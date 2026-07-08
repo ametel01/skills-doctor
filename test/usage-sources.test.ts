@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -65,6 +65,76 @@ describe("Codex usage source discovery", () => {
     expect(result.usageSourcePaths).toHaveLength(1);
     expect(result.usageSourcePaths[0]).toMatch(/recent-[12]\.jsonl$/u);
     expect(result.usageSourcePaths).not.toContain(older);
+    expect(result.contextPressure.level).toBe("low");
+  });
+
+  it("selects the newest session by mtime when it sorts late by path", async () => {
+    const sessionDir = path.join(homeDir, ".codex", "sessions", "2026", "06", "20");
+    for (const [index, name] of ["z-old", "y-old", "x-old", "w-old"].entries()) {
+      const sessionPath = path.join(sessionDir, `${name}.jsonl`);
+      await writeJsonl(sessionPath, [
+        { timestamp: `2026-06-20T00:0${index}:00.000Z`, role: "assistant" },
+      ]);
+      const modifiedAt = new Date(`2026-06-20T00:0${index}:00.000Z`);
+      await utimes(sessionPath, modifiedAt, modifiedAt);
+    }
+    const newest = path.join(sessionDir, "a-new.jsonl");
+    await writeJsonl(newest, [{ timestamp: "2026-06-20T00:10:00.000Z", role: "assistant" }]);
+    await utimes(
+      newest,
+      new Date("2026-06-20T00:10:00.000Z"),
+      new Date("2026-06-20T00:10:00.000Z"),
+    );
+
+    const result = await discoverUsageSources({
+      homeDir,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+      recentWindowDays: 30,
+      maxSessionFiles: 1,
+    });
+
+    expect(result.usageSourcePaths).toEqual([newest]);
+    expect(result.contextPressure.level).toBe("low");
+  });
+
+  it("bounds directory-batch discovery before older session directories", async () => {
+    const sessionPaths: string[] = [];
+    for (let index = 0; index < 12; index += 1) {
+      const day = String(index + 1).padStart(2, "0");
+      const sessionPath = path.join(
+        homeDir,
+        ".codex",
+        "sessions",
+        "2026",
+        "06",
+        day,
+        `session-${day}.jsonl`,
+      );
+      sessionPaths.push(sessionPath);
+      await writeJsonl(sessionPath, [{ timestamp: `2026-06-${day}T00:00:00.000Z` }]);
+      const modifiedAt = new Date(`2026-06-${day}T00:00:00.000Z`);
+      await utimes(sessionPath, modifiedAt, modifiedAt);
+    }
+    const inspectedSessionFiles: string[] = [];
+
+    const result = await discoverUsageSources({
+      homeDir,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+      recentWindowDays: 30,
+      maxSessionFiles: 2,
+      fileSystem: {
+        stat: async (filePath) => {
+          if (filePath.includes(`${path.sep}.codex${path.sep}sessions${path.sep}`)) {
+            inspectedSessionFiles.push(filePath);
+          }
+          return stat(filePath);
+        },
+      },
+    });
+
+    expect(result.usageSourcePaths).toEqual([sessionPaths[11], sessionPaths[10]]);
+    expect(inspectedSessionFiles.length).toBeGreaterThan(0);
+    expect(inspectedSessionFiles.length).toBeLessThan(sessionPaths.length);
     expect(result.contextPressure.level).toBe("low");
   });
 
