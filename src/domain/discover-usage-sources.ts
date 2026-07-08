@@ -60,9 +60,10 @@ export type DiscoverUsageSourcesResult = {
 type CandidateFile = {
   readonly filePath: string;
   readonly modifiedAt: Date;
+  readonly latestEventTimestamp?: string | undefined;
 };
 
-const DEFAULT_RECENT_WINDOW_DAYS = 90;
+const DEFAULT_RECENT_WINDOW_DAYS = 30;
 const DEFAULT_MAX_SESSION_FILES = 200;
 const DEFAULT_MAX_FILE_BYTES = 1_000_000;
 const CONTEXT_BUDGET_WARNING =
@@ -96,7 +97,12 @@ export const discoverUsageSources = async (
     diagnostics,
     fileSystem: input.fileSystem,
   });
-  const historyFile = await fileIfExists(historyPath, since, diagnostics, input.fileSystem);
+  const historyFile = await fileIfRecentUsageEventExists(
+    historyPath,
+    since,
+    diagnostics,
+    input.fileSystem,
+  );
   const usageSourcePaths = [
     ...sessionFiles.map((candidate) => candidate.filePath),
     ...(historyFile === undefined ? [] : [historyFile.filePath]),
@@ -162,14 +168,11 @@ const collectJsonlFiles = async (input: {
   readonly fileSystem: UsageSourceFileSystem | undefined;
   readonly state: DiscoveryState;
 }): Promise<void> => {
-  if (input.state.candidates.length >= input.maxFiles) return;
-
   const entries = await readDirectory(input.directory, input.fileSystem, input.diagnostics);
   if (entries === undefined) return;
 
   const sortedEntries = [...entries].sort(compareDiscoveryEntries);
   for (const entry of sortedEntries) {
-    if (input.state.candidates.length >= input.maxFiles) return;
     if (!entry.isDirectory()) continue;
     const entryPath = path.join(input.directory, entry.name);
     await collectJsonlFiles({ ...input, directory: entryPath });
@@ -181,24 +184,14 @@ const collectJsonlFiles = async (input: {
   for (const entry of candidateFiles) {
     const entryPath = path.join(input.directory, entry.name);
     if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
-    const candidate = await fileIfExists(
+    const candidate = await fileIfRecentUsageEventExists(
       entryPath,
       input.since,
       input.diagnostics,
       input.fileSystem,
     );
-    if (candidate !== undefined) addCandidate(input.state.candidates, candidate, input.maxFiles);
+    if (candidate !== undefined) input.state.candidates.push(candidate);
   }
-};
-
-const addCandidate = (
-  candidates: CandidateFile[],
-  candidate: CandidateFile,
-  maxFiles: number,
-): void => {
-  candidates.push(candidate);
-  candidates.sort(compareCandidateFiles);
-  candidates.splice(maxFiles);
 };
 
 const readDirectory = async (
@@ -221,7 +214,7 @@ const readDirectory = async (
   });
 };
 
-const fileIfExists = async (
+const fileIfRecentUsageEventExists = async (
   filePath: string,
   since: Date,
   diagnostics: Diagnostic[],
@@ -249,8 +242,46 @@ const fileIfExists = async (
     });
     return undefined;
   }
-  if (stats.mtime < since) return undefined;
-  return { filePath, modifiedAt: stats.mtime };
+  const latestEventTimestamp = await latestRecentEventTimestamp(filePath, since, diagnostics);
+  if (latestEventTimestamp === undefined) return undefined;
+  return { filePath, modifiedAt: stats.mtime, latestEventTimestamp };
+};
+
+const latestRecentEventTimestamp = async (
+  filePath: string,
+  since: Date,
+  diagnostics: Diagnostic[],
+): Promise<string | undefined> => {
+  const timestamps: string[] = [];
+  const handle = await open(filePath, "r").catch((error: unknown) => {
+    diagnostics.push({
+      code: "usage-source-unreadable",
+      severity: "warning",
+      message: error instanceof Error ? error.message : `Unable to read ${filePath}`,
+      path: filePath,
+    });
+    return undefined;
+  });
+  if (handle === undefined) return undefined;
+  try {
+    for await (const line of handle.readLines()) {
+      const trimmed = line.trim();
+      if (trimmed.length === 0) continue;
+      const timestamp = extractTimestampFromJsonLine(trimmed);
+      if (timestamp === undefined) continue;
+      if (Date.parse(timestamp) >= since.getTime()) timestamps.push(timestamp);
+    }
+  } catch (error: unknown) {
+    diagnostics.push({
+      code: "usage-source-unreadable",
+      severity: "warning",
+      message: error instanceof Error ? error.message : `Unable to read ${filePath}`,
+      path: filePath,
+    });
+  } finally {
+    await handle.close();
+  }
+  return latestTimestamp(timestamps);
 };
 
 type JsonlPressure = {
@@ -420,6 +451,9 @@ const daysBefore = (now: Date, days: number): Date =>
   new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
 const compareCandidateFiles = (left: CandidateFile, right: CandidateFile): number => {
+  const eventDifference =
+    timestampValue(right.latestEventTimestamp) - timestampValue(left.latestEventTimestamp);
+  if (eventDifference !== 0) return eventDifference;
   const modifiedDifference = right.modifiedAt.getTime() - left.modifiedAt.getTime();
   if (modifiedDifference !== 0) return modifiedDifference;
   return left.filePath.localeCompare(right.filePath);
@@ -435,6 +469,12 @@ const latestTimestamp = (timestamps: readonly (string | undefined)[]): string | 
     .filter((timestamp): timestamp is string => timestamp !== undefined)
     .sort((left, right) => Date.parse(right) - Date.parse(left));
   return sorted[0];
+};
+
+const timestampValue = (timestamp: string | undefined): number => {
+  if (timestamp === undefined) return 0;
+  const value = Date.parse(timestamp);
+  return Number.isNaN(value) ? 0 : value;
 };
 
 const sumNumbers = (values: readonly (number | undefined)[]): number =>

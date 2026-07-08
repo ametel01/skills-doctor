@@ -56,14 +56,14 @@ describe("skill usage analysis", () => {
       usageCount: 1,
       recentUsageCount: 1,
       tier: "recent",
-      confidence: "high",
+      confidence: "medium",
       lastUsedAt: "2026-06-15T00:00:00.000Z",
     });
     expect(summary(analysis, "teach")).toMatchObject({
       usageCount: 5,
       recentUsageCount: 5,
       tier: "frequent",
-      confidence: "high",
+      confidence: "medium",
     });
     expect(summary(analysis, "unused-global")).toMatchObject({
       usageCount: 0,
@@ -189,7 +189,178 @@ describe("skill usage analysis", () => {
     });
   });
 
-  it("reads a bounded tail of each usage source without reporting transcript text", async () => {
+  it("records explicit user invocations and plugin-qualified aliases as high-confidence events", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    const pluginRoot = path.join(
+      directory,
+      ".codex",
+      "plugins",
+      "cache",
+      "openai-curated",
+      "github",
+      "202e9242",
+      "skills",
+    );
+    await writeJsonl(usageSource, [
+      user("2026-06-20T00:00:00.000Z", "Use $agent-coding-workflow and $github:gh-fix-ci."),
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [
+        buildRecord({ name: "agent-coding-workflow", source: "global" }),
+        buildRecord({ name: "gh-fix-ci", source: "global", rootPath: pluginRoot }),
+      ],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.events).toEqual([
+      expect.objectContaining({
+        skillName: "agent-coding-workflow",
+        confidence: "high",
+        evidenceKind: "explicit-user-invocation",
+      }),
+      expect.objectContaining({
+        skillName: "gh-fix-ci",
+        confidence: "high",
+        evidenceKind: "explicit-user-invocation",
+      }),
+    ]);
+    expect(summary(analysis, "agent-coding-workflow")).toMatchObject({
+      usageCount: 1,
+      confidence: "high",
+      tier: "recent",
+    });
+    expect(summary(analysis, "gh-fix-ci")).toMatchObject({
+      pluginName: "github",
+      usageCount: 1,
+      confidence: "high",
+      tier: "recent",
+    });
+  });
+
+  it("records user markdown links to known SKILL.md files", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    const linkedSkill = buildRecord({ name: "linked-skill", source: "global" });
+    await writeJsonl(usageSource, [
+      user(
+        "2026-06-20T00:00:00.000Z",
+        `Please use [linked skill](${linkedSkill.skillPath}) for this task.`,
+      ),
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [linkedSkill],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.events).toEqual([
+      expect.objectContaining({
+        skillName: "linked-skill",
+        confidence: "high",
+        evidenceKind: "codex-skill-markdown-link",
+      }),
+    ]);
+  });
+
+  it("records tool and function calls that read known SKILL.md files", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    const readSkill = buildRecord({ name: "tool-read-skill", source: "global" });
+    await writeJsonl(usageSource, [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "functions.exec_command",
+          arguments: JSON.stringify({ cmd: `sed -n '1,120p' ${readSkill.skillPath}` }),
+        },
+      },
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [readSkill],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.events).toEqual([
+      expect.objectContaining({
+        skillName: "tool-read-skill",
+        confidence: "high",
+        evidenceKind: "tool-skill-md-read",
+      }),
+    ]);
+  });
+
+  it("keeps duplicate-name evidence ambiguous instead of assigning it to the wrong skill", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    await writeJsonl(usageSource, [
+      user("2026-06-20T00:00:00.000Z", "Use $shared-review for this."),
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [
+        buildRecord({ name: "shared-review", source: "global", rootPath: "/tmp/first" }),
+        buildRecord({ name: "shared-review", source: "local", rootPath: "/tmp/second" }),
+      ],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.events).toEqual([]);
+    expect(analysis.sourceCoverage).toEqual([
+      expect.objectContaining({
+        status: "incomplete",
+        diagnosticCodes: ["usage-evidence-ambiguous"],
+      }),
+    ]);
+    expect(analysis.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "usage-evidence-ambiguous",
+        path: usageSource,
+      }),
+    ]);
+    expect(analysis.skillsByUsage).toEqual([
+      expect.objectContaining({ skillName: "shared-review", usageCount: 0, tier: "unused" }),
+      expect.objectContaining({ skillName: "shared-review", usageCount: 0, tier: "unused" }),
+    ]);
+  });
+
+  it("marks invalid JSONL sources as incomplete coverage without storing transcript text", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    await mkdir(path.dirname(usageSource), { recursive: true });
+    await writeFile(
+      usageSource,
+      [
+        JSON.stringify(user("2026-06-20T00:00:00.000Z", "Use $valid-skill with private context.")),
+        "{not-json",
+        "",
+      ].join("\n"),
+    );
+
+    const analysis = await analyzeSkillUsage({
+      skills: [buildRecord({ name: "valid-skill", source: "global" })],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.coverageStatus).toBe("incomplete");
+    expect(analysis.sourceCoverage).toEqual([
+      expect.objectContaining({
+        status: "incomplete",
+        recordCount: 2,
+        parsedRecordCount: 1,
+        invalidRecordCount: 1,
+        eventCount: 1,
+        diagnosticCodes: ["usage-source-invalid-json"],
+      }),
+    ]);
+    expect(JSON.stringify(analysis)).not.toContain("private context");
+  });
+
+  it("streams full usage sources beyond the old tail limit without reporting transcript text", async () => {
     const usageSource = path.join(directory, "session.jsonl");
     await mkdir(path.dirname(usageSource), { recursive: true });
     const privateFrontText = "private front transcript";
@@ -201,11 +372,11 @@ describe("skill usage analysis", () => {
           `Using the \`front-only\` skill. ${privateFrontText}`,
         ),
       ),
-      ...Array.from({ length: 80 }, (_, index) =>
+      ...Array.from({ length: 12_000 }, (_, index) =>
         JSON.stringify({
           timestamp: `2026-06-10T00:${String(index % 60).padStart(2, "0")}:00.000Z`,
           role: "assistant",
-          content: `padding record ${index} ${"x".repeat(80)}`,
+          content: `padding record ${index} ${"x".repeat(100)}`,
         }),
       ),
       JSON.stringify(
@@ -226,7 +397,7 @@ describe("skill usage analysis", () => {
 
     const serialized = JSON.stringify(analysis);
 
-    expect(summary(analysis, "front-only")).toMatchObject({ usageCount: 0, tier: "unused" });
+    expect(summary(analysis, "front-only")).toMatchObject({ usageCount: 1, tier: "recent" });
     expect(summary(analysis, "tail-used")).toMatchObject({
       usageCount: 1,
       tier: "recent",
@@ -295,6 +466,12 @@ const writeJsonl = async (filePath: string, records: readonly unknown[]): Promis
 const assistant = (timestamp: string, content: string): Record<string, unknown> => ({
   timestamp,
   role: "assistant",
+  content,
+});
+
+const user = (timestamp: string, content: string): Record<string, unknown> => ({
+  timestamp,
+  role: "user",
   content,
 });
 

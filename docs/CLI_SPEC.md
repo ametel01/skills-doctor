@@ -189,10 +189,10 @@ Responsibilities:
   roots.
 - `scan-skills.ts`: read `SKILL.md` files and collect diagnostics for unreadable
   roots or skill files.
-- `discover-usage-sources.ts`: discover bounded local Codex usage sources and
-  detect context-budget pressure.
+- `discover-usage-sources.ts`: discover bounded local Codex usage sources with
+  recent events and detect context-budget pressure.
 - `analyze-skill-usage.ts`: derive per-skill usage rankings and cleanup
-  recommendations from scanned skills and Codex JSONL sources.
+  recommendations from scanned skills and streamed Codex JSONL sources.
 - `parse-skill.ts`: parse YAML frontmatter and body content.
 - `rules/structural.ts`: validate required skill shape.
 - `rules/quality.ts`: validate skill-quality heuristics, resources, scripts,
@@ -234,8 +234,8 @@ Scan reports include:
 - diagnostics
 - score
 - findings
-- optional usage analysis, source diagnostics, context pressure, rankings, and
-  cleanup recommendations
+- optional usage analysis, source diagnostics, source coverage, structured
+  usage events, context pressure, rankings, and cleanup recommendations
 - handoff-request status
 
 Security findings remain in `findings` and count toward `findingCount` and
@@ -261,7 +261,10 @@ is present.
 
 Usage cleanup report files are also local artifacts under the OS temp directory
 and include `usage.json`, `usage.md`, and `cleanup-prompt.md`. Usage reports
-must not include raw Codex prompts or full assistant transcript text.
+must not include raw Codex prompts or full assistant transcript text. Usage
+events expose only source path, timestamp when present, matched skill identity,
+confidence, and evidence kind; ambiguous evidence remains diagnostic coverage
+metadata instead of being assigned to a same-name skill.
 
 ## Repair Handoff
 

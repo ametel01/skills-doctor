@@ -68,7 +68,7 @@ describe("Codex usage source discovery", () => {
     expect(result.contextPressure.level).toBe("low");
   });
 
-  it("selects the newest session by mtime when it sorts late by path", async () => {
+  it("selects the newest session by event timestamp when it sorts late by path", async () => {
     const sessionDir = path.join(homeDir, ".codex", "sessions", "2026", "06", "20");
     for (const [index, name] of ["z-old", "y-old", "x-old", "w-old"].entries()) {
       const sessionPath = path.join(sessionDir, `${name}.jsonl`);
@@ -97,7 +97,7 @@ describe("Codex usage source discovery", () => {
     expect(result.contextPressure.level).toBe("low");
   });
 
-  it("bounds directory-batch discovery before older session directories", async () => {
+  it("caps output after inspecting candidate event timestamps", async () => {
     const sessionPaths: string[] = [];
     for (let index = 0; index < 12; index += 1) {
       const day = String(index + 1).padStart(2, "0");
@@ -134,8 +134,33 @@ describe("Codex usage source discovery", () => {
 
     expect(result.usageSourcePaths).toEqual([sessionPaths[11], sessionPaths[10]]);
     expect(inspectedSessionFiles.length).toBeGreaterThan(0);
-    expect(inspectedSessionFiles.length).toBeLessThan(sessionPaths.length);
+    expect(inspectedSessionFiles).toHaveLength(sessionPaths.length);
     expect(result.contextPressure.level).toBe("low");
+  });
+
+  it("uses recent JSONL events rather than modified time to select sources", async () => {
+    const staleMtimeRecentEvent = path.join(homeDir, ".codex", "sessions", "stale-mtime.jsonl");
+    const recentMtimeOldEvent = path.join(homeDir, ".codex", "sessions", "recent-mtime.jsonl");
+    await writeJsonl(staleMtimeRecentEvent, [
+      { timestamp: "2026-06-20T00:00:00.000Z", role: "assistant" },
+    ]);
+    await utimes(
+      staleMtimeRecentEvent,
+      new Date("2025-01-01T00:00:00.000Z"),
+      new Date("2025-01-01T00:00:00.000Z"),
+    );
+    await writeJsonl(recentMtimeOldEvent, [
+      { timestamp: "2025-01-01T00:00:00.000Z", role: "assistant" },
+    ]);
+
+    const result = await discoverUsageSources({
+      homeDir,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+      recentWindowDays: 30,
+    });
+
+    expect(result.usageSourcePaths).toEqual([staleMtimeRecentEvent]);
+    expect(result.usageSourcePaths).not.toContain(recentMtimeOldEvent);
   });
 
   it("returns unknown pressure when no Codex usage data is available", async () => {

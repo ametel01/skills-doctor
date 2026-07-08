@@ -192,7 +192,9 @@ Use `--usage` to include local Codex usage analysis in JSON or non-interactive
 runs. Interactive runs analyze usage by default; pass `--no-logs` to skip local
 Codex log discovery. Usage analysis reads only known local Codex paths such as
 `~/.codex/sessions/**/*.jsonl`, `~/.codex/history.jsonl`, and optional
-`~/.codex/logs_2.sqlite` pressure data.
+`~/.codex/logs_2.sqlite` pressure data. JSON usage output includes sanitized
+evidence events and source coverage metadata, not raw prompts or full
+transcripts.
 
 ## Programmatic API
 

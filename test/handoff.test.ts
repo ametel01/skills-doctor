@@ -633,6 +633,18 @@ const makeFinding = (overrides: Partial<Finding>): Finding => ({
 const makeUsage = (): ScanReportUsage => ({
   sourcePaths: ["/repo/.codex/sessions/session.jsonl"],
   readableSourceCount: 1,
+  coverageStatus: "complete",
+  sourceCoverage: [
+    {
+      sourcePath: "/repo/.codex/sessions/session.jsonl",
+      status: "complete",
+      recordCount: 1,
+      parsedRecordCount: 1,
+      invalidRecordCount: 0,
+      eventCount: 1,
+      diagnosticCodes: [],
+    },
+  ],
   diagnostics: [],
   contextPressure: {
     level: "high",
@@ -646,6 +658,16 @@ const makeUsage = (): ScanReportUsage => ({
   unknownSkillCount: 0,
   duplicateSkillCount: 0,
   pluginContributedSkillCount: 1,
+  events: [
+    {
+      skillName: "used-skill",
+      skillPath: "/repo/.agents/skills/used-skill/SKILL.md",
+      sourcePath: "/repo/.codex/sessions/session.jsonl",
+      confidence: "high",
+      evidenceKind: "explicit-user-invocation",
+      timestamp: "2026-06-20T00:00:00.000Z",
+    },
+  ],
   skillsByUsage: [
     {
       skillName: "used-skill",

@@ -57,16 +57,18 @@ Discovery and scanning:
 
 - `discoverSkillRoots(input)`: finds local, global, and custom skill roots.
 - `discoverUsageSources(input?)`: finds bounded local Codex usage sources under
-  known `~/.codex` paths and detects context-budget pressure.
+  known `~/.codex` paths with events in the recent usage window and detects
+  context-budget pressure.
 - `scanSkillRoots(input)`: reads skills from selected roots, parses `SKILL.md`,
   discovers package artifact metadata, and returns skills, optional package
   records, diagnostics, and findings.
 - `parseSkillContent(content)`: parses one `SKILL.md` string into frontmatter
   and body data.
 - `analyzeSkillUsage(input)`: ranks scanned skills by detected local Codex
-  usage and returns conservative cleanup recommendations. It reads a bounded
-  tail of each usage source by default; pass `maxFileBytes` to tune the
-  per-source byte limit.
+  usage and returns conservative cleanup recommendations. It streams each JSONL
+  source record-by-record, emits sanitized `SkillUsageEvent` evidence, and
+  reports incomplete source coverage without storing raw prompts or transcript
+  text.
 
 Rules and scoring:
 
@@ -165,9 +167,12 @@ Exported types include:
 - `SkillSummary`
 - `SkillUsageAnalysis`
 - `SkillUsageConfidence`
+- `SkillUsageEvidenceKind`
 - `SkillUsageEvent`
 - `SkillUsageSummary`
 - `SkillUsageTier`
+- `UsageSourceCoverage`
+- `UsageSourceCoverageStatus`
 
 ## Filesystem Notes
 
@@ -337,11 +342,14 @@ the scan. `logs_2.sqlite` is optional; integrations can provide
 a hard dependency.
 
 `ScanReportUsage` contains source paths, source diagnostics, context pressure,
-aggregate counts, `skillsByUsage`, recommendations, and all disable-candidate
-recommendations. Each `skillsByUsage` item includes `usageCount` for all
-detected uses in analyzed sources and `recentUsageCount` for detected
-timestamped uses in the 30-day recent window. It does not include raw user
-prompts or assistant transcript text.
+aggregate counts, sanitized `events`, `coverageStatus`, `sourceCoverage`,
+`skillsByUsage`, recommendations, and all disable-candidate recommendations.
+Each `skillsByUsage` item includes `usageCount` for all detected uses in
+analyzed sources and `recentUsageCount` for detected timestamped uses in the
+30-day recent window. Evidence kinds distinguish explicit user invocations,
+Codex markdown links to `SKILL.md`, tool/function reads of known `SKILL.md`
+files, weak assistant announcements, and unknown legacy evidence. It does not
+include raw user prompts or assistant transcript text.
 
 ## Finding
 
