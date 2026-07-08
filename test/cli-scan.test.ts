@@ -410,6 +410,57 @@ describe("scanAction", () => {
     expect(nextStepChoices[0]).toContain("Choose unused skills to disable");
   });
 
+  it("keeps Codex-disabled skills out of cleanup re-scan usage reports", async () => {
+    const homeDir = path.join(directory, "home");
+    const activeSkillPath = path.join(homeDir, ".agents", "skills", "active-unused", "SKILL.md");
+    const disabledSkillPath = path.join(
+      homeDir,
+      ".agents",
+      "skills",
+      "disabled-unused",
+      "SKILL.md",
+    );
+    await writeStrongSkill(path.dirname(activeSkillPath), "active-unused");
+    await writeStrongSkill(path.dirname(disabledSkillPath), "disabled-unused");
+    await writeCodexDisabledSkillConfig(homeDir, [disabledSkillPath]);
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "No skill announcement here.",
+      },
+    ]);
+    const launches: string[] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "cleanup"],
+          confirms: [true],
+        }),
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async (command) => command === "codex",
+        launchAgent: async (_agentId, prompt) => {
+          launches.push(prompt);
+          return 0;
+        },
+      },
+    );
+
+    expect(launches).toHaveLength(1);
+    expect(report.skills.map((skill) => skill.name)).toEqual(["active-unused"]);
+    expect(report.usage?.totalSkillsAnalyzed).toBe(1);
+    expect(JSON.stringify(report.usage)).not.toContain("disabled-unused");
+  });
+
   it("does not offer cleanup handoff when only used skills are present", async () => {
     await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
     const homeDir = path.join(directory, "home");
@@ -577,10 +628,19 @@ describe("scanAction", () => {
 
   it("launches a scoped agent handoff for a selected usage recommendation group", async () => {
     const homeDir = path.join(directory, "home");
+    const disabledSkillPath = path.join(
+      homeDir,
+      ".agents",
+      "skills",
+      "disabled-long-skill",
+      "SKILL.md",
+    );
     await writeLongSkill(
       path.join(homeDir, ".agents", "skills", "long-used-skill"),
       "long-used-skill",
     );
+    await writeLongSkill(path.dirname(disabledSkillPath), "disabled-long-skill");
+    await writeCodexDisabledSkillConfig(homeDir, [disabledSkillPath]);
     await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
       {
         timestamp: "2026-06-20T00:00:00.000Z",
@@ -592,7 +652,7 @@ describe("scanAction", () => {
     const launches: string[] = [];
     const nextStepChoices: string[][] = [];
 
-    await scanAction(
+    const report = await scanAction(
       ".",
       {},
       {
@@ -641,6 +701,9 @@ describe("scanAction", () => {
     expect(launches[0]).toContain("shorten-description long-used-skill");
     expect(launches[0]).toContain("reduce context-heavy skill descriptions");
     expect(launches[0]).not.toContain("No skill announcement here.");
+    expect(report.skills.map((skill) => skill.name)).toEqual(["long-used-skill"]);
+    expect(report.usage?.totalSkillsAnalyzed).toBe(1);
+    expect(JSON.stringify(report.usage)).not.toContain("disabled-long-skill");
   });
 
   it("lets users cancel cleanup agent launch after report writing", async () => {
@@ -965,6 +1028,57 @@ describe("scanAction", () => {
     expect(stdout.join("")).toContain("Fixed findings:");
     expect(report.errorCount).toBe(0);
     expect(process.exitCode).toBe(0);
+  });
+
+  it("keeps Codex-disabled skills out of repair re-scan reports", async () => {
+    const homeDir = path.join(directory, "home");
+    const activeSkillDir = path.join(directory, ".agents", "skills", "active-bad");
+    const disabledSkillDir = path.join(directory, ".agents", "skills", "disabled-bad");
+    await mkdir(activeSkillDir, { recursive: true });
+    await mkdir(disabledSkillDir, { recursive: true });
+    const activeSkillPath = path.join(activeSkillDir, "SKILL.md");
+    const disabledSkillPath = path.join(disabledSkillDir, "SKILL.md");
+    await writeFile(
+      activeSkillPath,
+      ["---", "name: wrong-active", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    await writeFile(
+      disabledSkillPath,
+      ["---", "name: wrong-disabled", "description: Helps with PDFs.", "---", "", "Body."].join(
+        "\n",
+      ),
+    );
+    await writeCodexDisabledSkillConfig(homeDir, [disabledSkillPath]);
+    const stdout: string[] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "repair", "errors"],
+          confirms: [true, true, false],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async (command) => command === "codex",
+        launchAgent: async () => {
+          await writeSkill(activeSkillDir, "active-bad");
+          return 0;
+        },
+      },
+    );
+
+    expect(stdout.join("")).toContain("Post-handoff re-scan:");
+    expect(report.errorCount).toBe(0);
+    expect(report.skills.map((skill) => skill.name)).toEqual(["active-bad"]);
+    expect(report.findings.map((finding) => finding.skillPath)).not.toContain(disabledSkillPath);
+    expect(JSON.stringify(report)).not.toContain("disabled-bad");
   });
 
   it("reports remaining findings when the injected repair agent makes no changes", async () => {
@@ -1448,6 +1562,24 @@ const writeValidEvals = async (skillDir: string, name: string): Promise<void> =>
       null,
       2,
     )}\n`,
+  );
+};
+
+const writeCodexDisabledSkillConfig = async (
+  homeDir: string,
+  skillPaths: readonly string[],
+): Promise<void> => {
+  await mkdir(path.join(homeDir, ".codex"), { recursive: true });
+  await writeFile(
+    path.join(homeDir, ".codex", "config.toml"),
+    skillPaths
+      .flatMap((skillPath) => [
+        "[[skills.config]]",
+        `path = ${JSON.stringify(skillPath)}`,
+        "enabled = false",
+        "",
+      ])
+      .join("\n"),
   );
 };
 
