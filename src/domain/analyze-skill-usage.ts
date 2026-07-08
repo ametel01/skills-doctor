@@ -51,13 +51,16 @@ export type SkillUsageSummary = {
   readonly directoryName: string;
   readonly ecosystem: SkillRecord["ecosystem"];
   readonly source: SkillRecord["source"];
+  readonly enabled: boolean;
   readonly rootPath: string;
   readonly skillPath: string;
   readonly usageCount: number;
   readonly recentUsageCount: number;
   readonly tier: SkillUsageTier;
   readonly confidence: SkillUsageConfidence;
+  readonly coverageStatus: UsageSourceCoverageStatus;
   readonly lastUsedAt?: string | undefined;
+  readonly lastEvidenceKind?: SkillUsageEvidenceKind | undefined;
   readonly pluginName?: string | undefined;
   readonly descriptionLength: number;
   readonly recommendations: readonly SkillCleanupRecommendation[];
@@ -487,6 +490,11 @@ const buildAnalysis = (input: {
 }): SkillUsageAnalysis => {
   const eventsBySkill = groupEventsBySkill(input.events);
   const duplicateNames = duplicateSkillNames(input.catalog);
+  const coverageStatus: UsageSourceCoverageStatus =
+    input.sourceCoverage.length > 0 &&
+    input.sourceCoverage.every((coverage) => coverage.status === "complete")
+      ? "complete"
+      : "incomplete";
   const summaries = input.catalog.map((catalogSkill) => {
     const skillEvents = eventsBySkill.get(skillKey(catalogSkill.skill)) ?? [];
     const usageCount = skillEvents.length;
@@ -495,6 +503,7 @@ const buildAnalysis = (input: {
       return isRecent(event.timestamp, input.now, input.recentWindowDays);
     }).length;
     const lastUsedAt = latestTimestamp(skillEvents);
+    const lastEvidenceKind = summarizeLastEvidenceKind(skillEvents, lastUsedAt);
     const confidence = summarizeConfidence(skillEvents);
     const tier = classifyTier({
       usageCount,
@@ -509,13 +518,16 @@ const buildAnalysis = (input: {
       directoryName: catalogSkill.skill.directoryName,
       ecosystem: catalogSkill.skill.ecosystem,
       source: catalogSkill.skill.source,
+      enabled: true,
       rootPath: catalogSkill.skill.rootPath,
       skillPath: catalogSkill.skill.skillPath,
       usageCount,
       recentUsageCount,
       tier,
       confidence,
+      coverageStatus,
       ...(lastUsedAt === undefined ? {} : { lastUsedAt }),
+      ...(lastEvidenceKind === undefined ? {} : { lastEvidenceKind }),
       ...(catalogSkill.pluginName === undefined ? {} : { pluginName: catalogSkill.pluginName }),
       descriptionLength: catalogSkill.descriptionLength,
     };
@@ -537,11 +549,7 @@ const buildAnalysis = (input: {
   return {
     sourcePaths: input.sourcePaths,
     readableSourceCount: input.readableSourceCount,
-    coverageStatus:
-      input.sourceCoverage.length > 0 &&
-      input.sourceCoverage.every((coverage) => coverage.status === "complete")
-        ? "complete"
-        : "incomplete",
+    coverageStatus,
     sourceCoverage: input.sourceCoverage,
     diagnostics: input.diagnostics,
     totalSkills: input.catalog.length,
@@ -826,6 +834,23 @@ const latestTimestamp = (events: readonly SkillUsageEvent[]): string | undefined
     .filter((timestamp): timestamp is string => timestamp !== undefined)
     .sort((left, right) => Date.parse(right) - Date.parse(left));
   return timestamps[0];
+};
+
+const summarizeLastEvidenceKind = (
+  events: readonly SkillUsageEvent[],
+  lastUsedAt: string | undefined,
+): SkillUsageEvidenceKind | undefined => {
+  if (events.length === 0) return undefined;
+  if (lastUsedAt !== undefined) {
+    const latestEvent = events.find((event) => event.timestamp === lastUsedAt);
+    if (latestEvent !== undefined) return latestEvent.evidenceKind;
+  }
+  return [...events].sort(
+    (left, right) =>
+      confidenceRank(right.confidence) - confidenceRank(left.confidence) ||
+      timestampValue(right.timestamp) - timestampValue(left.timestamp) ||
+      left.evidenceKind.localeCompare(right.evidenceKind),
+  )[0]?.evidenceKind;
 };
 
 const summarizeConfidence = (events: readonly SkillUsageEvent[]): SkillUsageConfidence => {

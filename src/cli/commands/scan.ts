@@ -1422,6 +1422,7 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
         ["Used", String(report.usage.usedSkillCount)],
         ["Unused", String(report.usage.unusedSkillCount)],
         ["Unknown", String(report.usage.unknownSkillCount)],
+        ["Coverage", report.usage.coverageStatus],
         ["Duplicates", String(report.usage.duplicateSkillCount)],
         ["Plugins", String(report.usage.pluginContributedSkillCount)],
       ],
@@ -1441,19 +1442,27 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
       "",
       colorizeUsageTier(toTitleCase(tier), shouldColor),
       ...renderTable(
-        ["Skill", "Uses", "Confidence", "Last used"],
+        ["Skill", "Uses", "Recent", "Confidence", "Evidence", "Coverage", "Enabled", "Last used"],
         skills.map((skill) => [
           skill.skillName,
           String(skill.usageCount),
+          String(skill.recentUsageCount),
           skill.confidence,
+          formatEvidenceKind(skill.lastEvidenceKind),
+          skill.coverageStatus,
+          formatEnabled(skill.enabled),
           formatUsageTimestamp(skill.lastUsedAt),
         ]),
         {
           colorizers: [
             (text) => accent(text, shouldColor),
             (text) => success(text, shouldColor),
+            (text) => success(text, shouldColor),
             (text, _rowIndex, row) =>
-              colorizeUsageConfidence(row[2] ?? text.trim(), text, shouldColor),
+              colorizeUsageConfidence(row[3] ?? text.trim(), text, shouldColor),
+            (text) => dim(text, shouldColor),
+            (text, _rowIndex, row) => colorizeCoverage(row[5] ?? text.trim(), text, shouldColor),
+            (text, _rowIndex, row) => colorizeEnabled(row[6] ?? text.trim(), text, shouldColor),
             (text) => dim(text, shouldColor),
           ],
         },
@@ -1472,13 +1481,22 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
       `  Showing ${warning(String(preview.length), shouldColor)}. Use "View usage recommendations" for cleanup actions.`,
       "",
       ...renderTable(
-        ["Skill", "Path"],
+        ["Skill", "Enabled", "Coverage", "Evidence", "Path"],
         preview.map((skill) => [
           skill.skillName,
+          formatEnabled(skill.enabled),
+          skill.coverageStatus,
+          formatEvidenceKind(skill.lastEvidenceKind),
           compactSkillPath(skill.skillPath, { root: skill }),
         ]),
         {
-          colorizers: [(text) => accent(text, shouldColor), (text) => dim(text, shouldColor)],
+          colorizers: [
+            (text) => accent(text, shouldColor),
+            (text, _rowIndex, row) => colorizeEnabled(row[1] ?? text.trim(), text, shouldColor),
+            (text, _rowIndex, row) => colorizeCoverage(row[2] ?? text.trim(), text, shouldColor),
+            (text) => dim(text, shouldColor),
+            (text) => dim(text, shouldColor),
+          ],
         },
       ),
     );
@@ -1504,14 +1522,21 @@ const colorizeUsageConfidence = (
   return dim(text, shouldColor);
 };
 
+const colorizeCoverage = (coverage: string, text: string, shouldColor: boolean): string =>
+  coverage === "complete" ? success(text, shouldColor) : warning(text, shouldColor);
+
+const colorizeEnabled = (enabled: string, text: string, shouldColor: boolean): string =>
+  enabled === "enabled" ? success(text, shouldColor) : warning(text, shouldColor);
+
 const colorizeUsageSummaryCount = (
   rowIndex: number,
   text: string,
   shouldColor: boolean,
 ): string => {
   if (rowIndex === 0) return success(text, shouldColor);
-  if (rowIndex === 1 || rowIndex === 3) return warning(text, shouldColor);
-  if (rowIndex === 4) return accent(text, shouldColor);
+  if (rowIndex === 1 || rowIndex === 4) return warning(text, shouldColor);
+  if (rowIndex === 3) return colorizeCoverage(text.trim(), text, shouldColor);
+  if (rowIndex === 5) return accent(text, shouldColor);
   return dim(text, shouldColor);
 };
 
@@ -1566,6 +1591,10 @@ const formatUsageTimestamp = (timestamp: string | undefined): string => {
   if (timestamp === undefined) return "never";
   return timestamp.replace("T", " ").slice(0, 16);
 };
+
+const formatEvidenceKind = (evidenceKind: string | undefined): string => evidenceKind ?? "none";
+
+const formatEnabled = (enabled: boolean): string => (enabled ? "enabled" : "disabled");
 
 const compactSkillPath = (skillPath: string, context: SkillPathLabelContext = {}): string => {
   const normalizedPath = skillPath.split(path.sep).join("/");
@@ -1695,9 +1724,13 @@ const renderCleanupRecommendations = (
 ): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";
   const shouldColor = Boolean(options.color);
+  const usageBySkillPath = new Map(
+    report.usage.skillsByUsage.map((summary) => [summary.skillPath, summary]),
+  );
   const lines = [
     `${usageLabel("Usage recommendations", shouldColor)}:`,
     `${usageLabel("Context budget pressure", shouldColor)}: ${colorizePressure(report.usage.contextPressure.level, shouldColor)}`,
+    `${usageLabel("Usage coverage", shouldColor)}: ${colorizeCoverage(report.usage.coverageStatus, report.usage.coverageStatus, shouldColor)}`,
   ];
   if (report.usage.recommendations.length === 0) {
     lines.push(`- ${dim("No usage recommendations.", shouldColor)}`);
@@ -1717,17 +1750,26 @@ const renderCleanupRecommendations = (
             ]
           : []),
         ...renderTable(
-          ["Skill", "Confidence", "Path"],
-          shownRecommendations.map((recommendation) => [
-            recommendation.skillName,
-            recommendation.confidence,
-            compactSkillPath(recommendation.skillPath, { roots: report.scannedRoots }),
-          ]),
+          ["Skill", "Confidence", "Enabled", "Coverage", "Evidence", "Path"],
+          shownRecommendations.map((recommendation) => {
+            const usage = usageBySkillPath.get(recommendation.skillPath);
+            return [
+              recommendation.skillName,
+              recommendation.confidence,
+              formatEnabled(usage?.enabled ?? true),
+              usage?.coverageStatus ?? report.usage?.coverageStatus ?? "incomplete",
+              formatEvidenceKind(usage?.lastEvidenceKind),
+              compactSkillPath(recommendation.skillPath, { roots: report.scannedRoots }),
+            ];
+          }),
           {
             colorizers: [
               (text) => accent(text, shouldColor),
               (text, _rowIndex, row) =>
                 colorizeUsageConfidence(row[1] ?? text.trim(), text, shouldColor),
+              (text, _rowIndex, row) => colorizeEnabled(row[2] ?? text.trim(), text, shouldColor),
+              (text, _rowIndex, row) => colorizeCoverage(row[3] ?? text.trim(), text, shouldColor),
+              (text) => dim(text, shouldColor),
               (text) => dim(text, shouldColor),
             ],
           },

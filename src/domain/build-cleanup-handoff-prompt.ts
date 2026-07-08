@@ -21,6 +21,7 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
     `Scanned roots: ${input.report.scannedRoots.map((root) => `${root.ecosystem}: ${root.rootPath}`).join("; ")}`,
     `Skills analyzed: ${usage.totalSkillsAnalyzed}`,
     `Usage: ${usage.usedSkillCount} used, ${usage.unusedSkillCount} unused, ${usage.unknownSkillCount} unknown`,
+    `Coverage: ${usage.coverageStatus}`,
     `Context budget pressure: ${usage.contextPressure.level}`,
   ];
 
@@ -38,9 +39,10 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
       "- Preserve frequently used and recently used skills.",
       "- Preserve project-local skills unless there is strong evidence and clear user intent.",
       "- Do not delete skills.",
-      "- Only disable skills with a `disable-candidate` recommendation.",
+      "- Only disable selected high-confidence enabled skills with a `disable-candidate` recommendation.",
       "- Disable only the selected skills listed below; leave other cleanup candidates unchanged.",
       "- Do not modify skills recommended as keep, review, shorten-description, or merge-candidate.",
+      "- Preserve review items, unknown-coverage items, incomplete-coverage items, disabled-but-used recovery warnings, and disabled-used items.",
       "- Do not move skill directories.",
       "- For unused global/plugin skills, disable them the same way Codex `/skills` does: add or update `[[skills.config]]` entries in `~/.codex/config.toml` with the skill `path` and `enabled = false`.",
       "- Re-enable skills by using Codex `/skills` or removing the matching disabled config entry.",
@@ -59,6 +61,7 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
       "- Work only on the selected usage recommendations listed below.",
       "- Preserve unrelated user changes and existing skill intent.",
       "- Preserve frequently used and recently used skills unless the selected recommendation explicitly targets context reduction.",
+      "- Preserve review items, unknown-coverage items, incomplete-coverage items, disabled-but-used recovery warnings, and disabled-used items unless one is explicitly selected for review-only work.",
       "- Do not delete skill directories.",
       "- Do not disable skills unless the selected recommendation action is `disable-candidate`.",
       "- Do not expose raw Codex logs or transcript text.",
@@ -76,6 +79,7 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
       `- ${recommendation.action} ${recommendation.skillName}`,
       `  Path: ${recommendation.skillPath}`,
       `  Reason: ${recommendation.reason}`,
+      ...formatSelectedUsageEvidence(usage, recommendation.skillPath),
     );
   }
   if (recommendations.length === 0) {
@@ -90,6 +94,21 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
   );
 
   return lines.join("\n");
+};
+
+const formatSelectedUsageEvidence = (
+  usage: ScanReportUsage,
+  skillPath: string,
+): readonly string[] => {
+  const skill = usage.skillsByUsage.find((candidate) => candidate.skillPath === skillPath);
+  if (skill === undefined) return [];
+  return [
+    `  Enabled: ${skill.enabled ? "true" : "false"}`,
+    `  Coverage: ${skill.coverageStatus}`,
+    `  Recent uses: ${skill.recentUsageCount}`,
+    `  Last used: ${skill.lastUsedAt ?? "never"}`,
+    `  Evidence kind: ${skill.lastEvidenceKind ?? "none"}`,
+  ];
 };
 
 const formatActionInstructions = (actions: ReadonlySet<SkillCleanupAction>): readonly string[] => {

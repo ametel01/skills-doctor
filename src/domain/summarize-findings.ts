@@ -117,6 +117,9 @@ export const renderHumanSummary = (
       `${label("Usage analysis", shouldColor)}: ${success(String(report.usage.usedSkillCount), shouldColor)} used, ${warning(String(report.usage.unusedSkillCount), shouldColor)} unused, ${dim(String(report.usage.unknownSkillCount), shouldColor)} unknown`,
     );
     lines.push(
+      `${label("Usage coverage", shouldColor)}: ${colorizeCoverage(report.usage.coverageStatus, shouldColor)}`,
+    );
+    lines.push(
       `${label("Context budget pressure", shouldColor)}: ${colorizePressure(report.usage.contextPressure.level, shouldColor)}`,
     );
     if (report.usage.contextPressure.recentWarningCount > 0) {
@@ -128,6 +131,12 @@ export const renderHumanSummary = (
         `${label("Cleanup candidates", shouldColor)}: ${warning(String(cleanupCandidateCount), shouldColor)} enabled unused skills`,
       );
     }
+    const reviewItemCount = countUsageRecommendations(report, "review");
+    if (reviewItemCount > 0) {
+      lines.push(
+        `${label("Review items", shouldColor)}: ${warning(String(reviewItemCount), shouldColor)} need human confirmation before cleanup`,
+      );
+    }
   }
 
   return `${lines.join("\n")}\n`;
@@ -137,6 +146,13 @@ const countCleanupCandidates = (report: ScanReport): number =>
   report.usage?.recommendations.filter(
     (recommendation) => recommendation.action === "disable-candidate",
   ).length ?? 0;
+
+const countUsageRecommendations = (
+  report: ScanReport,
+  action: NonNullable<ScanReport["usage"]>["recommendations"][number]["action"],
+): number =>
+  report.usage?.recommendations.filter((recommendation) => recommendation.action === action)
+    .length ?? 0;
 
 const countSeverity = (findings: readonly Finding[], severity: Finding["severity"]): number =>
   findings.filter((finding) => finding.severity === severity).length;
@@ -328,6 +344,9 @@ const colorizePressure = (level: string, shouldColor: boolean): string => {
   if (level === "low") return success(level, shouldColor);
   return dim(level, shouldColor);
 };
+
+const colorizeCoverage = (status: string, shouldColor: boolean): string =>
+  status === "complete" ? success(status, shouldColor) : warning(status, shouldColor);
 
 const success = (text: string, shouldColor: boolean): string => color(text, 32, shouldColor);
 
