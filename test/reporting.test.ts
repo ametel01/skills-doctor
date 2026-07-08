@@ -619,6 +619,18 @@ const makeFinding = (overrides: Partial<Finding>): Finding => ({
 const makeUsageAnalysis = (): SkillUsageAnalysis => ({
   sourcePaths: ["/tmp/session.jsonl"],
   readableSourceCount: 1,
+  coverageStatus: "complete",
+  sourceCoverage: [
+    {
+      sourcePath: "/tmp/session.jsonl",
+      status: "complete",
+      recordCount: 1,
+      parsedRecordCount: 1,
+      invalidRecordCount: 0,
+      eventCount: 1,
+      diagnosticCodes: [],
+    },
+  ],
   diagnostics: [
     {
       code: "usage-source-unreadable",
@@ -639,6 +651,7 @@ const makeUsageAnalysis = (): SkillUsageAnalysis => ({
       skillPath: "/tmp/skills/used-skill/SKILL.md",
       sourcePath: "/tmp/session.jsonl",
       confidence: "high",
+      evidenceKind: "explicit-user-invocation",
       timestamp: "2026-06-20T00:00:00.000Z",
     },
   ],

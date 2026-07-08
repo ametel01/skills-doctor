@@ -4,6 +4,23 @@ import type { Diagnostic, SkillRecord } from "./types.js";
 
 export type SkillUsageTier = "frequent" | "recent" | "rare" | "unused" | "unknown";
 export type SkillUsageConfidence = "high" | "medium" | "none";
+export type SkillUsageEvidenceKind =
+  | "explicit-user-invocation"
+  | "codex-skill-markdown-link"
+  | "tool-skill-md-read"
+  | "assistant-announcement"
+  | "unknown-legacy";
+export type UsageSourceCoverageStatus = "complete" | "incomplete";
+
+export type UsageSourceCoverage = {
+  readonly sourcePath: string;
+  readonly status: UsageSourceCoverageStatus;
+  readonly recordCount: number;
+  readonly parsedRecordCount: number;
+  readonly invalidRecordCount: number;
+  readonly eventCount: number;
+  readonly diagnosticCodes: readonly string[];
+};
 
 export type SkillCleanupAction =
   | "keep"
@@ -17,6 +34,7 @@ export type SkillUsageEvent = {
   readonly skillPath: string;
   readonly sourcePath: string;
   readonly confidence: Exclude<SkillUsageConfidence, "none">;
+  readonly evidenceKind: SkillUsageEvidenceKind;
   readonly timestamp?: string | undefined;
 };
 
@@ -48,6 +66,8 @@ export type SkillUsageSummary = {
 export type SkillUsageAnalysis = {
   readonly sourcePaths: readonly string[];
   readonly readableSourceCount: number;
+  readonly coverageStatus: UsageSourceCoverageStatus;
+  readonly sourceCoverage: readonly UsageSourceCoverage[];
   readonly diagnostics: readonly Diagnostic[];
   readonly totalSkills: number;
   readonly usedSkillCount: number;
@@ -84,15 +104,15 @@ type MatchedUsageEvent = SkillUsageEvent & {
   readonly dedupeMarker: string;
 };
 
-type UsageSourceContentResult = {
+type ParsedUsageSource = {
   readonly sourcePath: string;
-  readonly content?: string | undefined;
-  readonly isTailTruncated?: boolean | undefined;
-  readonly diagnostic?: Diagnostic | undefined;
+  readonly readable: boolean;
+  readonly events: readonly MatchedUsageEvent[];
+  readonly coverage: UsageSourceCoverage;
+  readonly diagnostics: readonly Diagnostic[];
 };
 
 const DEFAULT_RECENT_WINDOW_DAYS = 30;
-const DEFAULT_MAX_FILE_BYTES = 1_000_000;
 const DEFAULT_FREQUENT_USE_THRESHOLD = 5;
 const DEFAULT_DESCRIPTION_COST_THRESHOLD = 280;
 
@@ -104,60 +124,35 @@ export const analyzeSkillUsage = async (
   const catalog = buildCatalog(input.skills);
   const aliasMap = buildAliasMap(catalog);
   const phraseMap = buildPhraseMap(catalog);
+  const skillPathMap = buildSkillPathMap(catalog);
   const events: MatchedUsageEvent[] = [];
+  const sourceCoverage: UsageSourceCoverage[] = [];
   let readableSourceCount = 0;
-  const maxFileBytes = normalizePositiveInteger(
-    input.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
-    DEFAULT_MAX_FILE_BYTES,
-  );
 
-  const sourceContents: UsageSourceContentResult[] = await Promise.all(
-    sourcePaths.map(async (sourcePath) => {
-      try {
-        return {
-          sourcePath,
-          ...(await readUsageSourceTail(sourcePath, maxFileBytes)),
-        } satisfies UsageSourceContentResult;
-      } catch (error: unknown) {
-        return {
-          sourcePath,
-          diagnostic: {
-            code: "usage-source-unreadable",
-            severity: "warning",
-            message: error instanceof Error ? error.message : `Unable to read ${sourcePath}`,
-            path: sourcePath,
-          } satisfies Diagnostic,
-        } satisfies UsageSourceContentResult;
-      }
-    }),
-  );
+  if (sourcePaths.length === 0) {
+    diagnostics.push({
+      code: "usage-source-none",
+      severity: "warning",
+      message: "No Codex usage sources were available, so usage coverage is incomplete.",
+    });
+  }
 
-  for (const { sourcePath, content, isTailTruncated = false, diagnostic } of sourceContents) {
-    if (diagnostic !== undefined) {
-      diagnostics.push(diagnostic);
-      continue;
-    }
-    if (content === undefined) {
-      diagnostics.push({
-        code: "usage-source-unreadable",
-        severity: "warning",
-        message: `Unable to read ${sourcePath}`,
-        path: sourcePath,
-      });
-      continue;
-    }
-
-    readableSourceCount += 1;
-    events.push(
-      ...parseUsageSource({
+  const parsedSources = await Promise.all(
+    sourcePaths.map((sourcePath) =>
+      parseUsageSource({
         sourcePath,
-        content,
-        isTailTruncated,
         aliasMap,
         phraseMap,
-        diagnostics,
+        skillPathMap,
       }),
-    );
+    ),
+  );
+
+  for (const source of parsedSources) {
+    sourceCoverage.push(source.coverage);
+    diagnostics.push(...source.diagnostics);
+    if (source.readable) readableSourceCount += 1;
+    events.push(...source.events);
   }
 
   const dedupedEvents: MatchedUsageEvent[] = [];
@@ -173,6 +168,7 @@ export const analyzeSkillUsage = async (
     catalog,
     sourcePaths,
     readableSourceCount,
+    sourceCoverage,
     diagnostics,
     events: dedupedEvents,
     now: input.now ?? new Date(),
@@ -182,60 +178,124 @@ export const analyzeSkillUsage = async (
   });
 };
 
-const parseUsageSource = (input: {
+const parseUsageSource = async (input: {
   readonly sourcePath: string;
-  readonly content: string;
-  readonly isTailTruncated: boolean;
   readonly aliasMap: ReadonlyMap<string, readonly CatalogSkill[]>;
   readonly phraseMap: ReadonlyMap<string, readonly CatalogSkill[]>;
-  readonly diagnostics: Diagnostic[];
-}): readonly MatchedUsageEvent[] => {
+  readonly skillPathMap: ReadonlyMap<string, readonly CatalogSkill[]>;
+}): Promise<ParsedUsageSource> => {
   const events: MatchedUsageEvent[] = [];
-  const lines = input.content.split(/\r?\n/);
+  const diagnostics: Diagnostic[] = [];
+  const diagnosticCodes = new Set<string>();
+  let recordCount = 0;
+  let parsedRecordCount = 0;
+  let invalidRecordCount = 0;
+  const handle = await open(input.sourcePath, "r").catch((error: unknown) => {
+    const diagnostic = {
+      code: "usage-source-unreadable",
+      severity: "warning",
+      message: error instanceof Error ? error.message : `Unable to read ${input.sourcePath}`,
+      path: input.sourcePath,
+    } satisfies Diagnostic;
+    diagnostics.push(diagnostic);
+    diagnosticCodes.add(diagnostic.code);
+    return undefined;
+  });
 
-  for (const [lineIndex, line] of lines.entries()) {
-    const trimmed = line.trim();
-    if (trimmed.length === 0) continue;
-
-    const record = parseJsonLine(
-      trimmed,
-      input.sourcePath,
-      input.diagnostics,
-      input.isTailTruncated && lineIndex === 0,
-    );
-    if (record === undefined) continue;
-
-    const assistantText = extractAssistantText(record);
-    if (assistantText.length === 0) continue;
-
-    const timestamp = extractTimestamp(record);
-    const dedupeMarker = extractTurnMarker(record) ?? timestamp ?? String(lineIndex + 1);
-    for (const match of matchSkillUse(assistantText, input.aliasMap, input.phraseMap)) {
-      events.push({
-        skillKey: skillKey(match.skill.skill),
-        dedupeMarker,
-        skillName: match.skill.skillName,
-        skillPath: match.skill.skill.skillPath,
+  if (handle === undefined) {
+    return {
+      sourcePath: input.sourcePath,
+      readable: false,
+      events,
+      diagnostics,
+      coverage: {
         sourcePath: input.sourcePath,
-        confidence: match.confidence,
-        ...(timestamp === undefined ? {} : { timestamp }),
-      });
-    }
+        status: "incomplete",
+        recordCount,
+        parsedRecordCount,
+        invalidRecordCount,
+        eventCount: events.length,
+        diagnosticCodes: [...diagnosticCodes].sort(),
+      },
+    };
   }
 
-  return events;
+  try {
+    for await (const line of handle.readLines()) {
+      const trimmed = line.trim();
+      if (trimmed.length === 0) continue;
+      recordCount += 1;
+
+      const record = parseJsonLine(trimmed, input.sourcePath, diagnostics);
+      if (record === undefined) {
+        invalidRecordCount += 1;
+        diagnosticCodes.add("usage-source-invalid-json");
+        continue;
+      }
+      parsedRecordCount += 1;
+
+      const timestamp = extractTimestamp(record);
+      const dedupeMarker = extractTurnMarker(record) ?? timestamp ?? String(recordCount);
+
+      for (const match of matchRecordSkillUse({
+        record,
+        aliasMap: input.aliasMap,
+        phraseMap: input.phraseMap,
+        skillPathMap: input.skillPathMap,
+        sourcePath: input.sourcePath,
+        diagnostics,
+        diagnosticCodes,
+      })) {
+        events.push({
+          skillKey: skillKey(match.skill.skill),
+          dedupeMarker,
+          skillName: match.skill.skillName,
+          skillPath: match.skill.skill.skillPath,
+          sourcePath: input.sourcePath,
+          confidence: match.confidence,
+          evidenceKind: match.evidenceKind,
+          ...(timestamp === undefined ? {} : { timestamp }),
+        });
+      }
+    }
+  } catch (error: unknown) {
+    const diagnostic = {
+      code: "usage-source-unreadable",
+      severity: "warning",
+      message: error instanceof Error ? error.message : `Unable to read ${input.sourcePath}`,
+      path: input.sourcePath,
+    } satisfies Diagnostic;
+    diagnostics.push(diagnostic);
+    diagnosticCodes.add(diagnostic.code);
+  } finally {
+    await handle.close();
+  }
+
+  return {
+    sourcePath: input.sourcePath,
+    readable: true,
+    events,
+    diagnostics,
+    coverage: {
+      sourcePath: input.sourcePath,
+      status: diagnosticCodes.size === 0 ? "complete" : "incomplete",
+      recordCount,
+      parsedRecordCount,
+      invalidRecordCount,
+      eventCount: events.length,
+      diagnosticCodes: [...diagnosticCodes].sort(),
+    },
+  };
 };
 
 const parseJsonLine = (
   line: string,
   sourcePath: string,
   diagnostics: Diagnostic[],
-  suppressDiagnostic = false,
 ): unknown | undefined => {
   try {
     return JSON.parse(line) as unknown;
   } catch (error) {
-    if (suppressDiagnostic) return undefined;
     diagnostics.push({
       code: "usage-source-invalid-json",
       severity: "warning",
@@ -246,62 +306,178 @@ const parseJsonLine = (
   }
 };
 
-const readUsageSourceTail = async (
-  sourcePath: string,
-  maxBytes: number,
-): Promise<{ readonly content: string; readonly isTailTruncated: boolean }> => {
-  const handle = await open(sourcePath, "r");
-  try {
-    const stats = await handle.stat();
-    const byteLength = Math.min(stats.size, maxBytes);
-    const buffer = Buffer.alloc(byteLength);
-    await handle.read(buffer, 0, byteLength, stats.size - byteLength);
-    return {
-      content: buffer.toString("utf8"),
-      isTailTruncated: stats.size > byteLength,
-    };
-  } finally {
-    await handle.close();
-  }
-};
-
-const matchSkillUse = (
-  assistantText: string,
-  aliasMap: ReadonlyMap<string, readonly CatalogSkill[]>,
-  phraseMap: ReadonlyMap<string, readonly CatalogSkill[]>,
-): readonly {
+const matchRecordSkillUse = (input: {
+  readonly record: unknown;
+  readonly aliasMap: ReadonlyMap<string, readonly CatalogSkill[]>;
+  readonly phraseMap: ReadonlyMap<string, readonly CatalogSkill[]>;
+  readonly skillPathMap: ReadonlyMap<string, readonly CatalogSkill[]>;
+  readonly sourcePath: string;
+  readonly diagnostics: Diagnostic[];
+  readonly diagnosticCodes: Set<string>;
+}): readonly {
   readonly skill: CatalogSkill;
   readonly confidence: Exclude<SkillUsageConfidence, "none">;
+  readonly evidenceKind: SkillUsageEvidenceKind;
 }[] => {
   const matches: {
     readonly skill: CatalogSkill;
     readonly confidence: Exclude<SkillUsageConfidence, "none">;
+    readonly evidenceKind: SkillUsageEvidenceKind;
   }[] = [];
-  const highConfidencePattern = /(?:using|use|used)\s+(?:the\s+)?`([^`]+)`\s+skill/giu;
-  for (const match of assistantText.matchAll(highConfidencePattern)) {
-    const alias = normalizeAlias(match[1] ?? "");
-    const candidates = aliasMap.get(alias) ?? [];
-    if (candidates.length === 1) {
-      const skill = candidates[0];
-      if (skill !== undefined) matches.push({ skill, confidence: "high" });
+
+  const userText = extractRoleText(input.record, "user");
+  for (const alias of extractExplicitUserAliases(userText)) {
+    const skill = resolveAlias({
+      alias,
+      aliasMap: input.aliasMap,
+      sourcePath: input.sourcePath,
+      diagnostics: input.diagnostics,
+      diagnosticCodes: input.diagnosticCodes,
+    });
+    if (skill !== undefined) {
+      matches.push({ skill, confidence: "high", evidenceKind: "explicit-user-invocation" });
+    }
+  }
+
+  for (const skillPath of extractSkillMarkdownPaths(userText)) {
+    const skill = resolveSkillPath({
+      skillPath,
+      skillPathMap: input.skillPathMap,
+      sourcePath: input.sourcePath,
+      diagnostics: input.diagnostics,
+      diagnosticCodes: input.diagnosticCodes,
+    });
+    if (skill !== undefined) {
+      matches.push({ skill, confidence: "high", evidenceKind: "codex-skill-markdown-link" });
+    }
+  }
+
+  if (isFunctionOrToolCallRecord(input.record)) {
+    for (const skillPath of extractSkillMarkdownPathsFromUnknown(input.record)) {
+      const skill = resolveSkillPath({
+        skillPath,
+        skillPathMap: input.skillPathMap,
+        sourcePath: input.sourcePath,
+        diagnostics: input.diagnostics,
+        diagnosticCodes: input.diagnosticCodes,
+      });
+      if (skill !== undefined) {
+        matches.push({ skill, confidence: "high", evidenceKind: "tool-skill-md-read" });
+      }
+    }
+  }
+
+  const assistantText = extractRoleText(input.record, "assistant");
+  const explicitAssistantPattern = /(?:using|use|used)\s+(?:the\s+)?`([^`]+)`\s+skill/giu;
+  for (const match of assistantText.matchAll(explicitAssistantPattern)) {
+    const skill = resolveAlias({
+      alias: match[1] ?? "",
+      aliasMap: input.aliasMap,
+      sourcePath: input.sourcePath,
+      diagnostics: input.diagnostics,
+      diagnosticCodes: input.diagnosticCodes,
+    });
+    if (skill !== undefined) {
+      matches.push({ skill, confidence: "medium", evidenceKind: "assistant-announcement" });
     }
   }
 
   const normalizedText = normalizeTextForPhraseSearch(assistantText);
-  for (const [phrase, candidates] of phraseMap) {
-    if (candidates.length !== 1) continue;
+  for (const [phrase, candidates] of input.phraseMap) {
     if (!containsPhrase(normalizedText, `${phrase} skill`)) continue;
-    const skill = candidates[0];
-    if (skill !== undefined) matches.push({ skill, confidence: "medium" });
+    const skill = resolveCandidates({
+      candidates,
+      sourcePath: input.sourcePath,
+      diagnostics: input.diagnostics,
+      diagnosticCodes: input.diagnosticCodes,
+    });
+    if (skill !== undefined) {
+      matches.push({ skill, confidence: "medium", evidenceKind: "assistant-announcement" });
+    }
   }
 
   return matches;
+};
+
+const extractExplicitUserAliases = (text: string): readonly string[] => {
+  const aliases: string[] = [];
+  const pattern = /(^|[^\w:.-])\$([a-z0-9](?:[a-z0-9._:-]*[a-z0-9])?)(?=$|[^a-z0-9_:-])/giu;
+  for (const match of text.matchAll(pattern)) {
+    const alias = match[2];
+    if (alias !== undefined) aliases.push(alias);
+  }
+  return aliases;
+};
+
+const extractSkillMarkdownPaths = (text: string): readonly string[] => {
+  const paths: string[] = [];
+  const markdownPattern = /\[[^\]]*\]\(([^)]*SKILL\.md(?:#[^)]*)?)\)/giu;
+  for (const match of text.matchAll(markdownPattern)) {
+    const linkedPath = normalizeSkillPathReference(match[1] ?? "");
+    if (linkedPath !== undefined) paths.push(linkedPath);
+  }
+  return paths;
+};
+
+const extractSkillMarkdownPathsFromUnknown = (value: unknown): readonly string[] => {
+  const paths: string[] = [];
+  const pathPattern = /(?:file:\/\/)?(\/[^\s"'`),]+\/SKILL\.md)(?:#[^\s"'`),]+)?/giu;
+  for (const text of collectStringValues(value)) {
+    for (const match of text.matchAll(pathPattern)) {
+      const linkedPath = normalizeSkillPathReference(match[1] ?? "");
+      if (linkedPath !== undefined) paths.push(linkedPath);
+    }
+  }
+  return paths;
+};
+
+const resolveAlias = (input: {
+  readonly alias: string;
+  readonly aliasMap: ReadonlyMap<string, readonly CatalogSkill[]>;
+  readonly sourcePath: string;
+  readonly diagnostics: Diagnostic[];
+  readonly diagnosticCodes: Set<string>;
+}): CatalogSkill | undefined => {
+  const candidates = input.aliasMap.get(normalizeAlias(input.alias)) ?? [];
+  return resolveCandidates({ ...input, candidates });
+};
+
+const resolveSkillPath = (input: {
+  readonly skillPath: string;
+  readonly skillPathMap: ReadonlyMap<string, readonly CatalogSkill[]>;
+  readonly sourcePath: string;
+  readonly diagnostics: Diagnostic[];
+  readonly diagnosticCodes: Set<string>;
+}): CatalogSkill | undefined => {
+  const candidates = input.skillPathMap.get(normalizeSkillPath(input.skillPath)) ?? [];
+  return resolveCandidates({ ...input, candidates });
+};
+
+const resolveCandidates = (input: {
+  readonly candidates: readonly CatalogSkill[];
+  readonly sourcePath: string;
+  readonly diagnostics: Diagnostic[];
+  readonly diagnosticCodes: Set<string>;
+}): CatalogSkill | undefined => {
+  if (input.candidates.length === 1) return input.candidates[0];
+  if (input.candidates.length > 1) {
+    const diagnostic = {
+      code: "usage-evidence-ambiguous",
+      severity: "warning",
+      message: "Usage evidence matched multiple scanned skills and was not assigned.",
+      path: input.sourcePath,
+    } satisfies Diagnostic;
+    input.diagnostics.push(diagnostic);
+    input.diagnosticCodes.add(diagnostic.code);
+  }
+  return undefined;
 };
 
 const buildAnalysis = (input: {
   readonly catalog: readonly CatalogSkill[];
   readonly sourcePaths: readonly string[];
   readonly readableSourceCount: number;
+  readonly sourceCoverage: readonly UsageSourceCoverage[];
   readonly diagnostics: readonly Diagnostic[];
   readonly events: readonly MatchedUsageEvent[];
   readonly now: Date;
@@ -361,6 +537,12 @@ const buildAnalysis = (input: {
   return {
     sourcePaths: input.sourcePaths,
     readableSourceCount: input.readableSourceCount,
+    coverageStatus:
+      input.sourceCoverage.length > 0 &&
+      input.sourceCoverage.every((coverage) => coverage.status === "complete")
+        ? "complete"
+        : "incomplete",
+    sourceCoverage: input.sourceCoverage,
     diagnostics: input.diagnostics,
     totalSkills: input.catalog.length,
     usedSkillCount: summaries.filter((summary) => summary.usageCount > 0).length,
@@ -494,18 +676,31 @@ const buildPhraseMap = (
   return map;
 };
 
-const extractAssistantText = (record: unknown): string => {
+const buildSkillPathMap = (
+  catalog: readonly CatalogSkill[],
+): ReadonlyMap<string, readonly CatalogSkill[]> => {
+  const map = new Map<string, CatalogSkill[]>();
+  for (const skill of catalog) {
+    const key = normalizeSkillPath(skill.skill.skillPath);
+    const existing = map.get(key) ?? [];
+    existing.push(skill);
+    map.set(key, existing);
+  }
+  return map;
+};
+
+const extractRoleText = (record: unknown, role: "assistant" | "user"): string => {
   if (!isRecord(record)) return "";
-  if (record.role === "assistant") return collectText(record.content ?? record.text);
+  if (record.role === role) return collectText(record.content ?? record.text);
   const message = isRecord(record.message) ? record.message : undefined;
-  if (message?.role === "assistant") return collectText(message.content ?? message.text);
+  if (message?.role === role) return collectText(message.content ?? message.text);
   const payload = isRecord(record.payload) ? record.payload : undefined;
-  if (payload?.role === "assistant") return collectText(payload.content ?? payload.text);
+  if (payload?.role === role) return collectText(payload.content ?? payload.text);
   const payloadMessage = isRecord(payload?.message) ? payload.message : undefined;
-  if (payloadMessage?.role === "assistant") {
+  if (payloadMessage?.role === role) {
     return collectText(payloadMessage.content ?? payloadMessage.text);
   }
-  if (typeof record.type === "string" && record.type.includes("assistant")) {
+  if (typeof record.type === "string" && record.type.includes(role)) {
     return collectText(
       record.content ??
         record.text ??
@@ -520,6 +715,13 @@ const extractAssistantText = (record: unknown): string => {
   return "";
 };
 
+const isFunctionOrToolCallRecord = (record: unknown): boolean => {
+  if (!isRecord(record)) return false;
+  return collectStringValues(record).some((value) =>
+    /function_call|tool_call|exec_command|read_mcp_resource|read_file|open|cat|sed/iu.test(value),
+  );
+};
+
 const collectText = (value: unknown): string => {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) {
@@ -532,6 +734,24 @@ const collectText = (value: unknown): string => {
   }
   if (!isRecord(value)) return "";
   return collectText(value.text ?? value.content);
+};
+
+const collectStringValues = (value: unknown): readonly string[] => {
+  const strings: string[] = [];
+  const visit = (candidate: unknown): void => {
+    if (typeof candidate === "string") {
+      strings.push(candidate);
+      return;
+    }
+    if (Array.isArray(candidate)) {
+      for (const item of candidate) visit(item);
+      return;
+    }
+    if (!isRecord(candidate)) return;
+    for (const child of Object.values(candidate)) visit(child);
+  };
+  visit(value);
+  return strings;
 };
 
 const extractTurnMarker = (record: unknown): string | undefined => {
@@ -649,7 +869,7 @@ const timestampValue = (timestamp: string | undefined): number => {
 };
 
 const eventKey = (event: MatchedUsageEvent): string =>
-  `${event.sourcePath}:${event.dedupeMarker}:${event.skillKey}`;
+  `${event.sourcePath}:${event.dedupeMarker}:${event.skillKey}:${event.evidenceKind}`;
 
 const skillKey = (skill: SkillRecord): string => skill.skillPath;
 
@@ -686,6 +906,17 @@ const normalizeAlias = (value: string): string =>
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+const normalizeSkillPathReference = (value: string): string | undefined => {
+  const withoutFragment = value.replace(/^file:\/\//u, "").replace(/#.*$/u, "");
+  try {
+    return normalizeSkillPath(decodeURIComponent(withoutFragment));
+  } catch {
+    return normalizeSkillPath(withoutFragment);
+  }
+};
+
+const normalizeSkillPath = (value: string): string => path.normalize(value.trim());
+
 const normalizeTextForPhraseSearch = (value: string): string =>
   ` ${value
     .toLowerCase()
@@ -695,11 +926,6 @@ const normalizeTextForPhraseSearch = (value: string): string =>
 
 const containsPhrase = (normalizedText: string, phrase: string): boolean =>
   normalizedText.includes(` ${phrase} `);
-
-const normalizePositiveInteger = (value: number, fallback: number): number => {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.max(1, Math.floor(value));
-};
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

@@ -1,7 +1,10 @@
 import type {
   SkillCleanupRecommendation,
   SkillUsageAnalysis,
+  SkillUsageEvent,
   SkillUsageSummary,
+  UsageSourceCoverage,
+  UsageSourceCoverageStatus,
 } from "./analyze-skill-usage.js";
 import { calculateScore, type ScoreSummary } from "./calculate-score.js";
 import type { ContextBudgetPressure } from "./discover-usage-sources.js";
@@ -53,6 +56,8 @@ export type ScanReport = {
 export type ScanReportUsage = {
   readonly sourcePaths: readonly string[];
   readonly readableSourceCount: number;
+  readonly coverageStatus: UsageSourceCoverageStatus;
+  readonly sourceCoverage: readonly UsageSourceCoverage[];
   readonly diagnostics: readonly Diagnostic[];
   readonly contextPressure: ContextBudgetPressure;
   readonly totalSkillsAnalyzed: number;
@@ -61,6 +66,7 @@ export type ScanReportUsage = {
   readonly unknownSkillCount: number;
   readonly duplicateSkillCount: number;
   readonly pluginContributedSkillCount: number;
+  readonly events: readonly SkillUsageEvent[];
   readonly skillsByUsage: readonly SkillUsageSummary[];
   readonly recommendations: readonly SkillCleanupRecommendation[];
   readonly topRecommendations: readonly SkillCleanupRecommendation[];
@@ -138,6 +144,8 @@ export const buildScanReport = (input: BuildScanReportInput): ScanReport => {
 const buildReportUsage = (input: BuildScanReportUsageInput): ScanReportUsage => ({
   sourcePaths: input.analysis.sourcePaths,
   readableSourceCount: input.analysis.readableSourceCount,
+  coverageStatus: input.analysis.coverageStatus,
+  sourceCoverage: input.analysis.sourceCoverage,
   diagnostics: input.analysis.diagnostics,
   contextPressure: input.contextPressure,
   totalSkillsAnalyzed: input.analysis.totalSkills,
@@ -146,6 +154,7 @@ const buildReportUsage = (input: BuildScanReportUsageInput): ScanReportUsage => 
   unknownSkillCount: input.analysis.unknownSkillCount,
   duplicateSkillCount: input.analysis.duplicateSkillCount,
   pluginContributedSkillCount: input.analysis.pluginContributedSkillCount,
+  events: input.analysis.events,
   skillsByUsage: input.analysis.skillsByUsage,
   recommendations: input.analysis.recommendations,
   topRecommendations: input.analysis.recommendations.filter(

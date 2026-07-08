@@ -132,6 +132,8 @@ const makeReport = (
   usage: {
     sourcePaths: [],
     readableSourceCount: 0,
+    coverageStatus: "complete",
+    sourceCoverage: [],
     diagnostics: [],
     contextPressure: {
       level: "low",
@@ -143,6 +145,7 @@ const makeReport = (
     unknownSkillCount: 0,
     duplicateSkillCount: 0,
     pluginContributedSkillCount: 0,
+    events: [],
     skillsByUsage: [],
     recommendations: [
       {

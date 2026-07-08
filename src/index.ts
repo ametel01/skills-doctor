@@ -6,8 +6,11 @@ export {
   type SkillUsageAnalysis,
   type SkillUsageConfidence,
   type SkillUsageEvent,
+  type SkillUsageEvidenceKind,
   type SkillUsageSummary,
   type SkillUsageTier,
+  type UsageSourceCoverage,
+  type UsageSourceCoverageStatus,
 } from "./domain/analyze-skill-usage.js";
 export {
   type BuildCleanupHandoffPromptInput,
