@@ -128,6 +128,28 @@ describe("skill usage analysis", () => {
     expect(actions(analysis, "agent-coding-workflow")).toEqual(["review"]);
   });
 
+  it("marks analysis with no usage sources as incomplete coverage", async () => {
+    const analysis = await analyzeSkillUsage({
+      skills: [buildRecord({ name: "agent-coding-workflow", source: "global" })],
+      usageSourcePaths: [],
+    });
+
+    expect(analysis.sourcePaths).toEqual([]);
+    expect(analysis.sourceCoverage).toEqual([]);
+    expect(analysis.coverageStatus).toBe("incomplete");
+    expect(analysis.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "usage-source-none",
+        severity: "warning",
+      }),
+    ]);
+    expect(summary(analysis, "agent-coding-workflow")).toMatchObject({
+      tier: "unknown",
+      usageCount: 0,
+    });
+    expect(actions(analysis, "agent-coding-workflow")).toEqual(["review"]);
+  });
+
   it("matches medium-confidence phrases only when they map to one known skill", async () => {
     const usageSource = path.join(directory, "session.jsonl");
     await writeJsonl(usageSource, [

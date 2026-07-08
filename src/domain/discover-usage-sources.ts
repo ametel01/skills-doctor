@@ -144,7 +144,16 @@ const findJsonlFiles = async (input: {
   readonly diagnostics: Diagnostic[];
   readonly fileSystem: UsageSourceFileSystem | undefined;
 }): Promise<readonly CandidateFile[]> => {
-  if (input.maxFiles <= 0) return [];
+  if (input.maxFiles <= 0) {
+    input.diagnostics.push({
+      code: "usage-source-discovery-truncated",
+      severity: "warning",
+      message:
+        "Codex session source discovery is capped at 0 files, so session coverage is incomplete.",
+      path: input.directory,
+    });
+    return [];
+  }
 
   const state: DiscoveryState = {
     candidates: [],
@@ -153,7 +162,17 @@ const findJsonlFiles = async (input: {
     ...input,
     state,
   });
-  return state.candidates.sort(compareCandidateFiles).slice(0, input.maxFiles);
+  const sortedCandidates = state.candidates.sort(compareCandidateFiles);
+  if (sortedCandidates.length > input.maxFiles) {
+    const omittedCount = sortedCandidates.length - input.maxFiles;
+    input.diagnostics.push({
+      code: "usage-source-discovery-truncated",
+      severity: "warning",
+      message: `Discovered ${sortedCandidates.length} recent Codex session sources but included ${input.maxFiles}; ${omittedCount} recent sources were omitted, so usage coverage is incomplete.`,
+      path: input.directory,
+    });
+  }
+  return sortedCandidates.slice(0, input.maxFiles);
 };
 
 type DiscoveryState = {

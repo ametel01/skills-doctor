@@ -65,6 +65,13 @@ describe("Codex usage source discovery", () => {
     expect(result.usageSourcePaths).toHaveLength(1);
     expect(result.usageSourcePaths[0]).toMatch(/recent-[12]\.jsonl$/u);
     expect(result.usageSourcePaths).not.toContain(older);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "usage-source-discovery-truncated",
+        severity: "warning",
+        path: path.join(homeDir, ".codex", "sessions"),
+      }),
+    ]);
     expect(result.contextPressure.level).toBe("low");
   });
 
@@ -94,6 +101,13 @@ describe("Codex usage source discovery", () => {
     });
 
     expect(result.usageSourcePaths).toEqual([newest]);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "usage-source-discovery-truncated",
+        severity: "warning",
+        path: path.join(homeDir, ".codex", "sessions"),
+      }),
+    ]);
     expect(result.contextPressure.level).toBe("low");
   });
 
@@ -135,6 +149,13 @@ describe("Codex usage source discovery", () => {
     expect(result.usageSourcePaths).toEqual([sessionPaths[11], sessionPaths[10]]);
     expect(inspectedSessionFiles.length).toBeGreaterThan(0);
     expect(inspectedSessionFiles).toHaveLength(sessionPaths.length);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "usage-source-discovery-truncated",
+        severity: "warning",
+        path: path.join(homeDir, ".codex", "sessions"),
+      }),
+    ]);
     expect(result.contextPressure.level).toBe("low");
   });
 

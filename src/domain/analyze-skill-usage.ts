@@ -129,6 +129,14 @@ export const analyzeSkillUsage = async (
   const sourceCoverage: UsageSourceCoverage[] = [];
   let readableSourceCount = 0;
 
+  if (sourcePaths.length === 0) {
+    diagnostics.push({
+      code: "usage-source-none",
+      severity: "warning",
+      message: "No Codex usage sources were available, so usage coverage is incomplete.",
+    });
+  }
+
   const parsedSources = await Promise.all(
     sourcePaths.map((sourcePath) =>
       parseUsageSource({
@@ -529,9 +537,11 @@ const buildAnalysis = (input: {
   return {
     sourcePaths: input.sourcePaths,
     readableSourceCount: input.readableSourceCount,
-    coverageStatus: input.sourceCoverage.every((coverage) => coverage.status === "complete")
-      ? "complete"
-      : "incomplete",
+    coverageStatus:
+      input.sourceCoverage.length > 0 &&
+      input.sourceCoverage.every((coverage) => coverage.status === "complete")
+        ? "complete"
+        : "incomplete",
     sourceCoverage: input.sourceCoverage,
     diagnostics: input.diagnostics,
     totalSkills: input.catalog.length,
