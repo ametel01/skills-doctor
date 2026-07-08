@@ -55,14 +55,14 @@ describe("skill usage analysis", () => {
     expect(summary(analysis, "gh-fix-ci")).toMatchObject({
       usageCount: 1,
       recentUsageCount: 1,
-      tier: "recent",
+      tier: "unknown",
       confidence: "medium",
       lastUsedAt: "2026-06-15T00:00:00.000Z",
     });
     expect(summary(analysis, "teach")).toMatchObject({
       usageCount: 5,
       recentUsageCount: 5,
-      tier: "frequent",
+      tier: "unknown",
       confidence: "medium",
     });
     expect(summary(analysis, "unused-global")).toMatchObject({
@@ -71,7 +71,7 @@ describe("skill usage analysis", () => {
       tier: "unused",
       confidence: "none",
     });
-    expect(actions(analysis, "teach")).toEqual(["keep", "shorten-description"]);
+    expect(actions(analysis, "teach")).toEqual(["review"]);
     expect(actions(analysis, "unused-global")).toEqual(["disable-candidate"]);
     expect(analysis.skillsByUsage.map((skill) => skill.skillName)).toEqual([
       "teach",
@@ -101,7 +101,7 @@ describe("skill usage analysis", () => {
     expect(summary(analysis, "agent-coding-workflow")).toMatchObject({
       usageCount: 3,
       recentUsageCount: 1,
-      tier: "recent",
+      tier: "unknown",
     });
   });
 
@@ -150,6 +150,47 @@ describe("skill usage analysis", () => {
     expect(actions(analysis, "agent-coding-workflow")).toEqual(["review"]);
   });
 
+  it("keeps no-evidence skills out of cleanup candidates when discovery coverage was capped", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    await writeJsonl(usageSource, [user("2026-06-20T00:00:00.000Z", "Use $known-skill for this.")]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [
+        buildRecord({ name: "known-skill", source: "global" }),
+        buildRecord({ name: "no-evidence-skill", source: "global" }),
+      ],
+      usageSourcePaths: [usageSource],
+      coverageDiagnostics: [
+        {
+          code: "usage-source-discovery-truncated",
+          severity: "warning",
+          message: "Recent Codex session sources were omitted.",
+          path: path.dirname(usageSource),
+        },
+      ],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.coverageStatus).toBe("incomplete");
+    expect(summary(analysis, "known-skill")).toMatchObject({
+      usageCount: 1,
+      tier: "recent",
+      confidence: "high",
+    });
+    expect(summary(analysis, "no-evidence-skill")).toMatchObject({
+      usageCount: 0,
+      tier: "unknown",
+      confidence: "none",
+    });
+    expect(actions(analysis, "no-evidence-skill")).toEqual(["review"]);
+    expect(analysis.recommendations).not.toContainEqual(
+      expect.objectContaining({
+        action: "disable-candidate",
+        skillName: "no-evidence-skill",
+      }),
+    );
+  });
+
   it("matches medium-confidence phrases only when they map to one known skill", async () => {
     const usageSource = path.join(directory, "session.jsonl");
     await writeJsonl(usageSource, [
@@ -170,11 +211,11 @@ describe("skill usage analysis", () => {
     expect(summary(analysis, "agent-coding-workflow")).toMatchObject({
       usageCount: 1,
       confidence: "medium",
-      tier: "recent",
+      tier: "unknown",
     });
     expect(analysis.skillsByUsage.filter((skill) => skill.skillName === "shared-review")).toEqual([
-      expect.objectContaining({ usageCount: 0, tier: "unused" }),
-      expect.objectContaining({ usageCount: 0, tier: "unused" }),
+      expect.objectContaining({ usageCount: 0, tier: "unknown" }),
+      expect.objectContaining({ usageCount: 0, tier: "unknown" }),
     ]);
   });
 
@@ -206,9 +247,10 @@ describe("skill usage analysis", () => {
     expect(summary(analysis, "agent-coding-workflow")).toMatchObject({
       usageCount: 1,
       confidence: "medium",
-      tier: "recent",
+      tier: "unknown",
       lastUsedAt: "2026-06-20T00:00:00.000Z",
     });
+    expect(actions(analysis, "agent-coding-workflow")).toEqual(["review"]);
   });
 
   it("records assistant prose-only announcements as medium-confidence weak evidence", async () => {
@@ -238,8 +280,9 @@ describe("skill usage analysis", () => {
     expect(summary(analysis, "weak-announcement")).toMatchObject({
       usageCount: 1,
       confidence: "medium",
-      tier: "recent",
+      tier: "unknown",
     });
+    expect(actions(analysis, "weak-announcement")).toEqual(["review"]);
     expect(actions(analysis, "weak-announcement")).not.toContain("disable-candidate");
   });
 
@@ -491,8 +534,8 @@ describe("skill usage analysis", () => {
       }),
     ]);
     expect(analysis.skillsByUsage).toEqual([
-      expect.objectContaining({ skillName: "shared-review", usageCount: 0, tier: "unused" }),
-      expect.objectContaining({ skillName: "shared-review", usageCount: 0, tier: "unused" }),
+      expect.objectContaining({ skillName: "shared-review", usageCount: 0, tier: "unknown" }),
+      expect.objectContaining({ skillName: "shared-review", usageCount: 0, tier: "unknown" }),
     ]);
   });
 
@@ -565,10 +608,10 @@ describe("skill usage analysis", () => {
 
     const serialized = JSON.stringify(analysis);
 
-    expect(summary(analysis, "front-only")).toMatchObject({ usageCount: 1, tier: "recent" });
+    expect(summary(analysis, "front-only")).toMatchObject({ usageCount: 1, tier: "unknown" });
     expect(summary(analysis, "tail-used")).toMatchObject({
       usageCount: 1,
-      tier: "recent",
+      tier: "unknown",
       lastUsedAt: "2026-06-20T00:00:00.000Z",
     });
     expect(serialized).not.toContain(privateFrontText);
@@ -600,7 +643,7 @@ describe("skill usage analysis", () => {
     expect(summary(analysis, "gh-fix-ci")).toMatchObject({
       pluginName: "github",
       usageCount: 1,
-      tier: "recent",
+      tier: "unknown",
     });
     expect(analysis.pluginContributedSkillCount).toBe(1);
   });
@@ -681,12 +724,17 @@ describe("skill usage analysis", () => {
     expect(summary(analysis, "disabled-used")).toMatchObject({
       enabled: false,
       usageCount: 1,
-      tier: "recent",
+      tier: "unknown",
     });
     expect(actions(analysis, "disabled-used")).toEqual(["review"]);
     expect(summary(analysis, "disabled-used").recommendations[0]?.reason).toContain(
       "recover or re-enable",
     );
+    expect(summary(analysis, "disabled-unused")).toMatchObject({
+      enabled: false,
+      usageCount: 0,
+      tier: "unknown",
+    });
     expect(actions(analysis, "disabled-unused")).toEqual([]);
     expect(analysis.recommendations).toEqual(
       expect.arrayContaining([

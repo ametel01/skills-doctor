@@ -88,6 +88,7 @@ export type SkillUsageAnalysis = {
 export type AnalyzeSkillUsageInput = {
   readonly skills: readonly SkillRecord[];
   readonly usageSourcePaths?: readonly string[] | undefined;
+  readonly coverageDiagnostics?: readonly Diagnostic[] | undefined;
   readonly now?: Date | undefined;
   readonly recentWindowDays?: number | undefined;
   readonly maxFileBytes?: number | undefined;
@@ -125,7 +126,7 @@ export const analyzeSkillUsage = async (
   input: AnalyzeSkillUsageInput,
 ): Promise<SkillUsageAnalysis> => {
   const sourcePaths = input.usageSourcePaths ?? [];
-  const diagnostics: Diagnostic[] = [];
+  const diagnostics: Diagnostic[] = [...(input.coverageDiagnostics ?? [])];
   const catalog = buildCatalog(input.skills);
   const aliasMap = buildAliasMap(catalog);
   const phraseMap = buildPhraseMap(catalog);
@@ -492,11 +493,10 @@ const buildAnalysis = (input: {
 }): SkillUsageAnalysis => {
   const eventsBySkill = groupEventsBySkill(input.events);
   const duplicateNames = duplicateSkillNames(input.catalog);
-  const coverageStatus: UsageSourceCoverageStatus =
-    input.sourceCoverage.length > 0 &&
-    input.sourceCoverage.every((coverage) => coverage.status === "complete")
-      ? "complete"
-      : "incomplete";
+  const coverageStatus = classifyCoverageStatus({
+    sourceCoverage: input.sourceCoverage,
+    diagnostics: input.diagnostics,
+  });
   const summaries = input.catalog.map((catalogSkill) => {
     const skillEvents = eventsBySkill.get(skillKey(catalogSkill.skill)) ?? [];
     const usageCount = skillEvents.length;
@@ -507,10 +507,14 @@ const buildAnalysis = (input: {
     const lastUsedAt = latestTimestamp(skillEvents);
     const lastEvidenceKind = summarizeLastEvidenceKind(skillEvents, lastUsedAt);
     const confidence = summarizeConfidence(skillEvents);
+    const enabled = isEnabled(catalogSkill.skill);
     const tier = classifyTier({
       usageCount,
       lastUsedAt,
       readableSourceCount: input.readableSourceCount,
+      coverageStatus,
+      enabled,
+      hasOnlyAssistantAnnouncementEvidence: hasOnlyAssistantAnnouncementEvidence(skillEvents),
       now: input.now,
       recentWindowDays: input.recentWindowDays,
       frequentUseThreshold: input.frequentUseThreshold,
@@ -520,7 +524,7 @@ const buildAnalysis = (input: {
       directoryName: catalogSkill.skill.directoryName,
       ecosystem: catalogSkill.skill.ecosystem,
       source: catalogSkill.skill.source,
-      enabled: isEnabled(catalogSkill.skill),
+      enabled,
       rootPath: catalogSkill.skill.rootPath,
       skillPath: catalogSkill.skill.skillPath,
       usageCount,
@@ -540,6 +544,7 @@ const buildAnalysis = (input: {
         tier,
         confidence,
         usageCount,
+        coverageStatus,
         isDuplicate: duplicateNames.has(catalogSkill.skillName),
         descriptionCostThreshold: input.descriptionCostThreshold,
       }),
@@ -580,6 +585,7 @@ const buildRecommendations = (input: {
   readonly tier: SkillUsageTier;
   readonly confidence: SkillUsageConfidence;
   readonly usageCount: number;
+  readonly coverageStatus: UsageSourceCoverageStatus;
   readonly isDuplicate: boolean;
   readonly descriptionCostThreshold: number;
 }): readonly SkillCleanupRecommendation[] => {
@@ -610,9 +616,17 @@ const buildRecommendations = (input: {
       add("shorten-description", "Skill appears useful but has high description context cost.");
     }
   } else if (input.tier === "unknown") {
-    add("review", "No readable usage sources were available, so usage is unknown.");
+    add(
+      "review",
+      input.usageCount > 0
+        ? "Only low-confidence assistant usage evidence was detected, so usage requires review."
+        : input.coverageStatus === "complete"
+          ? "No readable usage sources were available, so usage is unknown."
+          : "Usage coverage is incomplete, so absence of evidence requires review.",
+    );
   } else if (
     input.tier === "unused" &&
+    input.coverageStatus === "complete" &&
     (input.skill.skill.source === "global" || input.skill.skill.source === "custom")
   ) {
     add("disable-candidate", "No local usage was detected for this non-project skill.");
@@ -631,12 +645,18 @@ const classifyTier = (input: {
   readonly usageCount: number;
   readonly lastUsedAt: string | undefined;
   readonly readableSourceCount: number;
+  readonly coverageStatus: UsageSourceCoverageStatus;
+  readonly enabled: boolean;
+  readonly hasOnlyAssistantAnnouncementEvidence: boolean;
   readonly now: Date;
   readonly recentWindowDays: number;
   readonly frequentUseThreshold: number;
 }): SkillUsageTier => {
   if (input.readableSourceCount === 0) return "unknown";
+  if (input.coverageStatus !== "complete" && input.usageCount === 0) return "unknown";
+  if (!input.enabled && input.usageCount === 0) return "unknown";
   if (input.usageCount === 0) return "unused";
+  if (input.hasOnlyAssistantAnnouncementEvidence) return "unknown";
   if (input.usageCount >= input.frequentUseThreshold) return "frequent";
   if (
     input.lastUsedAt !== undefined &&
@@ -876,6 +896,27 @@ const summarizeConfidence = (events: readonly SkillUsageEvent[]): SkillUsageConf
   if (events.some((event) => event.confidence === "medium")) return "medium";
   return "none";
 };
+
+const hasOnlyAssistantAnnouncementEvidence = (events: readonly SkillUsageEvent[]): boolean =>
+  events.length > 0 && events.every((event) => event.evidenceKind === "assistant-announcement");
+
+const classifyCoverageStatus = (input: {
+  readonly sourceCoverage: readonly UsageSourceCoverage[];
+  readonly diagnostics: readonly Diagnostic[];
+}): UsageSourceCoverageStatus => {
+  if (input.sourceCoverage.length === 0) return "incomplete";
+  if (input.sourceCoverage.some((coverage) => coverage.status !== "complete")) {
+    return "incomplete";
+  }
+  if (input.diagnostics.some(isCoverageGapDiagnostic)) return "incomplete";
+  return "complete";
+};
+
+const isCoverageGapDiagnostic = (diagnostic: Diagnostic): boolean =>
+  diagnostic.code === "usage-source-discovery-truncated" ||
+  diagnostic.code === "usage-source-none" ||
+  diagnostic.code === "usage-source-unreadable" ||
+  diagnostic.code === "usage-source-invalid-json";
 
 const duplicateSkillNames = (catalog: readonly CatalogSkill[]): ReadonlySet<string> => {
   const counts = new Map<string, number>();

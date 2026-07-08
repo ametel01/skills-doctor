@@ -309,12 +309,10 @@ const buildUsageReportInput = async (input: {
   const analysis = await input.analyzeSkillUsage({
     skills: [...input.scan.skills, ...(input.scan.disabledSkills ?? [])],
     usageSourcePaths: discovered.usageSourcePaths,
+    coverageDiagnostics: discovered.diagnostics,
   });
   return {
-    analysis: {
-      ...analysis,
-      diagnostics: [...discovered.diagnostics, ...analysis.diagnostics],
-    },
+    analysis,
     contextPressure: discovered.contextPressure,
   };
 };
