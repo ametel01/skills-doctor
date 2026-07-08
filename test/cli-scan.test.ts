@@ -60,8 +60,8 @@ describe("scanAction", () => {
     await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
       {
         timestamp: "2026-06-20T00:00:00.000Z",
-        role: "assistant",
-        content: "Using the `good-skill` skill.",
+        role: "user",
+        content: "Use $good-skill for this.",
       },
     ]);
     const options = {
@@ -470,7 +470,7 @@ describe("scanAction", () => {
         expect.objectContaining({
           skillName: "disabled-used",
           enabled: false,
-          tier: "recent",
+          tier: "unknown",
           usageCount: 1,
           recommendations: [
             expect.objectContaining({
@@ -556,8 +556,8 @@ describe("scanAction", () => {
     await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
       {
         timestamp: "2026-06-20T00:00:00.000Z",
-        role: "assistant",
-        content: "Using the `good-skill` skill.",
+        role: "user",
+        content: "Use $good-skill for this.",
       },
     ]);
     const nextStepChoices: string[][] = [];
@@ -698,6 +698,7 @@ describe("scanAction", () => {
       },
     ]);
     const stdout: string[] = [];
+    let viewedUsageRanking = false;
 
     await scanAction(
       ".",
@@ -708,7 +709,19 @@ describe("scanAction", () => {
         env: {},
         stdinIsTty: true,
         stdoutIsTty: true,
-        prompts: fakePrompts([pluginRoot, "usage-ranking", "exit"]),
+        prompts: {
+          ...fakePrompts([]),
+          input: async () => pluginRoot,
+          select: async <Value extends string>(
+            message: string,
+            _choices: readonly Choice<Value>[],
+          ) => {
+            if (message !== "Next step") return "all" as Value;
+            if (viewedUsageRanking) return "exit" as Value;
+            viewedUsageRanking = true;
+            return "usage-ranking" as Value;
+          },
+        },
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
@@ -736,8 +749,8 @@ describe("scanAction", () => {
     await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
       {
         timestamp: "2026-06-20T00:00:00.000Z",
-        role: "assistant",
-        content: "Using the `long-used-skill` skill.",
+        role: "user",
+        content: "Use $long-used-skill for this.",
       },
     ]);
     const stdout: string[] = [];
