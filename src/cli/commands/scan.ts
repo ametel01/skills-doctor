@@ -15,7 +15,10 @@ import {
   discoverUsageSources,
 } from "../../domain/discover-usage-sources.js";
 import { groupFindingsByKey } from "../../domain/group-findings.js";
-import { readCodexDisabledSkillConfig } from "../../domain/read-codex-disabled-skill-config.js";
+import {
+  type DisabledSkillSelectors,
+  readCodexDisabledSkillConfig,
+} from "../../domain/read-codex-disabled-skill-config.js";
 import { scanSkillRoots } from "../../domain/scan-skills.js";
 import {
   buildSecurityReviewIncidents,
@@ -250,6 +253,7 @@ export const scanAction = async (
         (await reviewScan(report, {
           cwd,
           roots,
+          disabledSkills: disabledCodexSkills,
           version: options.version ?? "0.0.0",
           spinner,
           prompts,
@@ -498,6 +502,7 @@ const mergeRoots = (
 type ReviewFindingsInput = {
   readonly cwd: string;
   readonly roots: readonly SkillRoot[];
+  readonly disabledSkills: DisabledSkillSelectors;
   readonly version: string;
   readonly spinner: SpinnerFactory;
   readonly prompts: PromptAdapter;
@@ -815,7 +820,7 @@ const runCleanupAgentFlow = async (
 
     const reScanStartedAt = input.now?.();
     const nextScan = await input.spinner.run("Re-scanning skills...", () =>
-      scanSkillRoots({ roots: input.roots }),
+      scanSkillRoots({ roots: input.roots, disabledSkills: input.disabledSkills }),
     );
     const nextElapsedMilliseconds =
       input.now === undefined || reScanStartedAt === undefined
@@ -914,7 +919,7 @@ const runUsageRecommendationAgentFlow = async (
 
     const reScanStartedAt = input.now?.();
     const nextScan = await input.spinner.run("Re-scanning skills...", () =>
-      scanSkillRoots({ roots: input.roots }),
+      scanSkillRoots({ roots: input.roots, disabledSkills: input.disabledSkills }),
     );
     const nextElapsedMilliseconds =
       input.now === undefined || reScanStartedAt === undefined
@@ -1090,7 +1095,7 @@ const runRepairAgentFlow = async (
 
     const reScanStartedAt = input.now?.();
     const nextScan = await input.spinner.run("Re-scanning skills...", () =>
-      scanSkillRoots({ roots: input.roots }),
+      scanSkillRoots({ roots: input.roots, disabledSkills: input.disabledSkills }),
     );
     const nextElapsedMilliseconds =
       input.now === undefined || reScanStartedAt === undefined
