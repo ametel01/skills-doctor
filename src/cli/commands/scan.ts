@@ -585,7 +585,12 @@ const reviewScan = async (
       continue;
     }
     if (action === "security") {
-      write(renderSecurityFindings(selectedFindings, { color: input.color }));
+      write(
+        renderSecurityFindings(selectedFindings, {
+          color: input.color,
+          roots: report.scannedRoots,
+        }),
+      );
       await maybeWaitForTuiContinue(input);
       continue;
     }
@@ -1010,7 +1015,7 @@ const selectCleanupRecommendations = async (
           usageBySkillPath.get(recommendation.skillPath)?.recentUsageCount,
         ),
         value: recommendation.skillPath,
-        description: compactSkillPath(recommendation.skillPath),
+        description: compactSkillPath(recommendation.skillPath, { roots: report.scannedRoots }),
         checked: defaultPaths.has(recommendation.skillPath),
       })),
     ]),
@@ -1172,6 +1177,7 @@ const writeCleanupHandoffSummary = (
 
 type RenderTerminalOptions = {
   readonly color?: boolean | undefined;
+  readonly roots?: readonly SkillRoot[] | undefined;
 };
 
 const renderFindings = (
@@ -1215,7 +1221,7 @@ const renderSecurityFindings = (
     }),
     "",
     usageLabel("Incidents", shouldColor),
-    ...renderSecurityIncidentTable(incidents, shouldColor),
+    ...renderSecurityIncidentTable(incidents, shouldColor, options.roots),
     "",
     usageLabel("Suggested next actions", shouldColor),
     `- Review ${danger("Critical", shouldColor)} rows first, especially data exposure, remote execution, secret access, and destructive action.`,
@@ -1262,6 +1268,7 @@ const SECURITY_INCIDENT_TABLE_WIDTHS = [8, 17, 18, 34, 36] as const;
 const renderSecurityIncidentTable = (
   incidents: readonly SecurityReviewIncident[],
   shouldColor: boolean,
+  roots: readonly SkillRoot[] | undefined,
 ): readonly string[] => {
   if (incidents.length === 0) return [];
   const headers = ["Severity", "Category", "Skill", "Finding", "Artifact"];
@@ -1275,7 +1282,7 @@ const renderSecurityIncidentTable = (
         classifySecurityIncidentForDisplay(incident),
         incident.skillName ?? path.basename(path.dirname(incident.skillPath)),
         incident.primaryFinding.title,
-        compactArtifactPath(formatIncidentArtifact(incident)),
+        compactArtifactPath(formatIncidentArtifact(incident), { roots }),
       ];
       const formattedCells = cells.map((cell, index) =>
         formatFixedCell(cell, SECURITY_INCIDENT_TABLE_WIDTHS[index] ?? 0),
@@ -1373,12 +1380,19 @@ const formatIncidentArtifact = (incident: SecurityReviewIncident): string => {
   return `${incident.artifactPath}${line === undefined ? "" : `:${line}`}`;
 };
 
-const compactArtifactPath = (artifactPath: string): string => {
+type SkillPathLabelRoot = Pick<SkillRoot, "ecosystem" | "rootPath" | "source">;
+
+type SkillPathLabelContext = {
+  readonly root?: SkillPathLabelRoot | undefined;
+  readonly roots?: readonly SkillPathLabelRoot[] | undefined;
+};
+
+const compactArtifactPath = (artifactPath: string, context: SkillPathLabelContext = {}): string => {
   const lineMatch = artifactPath.match(/:(\d+)$/u);
   const lineSuffix = lineMatch?.[0] ?? "";
   const pathWithoutLine =
     lineSuffix.length === 0 ? artifactPath : artifactPath.slice(0, -lineSuffix.length);
-  return `${compactSkillPath(pathWithoutLine)}${lineSuffix}`;
+  return `${compactSkillPath(pathWithoutLine, context)}${lineSuffix}`;
 };
 
 const formatFindingLocation = (finding: Finding): string =>
@@ -1448,7 +1462,10 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
       "",
       ...renderTable(
         ["Skill", "Path"],
-        preview.map((skill) => [skill.skillName, compactSkillPath(skill.skillPath)]),
+        preview.map((skill) => [
+          skill.skillName,
+          compactSkillPath(skill.skillPath, { root: skill }),
+        ]),
         {
           colorizers: [(text) => accent(text, shouldColor), (text) => dim(text, shouldColor)],
         },
@@ -1539,20 +1556,58 @@ const formatUsageTimestamp = (timestamp: string | undefined): string => {
   return timestamp.replace("T", " ").slice(0, 16);
 };
 
-const compactSkillPath = (skillPath: string): string => {
+const compactSkillPath = (skillPath: string, context: SkillPathLabelContext = {}): string => {
   const normalizedPath = skillPath.split(path.sep).join("/");
-  const agentsMatch = normalizedPath.match(/\/\.agents\/skills\/(.+)$/u);
-  if (agentsMatch?.[1] !== undefined) return `~/.agents/skills/${agentsMatch[1]}`;
-  const claudeMatch = normalizedPath.match(/\/\.claude\/skills\/(.+)$/u);
-  if (claudeMatch?.[1] !== undefined) return `~/.claude/skills/${claudeMatch[1]}`;
   const pluginMatch = normalizedPath.match(
     /\/plugins\/cache\/[^/]+\/([^/]+)\/[^/]+\/skills\/(.+)$/u,
   );
   if (pluginMatch?.[1] !== undefined && pluginMatch[2] !== undefined) {
     return `${pluginMatch[1]}:skills/${pluginMatch[2]}`;
   }
+  const root = context.root ?? findContainingSkillRoot(normalizedPath, context.roots);
+  if (root !== undefined) {
+    const rootRelativePath = pathRelativeToRoot(normalizedPath, root.rootPath);
+    const rootPrefix = compactRootPrefix(root);
+    if (rootRelativePath !== undefined && rootPrefix !== undefined) {
+      return rootRelativePath.length === 0 ? rootPrefix : `${rootPrefix}/${rootRelativePath}`;
+    }
+  }
   return skillPath;
 };
+
+const findContainingSkillRoot = (
+  normalizedPath: string,
+  roots: readonly SkillPathLabelRoot[] | undefined,
+): SkillPathLabelRoot | undefined => {
+  if (roots === undefined) return undefined;
+  return [...roots]
+    .sort(
+      (left, right) => normalizePath(right.rootPath).length - normalizePath(left.rootPath).length,
+    )
+    .find((root) => pathRelativeToRoot(normalizedPath, root.rootPath) !== undefined);
+};
+
+const pathRelativeToRoot = (normalizedPath: string, rootPath: string): string | undefined => {
+  const normalizedRoot = normalizePath(rootPath).replace(/\/+$/u, "");
+  if (normalizedPath === normalizedRoot) return "";
+  const rootPrefix = `${normalizedRoot}/`;
+  if (!normalizedPath.startsWith(rootPrefix)) return undefined;
+  return normalizedPath.slice(rootPrefix.length);
+};
+
+const compactRootPrefix = (root: SkillPathLabelRoot): string | undefined => {
+  if (root.source === "global") {
+    if (root.ecosystem === "codex") return "~/.agents/skills";
+    if (root.ecosystem === "claude") return "~/.claude/skills";
+  }
+  if (root.source === "local") {
+    if (root.ecosystem === "codex") return ".agents/skills";
+    if (root.ecosystem === "claude") return ".claude/skills";
+  }
+  return undefined;
+};
+
+const normalizePath = (targetPath: string): string => targetPath.split(path.sep).join("/");
 
 const toTitleCase = (text: string): string =>
   text.replace(/\w\S*/gu, (word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`);
@@ -1655,7 +1710,7 @@ const renderCleanupRecommendations = (
           shownRecommendations.map((recommendation) => [
             recommendation.skillName,
             recommendation.confidence,
-            compactSkillPath(recommendation.skillPath),
+            compactSkillPath(recommendation.skillPath, { roots: report.scannedRoots }),
           ]),
           {
             colorizers: [
