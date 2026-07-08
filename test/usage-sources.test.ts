@@ -75,6 +75,27 @@ describe("Codex usage source discovery", () => {
     expect(result.contextPressure.level).toBe("low");
   });
 
+  it("reports skipped session files when discovery is capped at zero", async () => {
+    const sessionPath = path.join(homeDir, ".codex", "sessions", "recent.jsonl");
+    await writeJsonl(sessionPath, [{ timestamp: "2026-06-20T00:00:00.000Z", role: "assistant" }]);
+
+    const result = await discoverUsageSources({
+      homeDir,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+      maxSessionFiles: 0,
+    });
+
+    expect(result.usageSourcePaths).toEqual([]);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "usage-source-discovery-truncated",
+        severity: "warning",
+        path: path.join(homeDir, ".codex", "sessions"),
+      }),
+    ]);
+    expect(result.contextPressure.level).toBe("unknown");
+  });
+
   it("selects the newest session by event timestamp when it sorts late by path", async () => {
     const sessionDir = path.join(homeDir, ".codex", "sessions", "2026", "06", "20");
     for (const [index, name] of ["z-old", "y-old", "x-old", "w-old"].entries()) {

@@ -211,6 +211,38 @@ describe("skill usage analysis", () => {
     });
   });
 
+  it("records assistant prose-only announcements as medium-confidence weak evidence", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    await writeJsonl(usageSource, [
+      codexMessageRecord({
+        id: "turn-assistant-announcement",
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        text: "I'm using the weak-announcement skill.",
+      }),
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [buildRecord({ name: "weak-announcement", source: "global" })],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.events).toEqual([
+      expect.objectContaining({
+        skillName: "weak-announcement",
+        confidence: "medium",
+        evidenceKind: "assistant-announcement",
+      }),
+    ]);
+    expect(summary(analysis, "weak-announcement")).toMatchObject({
+      usageCount: 1,
+      confidence: "medium",
+      tier: "recent",
+    });
+    expect(actions(analysis, "weak-announcement")).not.toContain("disable-candidate");
+  });
+
   it("records explicit user invocations and plugin-qualified aliases as high-confidence events", async () => {
     const usageSource = path.join(directory, "session.jsonl");
     const pluginRoot = path.join(
@@ -225,6 +257,61 @@ describe("skill usage analysis", () => {
     );
     await writeJsonl(usageSource, [
       user("2026-06-20T00:00:00.000Z", "Use $agent-coding-workflow and $github:gh-fix-ci."),
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [
+        buildRecord({ name: "agent-coding-workflow", source: "global" }),
+        buildRecord({ name: "gh-fix-ci", source: "global", rootPath: pluginRoot }),
+      ],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.events).toEqual([
+      expect.objectContaining({
+        skillName: "agent-coding-workflow",
+        confidence: "high",
+        evidenceKind: "explicit-user-invocation",
+      }),
+      expect.objectContaining({
+        skillName: "gh-fix-ci",
+        confidence: "high",
+        evidenceKind: "explicit-user-invocation",
+      }),
+    ]);
+    expect(summary(analysis, "agent-coding-workflow")).toMatchObject({
+      usageCount: 1,
+      confidence: "high",
+      tier: "recent",
+    });
+    expect(summary(analysis, "gh-fix-ci")).toMatchObject({
+      pluginName: "github",
+      usageCount: 1,
+      confidence: "high",
+      tier: "recent",
+    });
+  });
+
+  it("records current Codex response_item user invocations and plugin-qualified aliases", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    const pluginRoot = path.join(
+      directory,
+      ".codex",
+      "plugins",
+      "cache",
+      "openai-curated",
+      "github",
+      "202e9242",
+      "skills",
+    );
+    await writeJsonl(usageSource, [
+      codexMessageRecord({
+        id: "turn-structured-user",
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "user",
+        text: "Use $agent-coding-workflow and $github:gh-fix-ci.",
+      }),
     ]);
 
     const analysis = await analyzeSkillUsage({
@@ -313,6 +400,65 @@ describe("skill usage analysis", () => {
         confidence: "high",
         evidenceKind: "tool-skill-md-read",
       }),
+    ]);
+  });
+
+  it("uses SKILL.md paths to disambiguate duplicate skill names", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    const firstShared = buildRecord({
+      name: "shared-review",
+      source: "global",
+      rootPath: path.join(directory, "first-root"),
+    });
+    const secondShared = buildRecord({
+      name: "shared-review",
+      source: "custom",
+      rootPath: path.join(directory, "second-root"),
+    });
+    await writeJsonl(usageSource, [
+      codexMessageRecord({
+        id: "turn-linked-skill",
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "user",
+        text: `Use [the local shared review skill](${secondShared.skillPath}).`,
+      }),
+      {
+        timestamp: "2026-06-20T00:01:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "functions.exec_command",
+          arguments: JSON.stringify({ cmd: `sed -n '1,120p' ${firstShared.skillPath}` }),
+        },
+      },
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [firstShared, secondShared],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.events).toEqual([
+      expect.objectContaining({
+        skillPath: secondShared.skillPath,
+        evidenceKind: "codex-skill-markdown-link",
+        confidence: "high",
+      }),
+      expect.objectContaining({
+        skillPath: firstShared.skillPath,
+        evidenceKind: "tool-skill-md-read",
+        confidence: "high",
+      }),
+    ]);
+    expect(analysis.diagnostics).toEqual([]);
+    expect(
+      analysis.skillsByUsage
+        .filter((skill) => skill.skillName === "shared-review")
+        .map((skill) => ({ skillPath: skill.skillPath, usageCount: skill.usageCount })),
+    ).toEqual([
+      { skillPath: firstShared.skillPath, usageCount: 1 },
+      { skillPath: secondShared.skillPath, usageCount: 1 },
     ]);
   });
 
@@ -478,6 +624,36 @@ describe("skill usage analysis", () => {
     expect(serialized).not.toContain("secret details");
     expect(summary(analysis, "gh-fix-ci").usageCount).toBe(1);
   });
+
+  it("marks enabled global skills as cleanup candidates only when coverage is complete and no usage is detected", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    await writeJsonl(usageSource, [
+      assistant("2026-06-20T00:00:00.000Z", "No structured skill evidence in this session."),
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [
+        buildRecord({ name: "enabled-global-unused", source: "global" }),
+        buildRecord({ name: "project-local-unused", source: "local" }),
+      ],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.coverageStatus).toBe("complete");
+    expect(summary(analysis, "enabled-global-unused")).toMatchObject({
+      usageCount: 0,
+      tier: "unused",
+      confidence: "none",
+    });
+    expect(actions(analysis, "enabled-global-unused")).toEqual(["disable-candidate"]);
+    expect(summary(analysis, "project-local-unused")).toMatchObject({
+      usageCount: 0,
+      tier: "unused",
+      confidence: "none",
+    });
+    expect(actions(analysis, "project-local-unused")).toEqual([]);
+  });
 });
 
 const writeJsonl = async (filePath: string, records: readonly unknown[]): Promise<void> => {
@@ -495,6 +671,27 @@ const user = (timestamp: string, content: string): Record<string, unknown> => ({
   timestamp,
   role: "user",
   content,
+});
+
+const codexMessageRecord = (input: {
+  readonly id: string;
+  readonly timestamp: string;
+  readonly role: "assistant" | "user";
+  readonly text: string;
+}): Record<string, unknown> => ({
+  timestamp: input.timestamp,
+  type: "response_item",
+  payload: {
+    id: input.id,
+    type: "message",
+    role: input.role,
+    content: [
+      {
+        type: input.role === "user" ? "input_text" : "output_text",
+        text: input.text,
+      },
+    ],
+  },
 });
 
 const summary = (analysis: SkillUsageAnalysis, skillName: string): SkillUsageSummary => {
