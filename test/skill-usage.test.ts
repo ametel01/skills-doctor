@@ -189,6 +189,53 @@ describe("skill usage analysis", () => {
     });
   });
 
+  it("reads a bounded tail of each usage source without reporting transcript text", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    await mkdir(path.dirname(usageSource), { recursive: true });
+    const privateFrontText = "private front transcript";
+    const privateTailText = "private tail transcript";
+    const records = [
+      JSON.stringify(
+        assistant(
+          "2026-06-01T00:00:00.000Z",
+          `Using the \`front-only\` skill. ${privateFrontText}`,
+        ),
+      ),
+      ...Array.from({ length: 80 }, (_, index) =>
+        JSON.stringify({
+          timestamp: `2026-06-10T00:${String(index % 60).padStart(2, "0")}:00.000Z`,
+          role: "assistant",
+          content: `padding record ${index} ${"x".repeat(80)}`,
+        }),
+      ),
+      JSON.stringify(
+        assistant("2026-06-20T00:00:00.000Z", `Using the \`tail-used\` skill. ${privateTailText}`),
+      ),
+    ];
+    await writeFile(usageSource, `${records.join("\n")}\n`);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [
+        buildRecord({ name: "front-only", source: "global" }),
+        buildRecord({ name: "tail-used", source: "global" }),
+      ],
+      usageSourcePaths: [usageSource],
+      maxFileBytes: 512,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    const serialized = JSON.stringify(analysis);
+
+    expect(summary(analysis, "front-only")).toMatchObject({ usageCount: 0, tier: "unused" });
+    expect(summary(analysis, "tail-used")).toMatchObject({
+      usageCount: 1,
+      tier: "recent",
+      lastUsedAt: "2026-06-20T00:00:00.000Z",
+    });
+    expect(serialized).not.toContain(privateFrontText);
+    expect(serialized).not.toContain(privateTailText);
+  });
+
   it("infers plugin-prefixed names from plugin cache paths", async () => {
     const usageSource = path.join(directory, "session.jsonl");
     await writeJsonl(usageSource, [
