@@ -17,12 +17,12 @@ describe("scanAction", () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(path.join(tmpdir(), "skills-doctor-cli-"));
-    process.exitCode = undefined;
+    process.exitCode = 0;
   });
 
   afterEach(async () => {
     await rm(directory, { recursive: true, force: true });
-    process.exitCode = undefined;
+    process.exitCode = 0;
   });
 
   it("scans the single detected root without prompting when --yes is used", async () => {
@@ -190,7 +190,7 @@ describe("scanAction", () => {
     expect(defaultReport.warningCount).toBeGreaterThan(0);
     expect(process.exitCode).toBe(0);
 
-    process.exitCode = undefined;
+    process.exitCode = 0;
     await scanAction(".", { yes: true, failOn: "warning" }, options);
     expect(process.exitCode).toBe(1);
   });
@@ -214,7 +214,7 @@ describe("scanAction", () => {
     expect(defaultReport.adviceCount).toBeGreaterThan(0);
     expect(process.exitCode).toBe(0);
 
-    process.exitCode = undefined;
+    process.exitCode = 0;
     await scanAction(".", { yes: true, failOn: "advice" }, options);
     expect(process.exitCode).toBe(1);
   });
@@ -445,9 +445,108 @@ describe("scanAction", () => {
     expect(nextStepChoices).toHaveLength(0);
   });
 
-  it("renders usage ranking and cleanup recommendation views", async () => {
+  it("renders usage ranking and cleanup recommendation views with local and global path labels", async () => {
     const homeDir = path.join(directory, "home");
-    await writeStrongSkill(path.join(homeDir, ".agents", "skills", "unused-skill"), "unused-skill");
+    const localCodexSkillPath = path.join(
+      directory,
+      ".agents",
+      "skills",
+      "local-codex-unused",
+      "SKILL.md",
+    );
+    const globalCodexSkillPath = path.join(
+      homeDir,
+      ".agents",
+      "skills",
+      "global-codex-unused",
+      "SKILL.md",
+    );
+    const localClaudeSkillPath = path.join(
+      directory,
+      ".claude",
+      "skills",
+      "local-claude-unused",
+      "SKILL.md",
+    );
+    const globalClaudeSkillPath = path.join(
+      homeDir,
+      ".claude",
+      "skills",
+      "global-claude-unused",
+      "SKILL.md",
+    );
+    await writeStrongSkill(path.dirname(localCodexSkillPath), "local-codex-unused");
+    await writeStrongSkill(path.dirname(globalCodexSkillPath), "global-codex-unused");
+    await writeStrongSkill(path.dirname(localClaudeSkillPath), "local-claude-unused");
+    await writeStrongSkill(path.dirname(globalClaudeSkillPath), "global-claude-unused");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "No skill announcement here.",
+      },
+    ]);
+    const stdout: string[] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        stdoutIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "all", "usage-ranking", "cleanup-recommendations", "exit"],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    const output = stdout.join("");
+    expect(output).toContain("\x1b[36mUsage ranking\x1b[39m:");
+    expect(output).toContain("\x1b[36mSummary\x1b[39m");
+    expect(output).toContain("Metric      Count");
+    expect(output).toContain("\x1b[2mUnused\x1b[22m");
+    expect(output).toContain("enabled skills have no detected usage.");
+    expect(output).toContain("Skill                 Path");
+    expect(output).toContain("\x1b[2m~/.agents/skills/global-codex-unused/SKILL.md\x1b[22m");
+    expect(output).toContain("\x1b[2m.agents/skills/local-codex-unused/SKILL.md\x1b[22m");
+    expect(output).toContain("\x1b[2m~/.claude/skills/global-claude-unused/SKILL.md\x1b[22m");
+    expect(output).toContain("\x1b[2m.claude/skills/local-claude-unused/SKILL.md\x1b[22m");
+    expect(output).not.toContain("~/.agents/skills/local-codex-unused");
+    expect(output).not.toContain("~/.claude/skills/local-claude-unused");
+    expect(output).toContain("\x1b[36mUsage recommendations\x1b[39m:");
+    expect(output).toContain("\x1b[36mContext budget pressure\x1b[39m: \x1b[32mlow\x1b[39m");
+    expect(output).toContain("\x1b[33mDisable candidates\x1b[39m");
+    expect(output).toContain("Skill                 Confidence  Path");
+    expect(output).not.toContain("No skill announcement here.");
+    expect(report.usage?.skillsByUsage.map((skill) => skill.skillPath)).toEqual(
+      expect.arrayContaining([
+        localCodexSkillPath,
+        globalCodexSkillPath,
+        localClaudeSkillPath,
+        globalClaudeSkillPath,
+      ]),
+    );
+  });
+
+  it("preserves plugin cache path labels in usage output", async () => {
+    const homeDir = path.join(directory, "home");
+    const pluginRoot = path.join(
+      homeDir,
+      ".codex",
+      "plugins",
+      "cache",
+      "openai-curated-remote",
+      "github",
+      "0.1.7",
+      "skills",
+    );
+    await writeStrongSkill(path.join(pluginRoot, "gh-fix-ci"), "gh-fix-ci");
     await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
       {
         timestamp: "2026-06-20T00:00:00.000Z",
@@ -466,30 +565,14 @@ describe("scanAction", () => {
         env: {},
         stdinIsTty: true,
         stdoutIsTty: true,
-        prompts: queuedPrompts({
-          selects: ["all", "usage-ranking", "cleanup-recommendations", "exit"],
-        }),
+        prompts: fakePrompts([pluginRoot, "usage-ranking", "exit"]),
         writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
       },
     );
 
-    const output = stdout.join("");
-    expect(output).toContain("\x1b[36mUsage ranking\x1b[39m:");
-    expect(output).toContain("\x1b[36mSummary\x1b[39m");
-    expect(output).toContain("Metric      Count");
-    expect(output).toContain("\x1b[2mUnused\x1b[22m");
-    expect(output).toContain("enabled skills have no detected usage.");
-    expect(output).toContain("Skill         Path");
-    expect(output).toContain(
-      "\x1b[36munused-skill\x1b[39m  \x1b[2m~/.agents/skills/unused-skill/SKILL.md\x1b[22m",
-    );
-    expect(output).toContain("\x1b[36mUsage recommendations\x1b[39m:");
-    expect(output).toContain("\x1b[36mContext budget pressure\x1b[39m: \x1b[32mlow\x1b[39m");
-    expect(output).toContain("\x1b[33mDisable candidates\x1b[39m");
-    expect(output).toContain("Skill         Confidence  Path");
-    expect(output).not.toContain("No skill announcement here.");
+    expect(stdout.join("")).toContain("\x1b[2mgithub:skills/gh-fix-ci/SKILL.md\x1b[22m");
   });
 
   it("launches a scoped agent handoff for a selected usage recommendation group", async () => {
