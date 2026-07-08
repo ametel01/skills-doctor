@@ -184,6 +184,15 @@ describe("fixture scanner coverage", () => {
     expect(scan.findings).toEqual([]);
   });
 
+  it("keeps the project-local React Doctor skill scanner-clean", async () => {
+    const skillsRoot = fileURLToPath(new URL("../.agents/skills", import.meta.url));
+    const scan = await scanSkillRoots({
+      roots: [{ ecosystem: "codex", rootPath: skillsRoot, source: "local" }],
+    });
+
+    expect(scan.findings).toEqual([]);
+  });
+
   it("keeps JSON report shape stable", async () => {
     const report = await scanFixture("weak-descriptions");
     const json = structuredClone(report) as ScanReport;
