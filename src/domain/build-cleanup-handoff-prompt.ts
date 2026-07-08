@@ -20,6 +20,8 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
     `Project root: ${input.report.directory}`,
     `Scanned roots: ${input.report.scannedRoots.map((root) => `${root.ecosystem}: ${root.rootPath}`).join("; ")}`,
     `Skills analyzed: ${usage.totalSkillsAnalyzed}`,
+    `Enabled skills: ${usage.enabledSkillCount}`,
+    `Disabled skills: ${usage.disabledSkillCount}`,
     `Usage: ${usage.usedSkillCount} used, ${usage.unusedSkillCount} unused, ${usage.unknownSkillCount} unknown`,
     `Coverage: ${usage.coverageStatus}`,
     `Context budget pressure: ${usage.contextPressure.level}`,

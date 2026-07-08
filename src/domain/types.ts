@@ -164,6 +164,7 @@ export type SkillRecord = {
   readonly ecosystem: SkillEcosystem;
   readonly rootPath: string;
   readonly source: "local" | "global" | "custom";
+  readonly enabled?: boolean | undefined;
   readonly skillDir: string;
   readonly skillPath: string;
   readonly directoryName: string;
@@ -180,6 +181,7 @@ export type SkillPackage = {
 export type ScanResult = {
   readonly roots: readonly SkillRoot[];
   readonly skills: readonly SkillRecord[];
+  readonly disabledSkills?: readonly SkillRecord[] | undefined;
   readonly packages?: readonly SkillPackage[] | undefined;
   readonly diagnostics: readonly Diagnostic[];
   readonly findings: readonly Finding[];

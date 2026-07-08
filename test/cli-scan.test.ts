@@ -353,7 +353,7 @@ describe("scanAction", () => {
     );
   });
 
-  it("excludes Codex-disabled skills from usage cleanup candidates", async () => {
+  it("includes Codex-disabled skills in usage without making them cleanup candidates", async () => {
     const homeDir = path.join(directory, "home");
     const activeSkillPath = path.join(homeDir, ".agents", "skills", "active-unused", "SKILL.md");
     const disabledSkillPath = path.join(
@@ -399,18 +399,101 @@ describe("scanAction", () => {
 
     expect(report.skillCount).toBe(1);
     expect(report.skills.map((skill) => skill.name)).toEqual(["active-unused"]);
-    expect(report.usage?.totalSkillsAnalyzed).toBe(1);
+    expect(report.usage).toMatchObject({
+      totalSkillsAnalyzed: 2,
+      enabledSkillCount: 1,
+      disabledSkillCount: 1,
+    });
+    expect(report.usage?.skillsByUsage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          skillName: "active-unused",
+          enabled: true,
+        }),
+        expect.objectContaining({
+          skillName: "disabled-unused",
+          enabled: false,
+          recommendations: [],
+        }),
+      ]),
+    );
     expect(report.usage?.topRecommendations).toEqual([
       expect.objectContaining({
         action: "disable-candidate",
         skillName: "active-unused",
       }),
     ]);
-    expect(JSON.stringify(report.usage)).not.toContain("disabled-unused");
+    expect(JSON.stringify(report.usage)).toContain("disabled-unused");
     expect(nextStepChoices[0]).toContain("Choose unused skills to disable");
   });
 
-  it("keeps Codex-disabled skills out of cleanup re-scan usage reports", async () => {
+  it("reports recently used disabled Codex skills as recovery review", async () => {
+    const homeDir = path.join(directory, "home");
+    const activeSkillPath = path.join(homeDir, ".agents", "skills", "active-unused", "SKILL.md");
+    const disabledSkillPath = path.join(homeDir, ".agents", "skills", "disabled-used", "SKILL.md");
+    await writeStrongSkill(path.dirname(activeSkillPath), "active-unused");
+    await writeStrongSkill(path.dirname(disabledSkillPath), "disabled-used");
+    await writeCodexDisabledSkillConfig(homeDir, [disabledSkillPath]);
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "assistant",
+        content: "Using the `disabled-used` skill.",
+      },
+    ]);
+    const nextStepChoices: string[][] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        prompts: recordingPrompts({
+          selects: ["all", "exit"],
+          nextStepChoices,
+        }),
+        writeStdout: () => {},
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(report.skillCount).toBe(1);
+    expect(report.findings.map((finding) => finding.skillPath)).not.toContain(disabledSkillPath);
+    expect(report.usage?.usedSkillCount).toBe(1);
+    expect(report.usage?.unusedSkillCount).toBe(1);
+    expect(report.usage?.skillsByUsage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          skillName: "disabled-used",
+          enabled: false,
+          tier: "recent",
+          usageCount: 1,
+          recommendations: [
+            expect.objectContaining({
+              action: "review",
+              reason: expect.stringContaining("recover or re-enable"),
+            }),
+          ],
+        }),
+      ]),
+    );
+    expect(report.usage?.topRecommendations).toEqual([
+      expect.objectContaining({
+        action: "disable-candidate",
+        skillName: "active-unused",
+      }),
+    ]);
+    expect(report.usage?.topRecommendations).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ skillName: "disabled-used" })]),
+    );
+    expect(nextStepChoices[0]).toContain("Fix usage recommendations with Claude or Codex");
+  });
+
+  it("keeps Codex-disabled skills out of cleanup re-scan findings while preserving usage reports", async () => {
     const homeDir = path.join(directory, "home");
     const activeSkillPath = path.join(homeDir, ".agents", "skills", "active-unused", "SKILL.md");
     const disabledSkillPath = path.join(
@@ -463,8 +546,8 @@ describe("scanAction", () => {
     expect(launches).toHaveLength(1);
     expect(launches[0]?.promptPath).toBe(path.join(reportDirectory, "cleanup-prompt.md"));
     expect(report.skills.map((skill) => skill.name)).toEqual(["active-unused"]);
-    expect(report.usage?.totalSkillsAnalyzed).toBe(1);
-    expect(JSON.stringify(report.usage)).not.toContain("disabled-unused");
+    expect(report.usage?.totalSkillsAnalyzed).toBe(2);
+    expect(JSON.stringify(report.usage)).toContain("disabled-unused");
   });
 
   it("does not offer cleanup handoff when only used skills are present", async () => {
@@ -717,8 +800,8 @@ describe("scanAction", () => {
     expect(launches[0]?.prompt).toContain("reduce context-heavy skill descriptions");
     expect(launches[0]?.prompt).not.toContain("No skill announcement here.");
     expect(report.skills.map((skill) => skill.name)).toEqual(["long-used-skill"]);
-    expect(report.usage?.totalSkillsAnalyzed).toBe(1);
-    expect(JSON.stringify(report.usage)).not.toContain("disabled-long-skill");
+    expect(report.usage?.totalSkillsAnalyzed).toBe(2);
+    expect(JSON.stringify(report.usage)).toContain("disabled-long-skill");
   });
 
   it("lets users cancel cleanup agent launch after report writing", async () => {

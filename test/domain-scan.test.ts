@@ -279,7 +279,7 @@ describe("skill discovery and parsing", () => {
     );
   });
 
-  it("ignores disabled Codex skills by path and name", async () => {
+  it("excludes disabled Codex skills from findings while keeping usage metadata", async () => {
     const skillsRoot = path.join(directory, ".agents", "skills");
     await writeFixtureSkill(path.join(skillsRoot, "active-skill"), "active-skill");
     await writeFixtureSkill(path.join(skillsRoot, "disabled-by-path"), "disabled-by-path");
@@ -298,10 +298,21 @@ describe("skill discovery and parsing", () => {
     });
 
     expect(scan.skills.map((skill) => skill.directoryName)).toEqual(["active-skill"]);
+    expect(scan.skills[0]).toMatchObject({ enabled: true });
+    expect(scan.disabledSkills?.map((skill) => skill.directoryName)).toEqual(
+      expect.arrayContaining(["disabled-by-path", "disabled-by-name"]),
+    );
+    expect(scan.disabledSkills).toEqual([
+      expect.objectContaining({ enabled: false }),
+      expect.objectContaining({ enabled: false }),
+    ]);
     expect(scan.findings).not.toContainEqual(
       expect.objectContaining({
         skillName: "missing-disabled",
       }),
+    );
+    expect(scan.findings.map((finding) => finding.skillName)).not.toEqual(
+      expect.arrayContaining(["disabled-by-path", "disabled-by-name"]),
     );
   });
 

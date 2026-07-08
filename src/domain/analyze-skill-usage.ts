@@ -73,6 +73,8 @@ export type SkillUsageAnalysis = {
   readonly sourceCoverage: readonly UsageSourceCoverage[];
   readonly diagnostics: readonly Diagnostic[];
   readonly totalSkills: number;
+  readonly enabledSkillCount: number;
+  readonly disabledSkillCount: number;
   readonly usedSkillCount: number;
   readonly unusedSkillCount: number;
   readonly unknownSkillCount: number;
@@ -518,7 +520,7 @@ const buildAnalysis = (input: {
       directoryName: catalogSkill.skill.directoryName,
       ecosystem: catalogSkill.skill.ecosystem,
       source: catalogSkill.skill.source,
-      enabled: true,
+      enabled: isEnabled(catalogSkill.skill),
       rootPath: catalogSkill.skill.rootPath,
       skillPath: catalogSkill.skill.skillPath,
       usageCount,
@@ -537,6 +539,7 @@ const buildAnalysis = (input: {
         skill: catalogSkill,
         tier,
         confidence,
+        usageCount,
         isDuplicate: duplicateNames.has(catalogSkill.skillName),
         descriptionCostThreshold: input.descriptionCostThreshold,
       }),
@@ -553,9 +556,13 @@ const buildAnalysis = (input: {
     sourceCoverage: input.sourceCoverage,
     diagnostics: input.diagnostics,
     totalSkills: input.catalog.length,
+    enabledSkillCount: summaries.filter((summary) => summary.enabled).length,
+    disabledSkillCount: summaries.filter((summary) => !summary.enabled).length,
     usedSkillCount: summaries.filter((summary) => summary.usageCount > 0).length,
-    unusedSkillCount: summaries.filter((summary) => summary.tier === "unused").length,
-    unknownSkillCount: summaries.filter((summary) => summary.tier === "unknown").length,
+    unusedSkillCount: summaries.filter((summary) => summary.enabled && summary.tier === "unused")
+      .length,
+    unknownSkillCount: summaries.filter((summary) => summary.enabled && summary.tier === "unknown")
+      .length,
     duplicateSkillCount: summaries.filter((summary) => duplicateNames.has(summary.skillName))
       .length,
     pluginContributedSkillCount: summaries.filter((summary) => summary.pluginName !== undefined)
@@ -572,6 +579,7 @@ const buildRecommendations = (input: {
   readonly skill: CatalogSkill;
   readonly tier: SkillUsageTier;
   readonly confidence: SkillUsageConfidence;
+  readonly usageCount: number;
   readonly isDuplicate: boolean;
   readonly descriptionCostThreshold: number;
 }): readonly SkillCleanupRecommendation[] => {
@@ -585,6 +593,16 @@ const buildRecommendations = (input: {
       confidence: input.confidence,
     });
   };
+
+  if (!isEnabled(input.skill.skill)) {
+    if (input.usageCount > 0) {
+      add(
+        "review",
+        "Skill is disabled but has detected local usage; review whether to recover or re-enable it.",
+      );
+    }
+    return recommendations;
+  }
 
   if (input.tier === "frequent" || input.tier === "recent") {
     add("keep", "Detected recent or frequent local usage.");
@@ -903,6 +921,8 @@ const readFrontmatterString = (skill: SkillRecord, key: string): string | undefi
   const value = skill.parseResult.frontmatter.data[key];
   return typeof value === "string" ? value : undefined;
 };
+
+const isEnabled = (skill: SkillRecord): boolean => skill.enabled !== false;
 
 const inferPluginName = (skill: SkillRecord): string | undefined => {
   const segments = skill.skillPath.split(path.sep);
