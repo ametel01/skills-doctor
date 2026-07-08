@@ -430,7 +430,10 @@ describe("scanAction", () => {
         content: "No skill announcement here.",
       },
     ]);
-    const launches: string[] = [];
+    const launches: Array<{ readonly prompt: string; readonly promptPath?: string | undefined }> =
+      [];
+    const reportOutputRoot = path.join(directory, "cleanup-reports");
+    const reportDirectory = path.join(reportOutputRoot, "2026-06-20T03-04-05-006Z");
 
     const report = await scanAction(
       ".",
@@ -448,14 +451,17 @@ describe("scanAction", () => {
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
         isRepairAgentAvailable: async (command) => command === "codex",
-        launchAgent: async (_agentId, prompt) => {
-          launches.push(prompt);
+        cleanupReportOutputRoot: reportOutputRoot,
+        cleanupReportTimestamp: "2026-06-20T03:04:05.006Z",
+        launchAgent: async (_agentId, prompt, _cwd, promptPath) => {
+          launches.push({ prompt, promptPath });
           return 0;
         },
       },
     );
 
     expect(launches).toHaveLength(1);
+    expect(launches[0]?.promptPath).toBe(path.join(reportDirectory, "cleanup-prompt.md"));
     expect(report.skills.map((skill) => skill.name)).toEqual(["active-unused"]);
     expect(report.usage?.totalSkillsAnalyzed).toBe(1);
     expect(JSON.stringify(report.usage)).not.toContain("disabled-unused");
@@ -649,8 +655,11 @@ describe("scanAction", () => {
       },
     ]);
     const stdout: string[] = [];
-    const launches: string[] = [];
+    const launches: Array<{ readonly prompt: string; readonly promptPath?: string | undefined }> =
+      [];
     const nextStepChoices: string[][] = [];
+    const reportOutputRoot = path.join(directory, "cleanup-reports");
+    const reportDirectory = path.join(reportOutputRoot, "2026-06-20T04-05-06-007Z");
 
     const report = await scanAction(
       ".",
@@ -687,8 +696,10 @@ describe("scanAction", () => {
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
         isRepairAgentAvailable: async (command) => command === "codex",
-        launchAgent: async (_agentId, prompt) => {
-          launches.push(prompt);
+        cleanupReportOutputRoot: reportOutputRoot,
+        cleanupReportTimestamp: "2026-06-20T04:05:06.007Z",
+        launchAgent: async (_agentId, prompt, _cwd, promptPath) => {
+          launches.push({ prompt, promptPath });
           return 0;
         },
       },
@@ -697,10 +708,11 @@ describe("scanAction", () => {
     expect(nextStepChoices.at(-1)).toContain("Fix usage recommendations with Claude or Codex");
     expect(stdout.join("")).toContain("Selected Codex.");
     expect(launches).toHaveLength(1);
-    expect(launches[0]).toContain("Fix selected Agent Skills usage recommendations");
-    expect(launches[0]).toContain("shorten-description long-used-skill");
-    expect(launches[0]).toContain("reduce context-heavy skill descriptions");
-    expect(launches[0]).not.toContain("No skill announcement here.");
+    expect(launches[0]?.promptPath).toBe(path.join(reportDirectory, "cleanup-prompt.md"));
+    expect(launches[0]?.prompt).toContain("Fix selected Agent Skills usage recommendations");
+    expect(launches[0]?.prompt).toContain("shorten-description long-used-skill");
+    expect(launches[0]?.prompt).toContain("reduce context-heavy skill descriptions");
+    expect(launches[0]?.prompt).not.toContain("No skill announcement here.");
     expect(report.skills.map((skill) => skill.name)).toEqual(["long-used-skill"]);
     expect(report.usage?.totalSkillsAnalyzed).toBe(1);
     expect(JSON.stringify(report.usage)).not.toContain("disabled-long-skill");
@@ -997,7 +1009,10 @@ describe("scanAction", () => {
       ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
     );
     const stdout: string[] = [];
-    const launches: string[] = [];
+    const launches: Array<{ readonly prompt: string; readonly promptPath?: string | undefined }> =
+      [];
+    const reportOutputRoot = path.join(directory, "reports");
+    const reportDirectory = path.join(reportOutputRoot, "2026-06-18T00-01-02-003Z");
 
     const report = await scanAction(
       ".",
@@ -1015,8 +1030,10 @@ describe("scanAction", () => {
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
         isRepairAgentAvailable: async (command) => command === "codex",
-        launchAgent: async (_agentId, prompt) => {
-          launches.push(prompt);
+        repairReportOutputRoot: reportOutputRoot,
+        repairReportTimestamp: "2026-06-18T00:01:02.003Z",
+        launchAgent: async (_agentId, prompt, _cwd, promptPath) => {
+          launches.push({ prompt, promptPath });
           await writeSkill(skillDir, "bad-skill");
           return 0;
         },
@@ -1024,6 +1041,7 @@ describe("scanAction", () => {
     );
 
     expect(launches).toHaveLength(1);
+    expect(launches[0]?.promptPath).toBe(path.join(reportDirectory, "handoff-prompt.md"));
     expect(stdout.join("")).toContain("Post-handoff re-scan:");
     expect(stdout.join("")).toContain("Fixed findings:");
     expect(report.errorCount).toBe(0);
@@ -1148,6 +1166,52 @@ describe("scanAction", () => {
 
     expect(stdout.join("")).toContain("Agent launch failed: spawn failed");
     expect(stdout.join("")).not.toContain("Post-handoff re-scan:");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("launches with the inline repair prompt when prompt file writing fails", async () => {
+    const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      ["---", "name: other-name", "description: Helps with PDFs.", "---", "", "Body."].join("\n"),
+    );
+    const stdout: string[] = [];
+    const launches: Array<{ readonly prompt: string; readonly promptPath?: string | undefined }> =
+      [];
+    const reportOutputRoot = path.join(directory, "reports");
+    const reportDirectory = path.join(reportOutputRoot, "2026-06-18T04-05-06-007Z");
+    await mkdir(path.join(reportDirectory, "handoff-prompt.md"), { recursive: true });
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        env: {},
+        stdinIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "repair", "errors"],
+          confirms: [true, true, false],
+        }),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+        isRepairAgentAvailable: async (command) => command === "codex",
+        repairReportOutputRoot: reportOutputRoot,
+        repairReportTimestamp: "2026-06-18T04:05:06.007Z",
+        launchAgent: async (_agentId, prompt, _cwd, promptPath) => {
+          launches.push({ prompt, promptPath });
+          return 0;
+        },
+      },
+    );
+
+    expect(launches).toHaveLength(1);
+    expect(launches[0]?.promptPath).toBeUndefined();
+    expect(launches[0]?.prompt).toContain("name-directory-mismatch");
+    expect(stdout.join("")).toContain("Report write failed:");
     expect(process.exitCode).toBe(1);
   });
 

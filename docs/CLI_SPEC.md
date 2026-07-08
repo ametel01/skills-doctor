@@ -276,9 +276,12 @@ Repair handoff is an explicit post-scan workflow. The CLI:
 7. Re-scans after the agent exits and compares fixed, remaining, and new
    findings.
 
-Launch behavior is implemented in `src/cli/utils/launch-agent.ts`. Keep command
-execution argument-based, not shell-string based, except where a platform wrapper
-must be resolved deliberately.
+Launch behavior is implemented in `src/cli/utils/launch-agent.ts`. When
+`handoff-prompt.md` or `cleanup-prompt.md` is available, the preview shows
+`<prompt-file>` and the spawned argv passes a short instruction pointing at that
+file. If prompt-file writing fails, the launcher falls back to the inline prompt
+body. Keep command execution argument-based, not shell-string based, except
+where a platform wrapper must be resolved deliberately.
 
 ## Usage Cleanup Handoff
 

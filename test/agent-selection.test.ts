@@ -89,7 +89,7 @@ describe("repair agent utilities", () => {
     ).rejects.toBeInstanceOf(CliInputError);
   });
 
-  it("builds launch invocations with prompt as the final argument", () => {
+  it("builds launch invocations with inline prompt as the final argument", () => {
     expect(buildRepairAgentInvocation("claude", "fix skills")).toEqual({
       command: "claude",
       args: ["--dangerously-skip-permissions", "fix skills"],
@@ -99,6 +99,36 @@ describe("repair agent utilities", () => {
       args: ["--yolo", "fix skills"],
     });
     expect(formatRepairAgentPreview("codex")).toBe("codex --yolo <prompt>");
+  });
+
+  it("builds launch invocations with prompt-file references when available", () => {
+    expect(
+      buildRepairAgentInvocation("claude", {
+        prompt: "fix skills",
+        promptPath: "/tmp/skills-doctor/reports/handoff-prompt.md",
+      }),
+    ).toEqual({
+      command: "claude",
+      args: [
+        "--dangerously-skip-permissions",
+        "Read and follow the prompt file at: /tmp/skills-doctor/reports/handoff-prompt.md",
+      ],
+    });
+    expect(
+      buildRepairAgentInvocation("codex", {
+        prompt: "fix skills",
+        promptPath: "/tmp/skills-doctor/reports/handoff-prompt.md",
+      }),
+    ).toEqual({
+      command: "codex",
+      args: [
+        "--yolo",
+        "Read and follow the prompt file at: /tmp/skills-doctor/reports/handoff-prompt.md",
+      ],
+    });
+    expect(formatRepairAgentPreview("codex", { usesPromptFile: true })).toBe(
+      "codex --yolo <prompt-file>",
+    );
   });
 
   it("uses a Windows entry script when a cmd wrapper points to one", async () => {

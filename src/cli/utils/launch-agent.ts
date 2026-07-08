@@ -27,7 +27,12 @@ export type RepairAgentLauncher = (
   agentId: RepairAgentId,
   prompt: string,
   cwd: string,
+  promptPath?: string | undefined,
 ) => Promise<number>;
+export type RepairAgentPromptInput = {
+  readonly prompt: string;
+  readonly promptPath?: string | undefined;
+};
 
 const REPAIR_AGENT_CONFIG: Record<RepairAgentId, RepairAgent> = {
   claude: {
@@ -116,18 +121,26 @@ export const chooseRepairAgent = async (
 
 export const buildRepairAgentInvocation = (
   agentId: RepairAgentId,
-  prompt: string,
+  promptInput: string | RepairAgentPromptInput,
 ): CommandInvocation => {
   const agent = REPAIR_AGENT_CONFIG[agentId];
   return {
     command: agent.binary,
-    args: [...agent.autoApproveArgs, prompt],
+    args: [...agent.autoApproveArgs, buildPromptArgument(promptInput)],
   };
 };
 
-export const formatRepairAgentPreview = (agentId: RepairAgentId): string => {
-  const invocation = buildRepairAgentInvocation(agentId, "<prompt>");
-  return [invocation.command, ...invocation.args].join(" ");
+export type FormatRepairAgentPreviewOptions = {
+  readonly usesPromptFile?: boolean | undefined;
+};
+
+export const formatRepairAgentPreview = (
+  agentId: RepairAgentId,
+  options: FormatRepairAgentPreviewOptions = {},
+): string => {
+  const agent = REPAIR_AGENT_CONFIG[agentId];
+  const promptPlaceholder = options.usesPromptFile === true ? "<prompt-file>" : "<prompt>";
+  return [agent.binary, ...agent.autoApproveArgs, promptPlaceholder].join(" ");
 };
 
 export type SpawnInvocationOptions = {
@@ -137,10 +150,10 @@ export type SpawnInvocationOptions = {
 
 export const buildRepairAgentSpawnInvocation = (
   agentId: RepairAgentId,
-  prompt: string,
+  promptInput: string | RepairAgentPromptInput,
   options: SpawnInvocationOptions = {},
 ): CommandInvocation => {
-  const invocation = buildRepairAgentInvocation(agentId, prompt);
+  const invocation = buildRepairAgentInvocation(agentId, promptInput);
   const platform = options.platform ?? process.platform;
   if (platform !== "win32") return invocation;
 
@@ -152,13 +165,19 @@ export const buildRepairAgentSpawnInvocation = (
   };
 };
 
-export const launchRepairAgent: RepairAgentLauncher = async (agentId, prompt, cwd) => {
-  const invocation = buildRepairAgentSpawnInvocation(agentId, prompt);
+export const launchRepairAgent: RepairAgentLauncher = async (agentId, prompt, cwd, promptPath) => {
+  const invocation = buildRepairAgentSpawnInvocation(agentId, { prompt, promptPath });
   return new Promise<number>((resolve, reject) => {
     const child = spawn(invocation.command, [...invocation.args], { cwd, stdio: "inherit" });
     child.on("error", reject);
     child.on("close", (code) => resolve(code ?? 0));
   });
+};
+
+const buildPromptArgument = (promptInput: string | RepairAgentPromptInput): string => {
+  if (typeof promptInput === "string") return promptInput;
+  if (promptInput.promptPath === undefined) return promptInput.prompt;
+  return `Read and follow the prompt file at: ${promptInput.promptPath}`;
 };
 
 const resolveWindowsCmdEntryScript = (
