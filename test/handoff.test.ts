@@ -199,10 +199,15 @@ describe("cleanup handoff", () => {
     expect(prompt).toContain("Inspect the usage report first");
     expect(prompt).toContain("Preserve project-local skills");
     expect(prompt).toContain("Do not delete skills");
-    expect(prompt).toContain("Only disable skills with a `disable-candidate` recommendation");
+    expect(prompt).toContain(
+      "Only disable selected high-confidence enabled skills with a `disable-candidate` recommendation",
+    );
     expect(prompt).toContain("Disable only the selected skills listed below");
     expect(prompt).toContain(
       "Do not modify skills recommended as keep, review, shorten-description, or merge-candidate",
+    );
+    expect(prompt).toContain(
+      "Preserve review items, unknown-coverage items, incomplete-coverage items, disabled-but-used recovery warnings, and disabled-used items",
     );
     expect(prompt).toContain("Do not move skill directories");
     expect(prompt).toContain("`[[skills.config]]` entries in `~/.codex/config.toml`");
@@ -213,7 +218,11 @@ describe("cleanup handoff", () => {
     expect(prompt).toContain("`npx skills-doctor@latest`");
     expect(prompt).toContain("/tmp/usage-report");
     expect(prompt).toContain("disable-candidate unused-skill");
+    expect(prompt).toContain("Enabled: true");
+    expect(prompt).toContain("Coverage: complete");
+    expect(prompt).toContain("Evidence kind: none");
     expect(prompt).toContain("Make only reversible Codex skills-config disable changes");
+    expect(prompt).not.toContain("RAW PRIVATE TRANSCRIPT");
   });
 
   it("limits cleanup prompts to selected recommendations", () => {
@@ -270,7 +279,7 @@ describe("cleanup handoff", () => {
     expect(prompt).toContain("Usage repair rules:");
     expect(prompt).toContain("`shorten-description`: reduce context-heavy skill descriptions");
     expect(prompt).toContain("shorten-description used-skill");
-    expect(prompt).not.toContain("Only disable skills with a `disable-candidate` recommendation");
+    expect(prompt).not.toContain("Only disable selected high-confidence enabled skills");
     expect(prompt).not.toContain("Selected unused skills to disable");
   });
 
@@ -290,6 +299,12 @@ describe("cleanup handoff", () => {
     );
     await expect(readFile(result.usageMarkdownPath, "utf8")).resolves.toContain(
       "disable-candidate",
+    );
+    await expect(readFile(result.usageMarkdownPath, "utf8")).resolves.toContain(
+      "Last evidence kind: explicit-user-invocation",
+    );
+    await expect(readFile(result.usageMarkdownPath, "utf8")).resolves.toContain(
+      "Coverage: complete",
     );
   });
 
@@ -674,13 +689,16 @@ const makeUsage = (): ScanReportUsage => ({
       directoryName: "used-skill",
       ecosystem: "codex",
       source: "global",
+      enabled: true,
       rootPath: "/repo/.agents/skills",
       skillPath: "/repo/.agents/skills/used-skill/SKILL.md",
       usageCount: 2,
       recentUsageCount: 2,
       tier: "recent",
       confidence: "high",
+      coverageStatus: "complete",
       lastUsedAt: "2026-06-20T00:00:00.000Z",
+      lastEvidenceKind: "explicit-user-invocation",
       descriptionLength: 120,
       recommendations: [
         {
@@ -697,12 +715,14 @@ const makeUsage = (): ScanReportUsage => ({
       directoryName: "unused-skill",
       ecosystem: "codex",
       source: "global",
+      enabled: true,
       rootPath: "/repo/.agents/skills",
       skillPath: "/repo/.agents/skills/unused-skill/SKILL.md",
       usageCount: 0,
       recentUsageCount: 0,
       tier: "unused",
       confidence: "none",
+      coverageStatus: "complete",
       pluginName: "github",
       descriptionLength: 80,
       recommendations: [

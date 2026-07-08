@@ -569,7 +569,9 @@ describe("scanAction", () => {
     expect(output).toContain("Metric      Count");
     expect(output).toContain("\x1b[2mUnused\x1b[22m");
     expect(output).toContain("enabled skills have no detected usage.");
-    expect(output).toContain("Skill                 Path");
+    expect(output).toContain("Skill                 Enabled");
+    expect(output).toContain("Coverage");
+    expect(output).toContain("Evidence");
     expect(output).toContain("\x1b[2m~/.agents/skills/global-codex-unused/SKILL.md\x1b[22m");
     expect(output).toContain("\x1b[2m.agents/skills/local-codex-unused/SKILL.md\x1b[22m");
     expect(output).toContain("\x1b[2m~/.claude/skills/global-claude-unused/SKILL.md\x1b[22m");
@@ -578,8 +580,9 @@ describe("scanAction", () => {
     expect(output).not.toContain("~/.claude/skills/local-claude-unused");
     expect(output).toContain("\x1b[36mUsage recommendations\x1b[39m:");
     expect(output).toContain("\x1b[36mContext budget pressure\x1b[39m: \x1b[32mlow\x1b[39m");
+    expect(output).toContain("\x1b[36mUsage coverage\x1b[39m: \x1b[32mcomplete\x1b[39m");
     expect(output).toContain("\x1b[33mDisable candidates\x1b[39m");
-    expect(output).toContain("Skill                 Confidence  Path");
+    expect(output).toContain("Skill                 Confidence  Enabled");
     expect(output).not.toContain("No skill announcement here.");
     expect(report.usage?.skillsByUsage.map((skill) => skill.skillPath)).toEqual(
       expect.arrayContaining([

@@ -484,6 +484,7 @@ describe("scan reports", () => {
     expect(withUsage.usage).toMatchObject({
       sourcePaths: ["/tmp/session.jsonl"],
       readableSourceCount: 1,
+      coverageStatus: "complete",
       totalSkillsAnalyzed: 2,
       usedSkillCount: 1,
       unusedSkillCount: 1,
@@ -496,9 +497,18 @@ describe("scan reports", () => {
         budgetLimit: "2%",
       },
     });
+    expect(withUsage.usage?.skillsByUsage[0]).toMatchObject({
+      skillName: "used-skill",
+      enabled: true,
+      coverageStatus: "complete",
+      recentUsageCount: 1,
+      lastUsedAt: "2026-06-20T00:00:00.000Z",
+      lastEvidenceKind: "explicit-user-invocation",
+    });
     expect(withUsage.usage?.topRecommendations).toHaveLength(1);
     expect(withUsage.usage?.topRecommendations[0]?.action).toBe("disable-candidate");
     expect(JSON.stringify(withUsage)).not.toContain("Using the");
+    expect(JSON.stringify(withUsage)).not.toContain("RAW PRIVATE TRANSCRIPT");
   });
 
   it("renders usage summaries and context pressure when usage analysis ran", () => {
@@ -524,6 +534,7 @@ describe("scan reports", () => {
     const rendered = renderHumanSummary(report);
 
     expect(rendered).toContain("Usage analysis: 1 used, 1 unused, 0 unknown");
+    expect(rendered).toContain("Usage coverage: complete");
     expect(rendered).toContain("Context budget pressure: high");
     expect(rendered).toContain("Recent Codex logs show skill descriptions were shortened.");
     expect(rendered).toContain("Cleanup candidates: 1 enabled unused skills");
@@ -590,6 +601,7 @@ describe("scan reports", () => {
     expect(rendered).toContain("\x1b[36mSkills\x1b[39m");
     expect(rendered).toContain("\x1b[32m1\x1b[39m used");
     expect(rendered).toContain("\x1b[33m1\x1b[39m unused");
+    expect(rendered).toContain("Usage coverage\x1b[39m: \x1b[32mcomplete\x1b[39m");
     expect(rendered).toContain("Context budget pressure\x1b[39m: \x1b[31mhigh\x1b[39m");
     expect(rendered).toContain(
       "\x1b[33mRecent Codex logs show skill descriptions were shortened.\x1b[39m",
@@ -661,13 +673,16 @@ const makeUsageAnalysis = (): SkillUsageAnalysis => ({
       directoryName: "used-skill",
       ecosystem: "codex",
       source: "global",
+      enabled: true,
       rootPath: "/tmp/skills",
       skillPath: "/tmp/skills/used-skill/SKILL.md",
       usageCount: 1,
       recentUsageCount: 1,
       tier: "recent",
       confidence: "high",
+      coverageStatus: "complete",
       lastUsedAt: "2026-06-20T00:00:00.000Z",
+      lastEvidenceKind: "explicit-user-invocation",
       pluginName: "github",
       descriptionLength: 320,
       recommendations: [
@@ -692,12 +707,14 @@ const makeUsageAnalysis = (): SkillUsageAnalysis => ({
       directoryName: "unused-skill",
       ecosystem: "codex",
       source: "global",
+      enabled: true,
       rootPath: "/tmp/skills",
       skillPath: "/tmp/skills/unused-skill/SKILL.md",
       usageCount: 0,
       recentUsageCount: 0,
       tier: "unused",
       confidence: "none",
+      coverageStatus: "complete",
       descriptionLength: 80,
       recommendations: [
         {

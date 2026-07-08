@@ -42,8 +42,10 @@ describe("TUI dashboard", () => {
     expect(output).toContain("Usage analysis");
     expect(output).toContain("23 used");
     expect(output).toContain("43 unused");
+    expect(output).toContain("complete coverage");
     expect(output).toContain("Context budget");
     expect(output).toContain("Cleanup candidates");
+    expect(output).toContain("0 review items");
     expect(output).toContain("Disable unused skills");
     expect(output).toContain("Clean up your skills configuration");
     expect(output).toContain("[0]  Exit");

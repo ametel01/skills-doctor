@@ -264,7 +264,11 @@ and include `usage.json`, `usage.md`, and `cleanup-prompt.md`. Usage reports
 must not include raw Codex prompts or full assistant transcript text. Usage
 events expose only source path, timestamp when present, matched skill identity,
 confidence, and evidence kind; ambiguous evidence remains diagnostic coverage
-metadata instead of being assigned to a same-name skill.
+metadata instead of being assigned to a same-name skill. Per-skill usage rows
+include enabled state, coverage status, recent usage count, last-used timestamp,
+and last evidence kind. Cleanup prompts must tell agents to act only on selected
+high-confidence enabled disable candidates and preserve review, unknown,
+incomplete-coverage, and disabled-used recovery items.
 
 ## Repair Handoff
 

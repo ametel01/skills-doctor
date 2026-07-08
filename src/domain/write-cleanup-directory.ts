@@ -58,6 +58,7 @@ const renderUsageMarkdown = (report: ScanReport, usage: ScanReportUsage): string
     `Project root: ${report.directory}`,
     `Scanned roots: ${report.scannedRoots.map((root) => `${root.ecosystem}: ${root.rootPath}`).join("; ")}`,
     `Context budget pressure: ${usage.contextPressure.level}`,
+    `Usage coverage: ${usage.coverageStatus}`,
     `Skills analyzed: ${usage.totalSkillsAnalyzed}`,
     `Used: ${usage.usedSkillCount}`,
     `Unused: ${usage.unusedSkillCount}`,
@@ -75,6 +76,7 @@ const renderUsageMarkdown = (report: ScanReport, usage: ScanReportUsage): string
       `  - Path: ${recommendation.skillPath}`,
       `  - Reason: ${recommendation.reason}`,
       `  - Confidence: ${recommendation.confidence}`,
+      ...formatSkillEvidenceLines(usage, recommendation.skillPath),
     );
   }
   if (usage.recommendations.length === 0) {
@@ -86,10 +88,27 @@ const renderUsageMarkdown = (report: ScanReport, usage: ScanReportUsage): string
     lines.push(
       `- ${skill.skillName}: ${skill.tier}, ${skill.usageCount} detected use${skill.usageCount === 1 ? "" : "s"}, ${skill.confidence} confidence`,
       `  - Path: ${skill.skillPath}`,
+      `  - Enabled: ${skill.enabled ? "true" : "false"}`,
+      `  - Coverage: ${skill.coverageStatus}`,
+      `  - Recent uses: ${skill.recentUsageCount}`,
+      `  - Last used: ${skill.lastUsedAt ?? "never"}`,
+      `  - Last evidence kind: ${skill.lastEvidenceKind ?? "none"}`,
     );
   }
 
   return `${lines.join("\n")}\n`;
+};
+
+const formatSkillEvidenceLines = (usage: ScanReportUsage, skillPath: string): readonly string[] => {
+  const skill = usage.skillsByUsage.find((candidate) => candidate.skillPath === skillPath);
+  if (skill === undefined) return [];
+  return [
+    `  - Enabled: ${skill.enabled ? "true" : "false"}`,
+    `  - Coverage: ${skill.coverageStatus}`,
+    `  - Recent uses: ${skill.recentUsageCount}`,
+    `  - Last used: ${skill.lastUsedAt ?? "never"}`,
+    `  - Last evidence kind: ${skill.lastEvidenceKind ?? "none"}`,
+  ];
 };
 
 const sanitizeTimestamp = (timestamp: string): string => timestamp.replace(/[:.]/g, "-");

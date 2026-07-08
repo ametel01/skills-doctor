@@ -346,10 +346,13 @@ aggregate counts, sanitized `events`, `coverageStatus`, `sourceCoverage`,
 `skillsByUsage`, recommendations, and all disable-candidate recommendations.
 Each `skillsByUsage` item includes `usageCount` for all detected uses in
 analyzed sources and `recentUsageCount` for detected timestamped uses in the
-30-day recent window. Evidence kinds distinguish explicit user invocations,
-Codex markdown links to `SKILL.md`, tool/function reads of known `SKILL.md`
-files, weak assistant announcements, and unknown legacy evidence. It does not
-include raw user prompts or assistant transcript text.
+30-day recent window, plus `lastUsedAt`, `lastEvidenceKind`, `enabled`, and
+per-skill `coverageStatus` so cleanup agents can explain why an item is kept,
+reviewed, or selected for reversible disablement. Evidence kinds distinguish
+explicit user invocations, Codex markdown links to `SKILL.md`, tool/function
+reads of known `SKILL.md` files, weak assistant announcements, and unknown
+legacy evidence. It does not include raw user prompts or assistant transcript
+text.
 
 ## Finding
 
