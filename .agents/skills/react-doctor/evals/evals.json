@@ -1,0 +1,36 @@
+{
+  "skill_name": "react-doctor",
+  "baseline_guidance": "Compare responses with and without this skill to confirm the agent chooses pinned React Doctor commands, respects safety boundaries, and validates after fixes.",
+  "evals": [
+    {
+      "id": "changed-scope-regression-check",
+      "prompt": "I just finished React changes. Run React Doctor before commit.",
+      "expected_output": "The agent runs npm exec --package react-doctor@0.7.2 -- react-doctor --verbose --scope changed, treats diagnostics as the source of truth, and fixes new errors before warnings.",
+      "assertions": [
+        "Response chooses the pinned changed-scope React Doctor command.",
+        "Response does not use react-doctor@latest.",
+        "Response checks whether the score regressed before commit."
+      ]
+    },
+    {
+      "id": "full-doctor-triage",
+      "prompt": "/doctor this React app and clean up the findings.",
+      "expected_output": "The agent runs npm exec --package react-doctor@0.7.2 -- react-doctor --verbose, triages errors before warnings, makes focused diagnostic-backed edits, and reruns the same command.",
+      "assertions": [
+        "Response chooses the pinned full React Doctor command.",
+        "Response fixes findings in severity order.",
+        "Response validates by rerunning React Doctor."
+      ]
+    },
+    {
+      "id": "rule-config-explanation",
+      "prompt": "Why is react-doctor/no-array-index-as-key firing, and can we turn it off?",
+      "expected_output": "The agent uses the pinned rules explain command first, explains the rule, then applies the narrowest config change only if the user still wants it disabled.",
+      "assertions": [
+        "Response starts with npm exec --package react-doctor@0.7.2 -- react-doctor rules explain.",
+        "Response explains before disabling.",
+        "Response validates config changes with npm exec --package react-doctor@0.7.2 -- react-doctor --verbose --diff."
+      ]
+    }
+  ]
+}
