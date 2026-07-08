@@ -61,6 +61,8 @@ export type ScanReportUsage = {
   readonly diagnostics: readonly Diagnostic[];
   readonly contextPressure: ContextBudgetPressure;
   readonly totalSkillsAnalyzed: number;
+  readonly enabledSkillCount: number;
+  readonly disabledSkillCount: number;
   readonly usedSkillCount: number;
   readonly unusedSkillCount: number;
   readonly unknownSkillCount: number;
@@ -149,6 +151,8 @@ const buildReportUsage = (input: BuildScanReportUsageInput): ScanReportUsage => 
   diagnostics: input.analysis.diagnostics,
   contextPressure: input.contextPressure,
   totalSkillsAnalyzed: input.analysis.totalSkills,
+  enabledSkillCount: input.analysis.enabledSkillCount,
+  disabledSkillCount: input.analysis.disabledSkillCount,
   usedSkillCount: input.analysis.usedSkillCount,
   unusedSkillCount: input.analysis.unusedSkillCount,
   unknownSkillCount: input.analysis.unknownSkillCount,

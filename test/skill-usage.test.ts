@@ -654,6 +654,53 @@ describe("skill usage analysis", () => {
     });
     expect(actions(analysis, "project-local-unused")).toEqual([]);
   });
+
+  it("reports disabled but used skills for recovery review instead of cleanup", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    await writeJsonl(usageSource, [
+      assistant("2026-06-20T00:00:00.000Z", "Using the `disabled-used` skill."),
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [
+        buildRecord({ name: "active-unused", source: "global" }),
+        buildRecord({ name: "disabled-used", source: "global", enabled: false }),
+        buildRecord({ name: "disabled-unused", source: "global", enabled: false }),
+      ],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis).toMatchObject({
+      totalSkills: 3,
+      enabledSkillCount: 1,
+      disabledSkillCount: 2,
+      usedSkillCount: 1,
+      unusedSkillCount: 1,
+    });
+    expect(summary(analysis, "disabled-used")).toMatchObject({
+      enabled: false,
+      usageCount: 1,
+      tier: "recent",
+    });
+    expect(actions(analysis, "disabled-used")).toEqual(["review"]);
+    expect(summary(analysis, "disabled-used").recommendations[0]?.reason).toContain(
+      "recover or re-enable",
+    );
+    expect(actions(analysis, "disabled-unused")).toEqual([]);
+    expect(analysis.recommendations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "disable-candidate", skillName: "active-unused" }),
+        expect.objectContaining({ action: "review", skillName: "disabled-used" }),
+      ]),
+    );
+    expect(analysis.recommendations).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "disable-candidate", skillName: "disabled-used" }),
+        expect.objectContaining({ action: "disable-candidate", skillName: "disabled-unused" }),
+      ]),
+    );
+  });
 });
 
 const writeJsonl = async (filePath: string, records: readonly unknown[]): Promise<void> => {
@@ -708,6 +755,7 @@ const buildRecord = (input: {
   readonly source: SkillRecord["source"];
   readonly rootPath?: string | undefined;
   readonly description?: string | undefined;
+  readonly enabled?: boolean | undefined;
 }): SkillRecord => {
   const rootPath = input.rootPath ?? path.join("/tmp", "skills");
   const skillDir = path.join(rootPath, input.name);
@@ -724,6 +772,7 @@ const buildRecord = (input: {
     ecosystem: "codex",
     rootPath,
     source: input.source,
+    enabled: input.enabled ?? true,
     skillDir,
     skillPath: path.join(skillDir, "SKILL.md"),
     directoryName: input.name,

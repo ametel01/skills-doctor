@@ -307,7 +307,7 @@ const buildUsageReportInput = async (input: {
 }): Promise<NonNullable<Parameters<typeof buildScanReport>[0]["usage"]>> => {
   const discovered = await input.discoverUsageSources({ homeDir: input.homeDir });
   const analysis = await input.analyzeSkillUsage({
-    skills: input.scan.skills,
+    skills: [...input.scan.skills, ...(input.scan.disabledSkills ?? [])],
     usageSourcePaths: discovered.usageSourcePaths,
   });
   return {

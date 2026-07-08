@@ -29,6 +29,7 @@ export type ScanSkillRootsInput = {
 
 export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanResult> => {
   const skills: SkillRecord[] = [];
+  const disabledSkills: SkillRecord[] = [];
   const packages: SkillPackage[] = [];
   const diagnostics: Diagnostic[] = [...(input.diagnostics ?? [])];
   const findings: Finding[] = [];
@@ -72,8 +73,9 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
         directoryName: entry.name,
         skillDir,
         skillPath: path.join(skillDir, "SKILL.md"),
+        disabledByPath: disabledSkillFilter.hasPath(path.join(skillDir, "SKILL.md")),
       };
-      if (!disabledSkillFilter.hasPath(task.skillPath)) tasks.push(task);
+      tasks.push(task);
     }
     rootPlans.push({ rootIndex, diagnostics: [], tasks });
   }
@@ -93,8 +95,15 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
       const result = readResultsByTask.get(taskKey(task.rootIndex, task.entryIndex));
       if (result?.diagnostic !== undefined) diagnostics.push(result.diagnostic);
       if (result?.finding !== undefined) findings.push(result.finding);
-      if (result?.skill !== undefined && !isDisabledByName(result.skill, disabledSkillFilter)) {
-        skills.push(result.skill);
+      if (result?.skill !== undefined) {
+        const disabled =
+          result.skill.enabled === false || isDisabledByName(result.skill, disabledSkillFilter);
+        const skill = { ...result.skill, enabled: !disabled };
+        if (disabled) {
+          disabledSkills.push(skill);
+        } else {
+          skills.push(skill);
+        }
       }
     }
   }
@@ -109,6 +118,7 @@ export const scanSkillRoots = async (input: ScanSkillRootsInput): Promise<ScanRe
   return {
     roots: input.roots,
     skills,
+    disabledSkills,
     packages,
     diagnostics,
     findings,
@@ -128,6 +138,7 @@ type SkillReadTask = {
   readonly directoryName: string;
   readonly skillDir: string;
   readonly skillPath: string;
+  readonly disabledByPath: boolean;
 };
 
 type SkillReadResult = {
@@ -148,6 +159,12 @@ const readSkillTask = async (task: SkillReadTask): Promise<SkillReadResult> => {
   try {
     content = await readFile(task.skillPath, "utf8");
   } catch (error) {
+    if (task.disabledByPath) {
+      return {
+        rootIndex: task.rootIndex,
+        entryIndex: task.entryIndex,
+      };
+    }
     if (getErrorCode(error) === "ENOENT") {
       return {
         rootIndex: task.rootIndex,
@@ -174,6 +191,7 @@ const readSkillTask = async (task: SkillReadTask): Promise<SkillReadResult> => {
       ecosystem: task.root.ecosystem,
       rootPath: task.root.rootPath,
       source: task.root.source,
+      enabled: !task.disabledByPath,
       skillDir: task.skillDir,
       skillPath: task.skillPath,
       directoryName: task.directoryName,

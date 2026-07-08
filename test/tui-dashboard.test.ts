@@ -142,6 +142,8 @@ const makeReport = (
       recentWarningCount: 0,
     },
     totalSkillsAnalyzed: 66,
+    enabledSkillCount: 66,
+    disabledSkillCount: 0,
     usedSkillCount: 23,
     unusedSkillCount: 43,
     unknownSkillCount: 0,

@@ -652,6 +652,8 @@ const makeUsageAnalysis = (): SkillUsageAnalysis => ({
     },
   ],
   totalSkills: 2,
+  enabledSkillCount: 2,
+  disabledSkillCount: 0,
   usedSkillCount: 1,
   unusedSkillCount: 1,
   unknownSkillCount: 0,

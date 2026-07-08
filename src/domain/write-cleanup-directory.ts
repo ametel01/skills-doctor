@@ -60,6 +60,8 @@ const renderUsageMarkdown = (report: ScanReport, usage: ScanReportUsage): string
     `Context budget pressure: ${usage.contextPressure.level}`,
     `Usage coverage: ${usage.coverageStatus}`,
     `Skills analyzed: ${usage.totalSkillsAnalyzed}`,
+    `Enabled skills: ${usage.enabledSkillCount}`,
+    `Disabled skills: ${usage.disabledSkillCount}`,
     `Used: ${usage.usedSkillCount}`,
     `Unused: ${usage.unusedSkillCount}`,
     `Unknown: ${usage.unknownSkillCount}`,
@@ -86,7 +88,7 @@ const renderUsageMarkdown = (report: ScanReport, usage: ScanReportUsage): string
   lines.push("", "## Skills By Usage", "");
   for (const skill of usage.skillsByUsage) {
     lines.push(
-      `- ${skill.skillName}: ${skill.tier}, ${skill.usageCount} detected use${skill.usageCount === 1 ? "" : "s"}, ${skill.confidence} confidence`,
+      `- ${skill.skillName}: ${skill.enabled ? "enabled" : "disabled"}, ${skill.tier}, ${skill.usageCount} detected use${skill.usageCount === 1 ? "" : "s"}, ${skill.confidence} confidence`,
       `  - Path: ${skill.skillPath}`,
       `  - Enabled: ${skill.enabled ? "true" : "false"}`,
       `  - Coverage: ${skill.coverageStatus}`,
