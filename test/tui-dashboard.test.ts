@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import type { Key } from "node:readline";
 import { describe, expect, it } from "vitest";
 import { PromptCancelledError } from "../src/cli/utils/prompts.js";
 import {
@@ -129,6 +130,50 @@ describe("TUI dashboard", () => {
     expect(output).not.toContain("navigate");
     expect(output).not.toContain("select");
     expect(output).not.toContain("quit");
+  });
+
+  it("renders only reachable numeric shortcuts when review actions exceed nine", () => {
+    const nineActionsAndExit = reviewChoices(9);
+    const tenActionsAndExit = reviewChoices(10);
+    const nineOutput = renderTuiDashboard(makeReport(), nineActionsAndExit, {
+      color: false,
+      columns: 120,
+    });
+    const tenOutput = renderTuiDashboard(makeReport(), tenActionsAndExit, {
+      color: false,
+      columns: 120,
+      selectedIndex: 9,
+    });
+
+    expect(nineOutput).toContain("[9]  Review action 9");
+    expect(nineOutput).toContain("[0]  Exit");
+    expect(tenOutput).not.toContain("[10]");
+    expect(tenOutput).toMatch(/╭\s+Review action 10/);
+    expect(tenOutput).toContain("Review action 10");
+    expect(tenOutput).toContain("[0]  Exit");
+  });
+
+  it("selects numbered actions, exit, and an unnumbered tenth action", async () => {
+    const choices = reviewChoices(10);
+
+    await expect(startSelection(choices, [{ character: "1", key: {} }]).selection).resolves.toBe(
+      "action-1",
+    );
+    await expect(startSelection(choices, [{ character: "9", key: {} }]).selection).resolves.toBe(
+      "action-9",
+    );
+    await expect(startSelection(choices, [{ character: "0", key: {} }]).selection).resolves.toBe(
+      "exit",
+    );
+
+    const tenthAction = startSelection(choices, [
+      { character: undefined, key: { name: "end" } },
+      { character: undefined, key: { name: "up" } },
+      { character: undefined, key: { name: "return" } },
+    ]);
+    await expect(tenthAction.selection).resolves.toBe("action-10");
+    expect(tenthAction.stdin.rawModes).toEqual([true, false]);
+    expect(tenthAction.stdin.listenerCount("keypress")).toBe(0);
   });
 
   it("repaints without erasing scrollback and restores terminal state after selection", async () => {
@@ -299,6 +344,33 @@ const choices = () =>
     { name: "Review findings", value: "review", description: "Inspect findings" },
     { name: "Exit", value: "exit", description: "Quit" },
   ] as const;
+
+const reviewChoices = (actionCount: number) => [
+  ...Array.from({ length: actionCount }, (_, index) => ({
+    name: `Review action ${index + 1}`,
+    value: `action-${index + 1}`,
+    description: `Inspect action ${index + 1}`,
+  })),
+  { name: "Exit", value: "exit", description: "Quit" },
+];
+
+const startSelection = (
+  choices: ReturnType<typeof reviewChoices>,
+  keys: readonly { readonly character: string | undefined; readonly key: Key }[],
+): { readonly selection: Promise<string>; readonly stdin: FakeStdin } => {
+  const stdin = new FakeStdin(false, true);
+  const selection = selectTuiAction(makeReport(), choices, {
+    columns: 120,
+    color: false,
+    stdin: stdin as unknown as NodeJS.ReadStream,
+    stdout: new EventEmitter() as never,
+    write: () => undefined,
+  });
+  for (const { character, key } of keys) {
+    stdin.emit("keypress", character, key);
+  }
+  return { selection, stdin };
+};
 
 const makeReport = (
   overrides: Partial<Pick<ScanReport, "securityFindingCount" | "securityPriorityCounts">> = {},
