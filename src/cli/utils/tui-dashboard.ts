@@ -538,7 +538,7 @@ const renderNextStepPanel = <Value extends string>(
 ): readonly string[] => {
   const title = `${blue("⚑", shouldColor)} ${blue("Next step", shouldColor)}`;
   const lines = choices.map((choice, index) =>
-    renderChoiceRow(choice, index, selectedIndex === index, width - 6, shouldColor),
+    renderChoiceRow(choice, index, choices, selectedIndex === index, width - 6, shouldColor),
   );
   return framedPanel([title, ...lines], width, selectedBorder, shouldColor);
 };
@@ -546,14 +546,18 @@ const renderNextStepPanel = <Value extends string>(
 const renderChoiceRow = <Value extends string>(
   choice: Choice<Value>,
   index: number,
+  choices: readonly Choice<Value>[],
   selected: boolean,
   width: number,
   shouldColor: boolean,
 ): string => {
-  const shortcut = choice.value === "exit" ? "0" : String(index + 1);
-  const shortcutBadge = selected
-    ? selectedBadge(` ${shortcut} `, shouldColor)
-    : subtleBadge(` ${shortcut} `, shouldColor);
+  const shortcut = shortcutForChoice(choices, index);
+  const shortcutBadge =
+    shortcut === undefined
+      ? "   "
+      : selected
+        ? selectedBadge(` ${shortcut} `, shouldColor)
+        : subtleBadge(` ${shortcut} `, shouldColor);
   const displayName = formatDashboardChoiceName(choice.name);
   const name = selected ? bright(displayName, shouldColor) : displayName;
   const description = choice.description === undefined ? "" : dim(choice.description, shouldColor);
@@ -682,14 +686,24 @@ const resolveShortcutIndex = <Value extends string>(
   choices: readonly Choice<Value>[],
 ): number | undefined => {
   if (character === undefined) return undefined;
-  if (character === "0") {
-    const exitIndex = choices.findIndex((choice) => choice.value === "exit");
-    return exitIndex >= 0 ? exitIndex : undefined;
-  }
-  const numeric = Number(character);
-  if (!Number.isInteger(numeric) || numeric < 1) return undefined;
-  const index = numeric - 1;
-  return index < choices.length ? index : undefined;
+  const shortcutIndex = choices.findIndex(
+    (_, index) => shortcutForChoice(choices, index) === character,
+  );
+  return shortcutIndex >= 0 ? shortcutIndex : undefined;
+};
+
+const shortcutForChoice = <Value extends string>(
+  choices: readonly Choice<Value>[],
+  index: number,
+): string | undefined => {
+  const choice = choices[index];
+  if (choice === undefined) return undefined;
+  if (choice.value === "exit") return "0";
+
+  const nonExitIndex = choices
+    .slice(0, index)
+    .filter((candidate) => candidate.value !== "exit").length;
+  return nonExitIndex < 9 ? String(nonExitIndex + 1) : undefined;
 };
 
 const padRight = (text: string, width: number): string =>
