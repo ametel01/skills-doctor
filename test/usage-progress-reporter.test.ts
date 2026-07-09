@@ -29,6 +29,54 @@ describe("createUsageProgressReporter", () => {
     ]);
   });
 
+  it("bounds dense mixed bursts and flushes the last throttled non-completion", () => {
+    const output: Array<{ readonly at: number; readonly message: string }> = [];
+    let now = 0;
+    const reporter = createUsageProgressReporter({
+      enabled: true,
+      isTty: true,
+      now: () => now,
+      write: (message) => output.push({ at: now, message }),
+    });
+
+    for (let tick = 0; tick < 250; tick += 1) {
+      now = tick;
+      if (tick % 2 === 0) {
+        reporter.onDiscoveryProgress(discoveryEvent("file-inspected", tick));
+      } else {
+        reporter.onProgress(analysisEvent("source-progress", tick));
+      }
+    }
+
+    expect(output).toEqual([
+      {
+        at: 0,
+        message:
+          "\rDiscovering Codex usage sources... | 0 directories | 0 JSONL files | 0 candidates",
+      },
+      {
+        at: 100,
+        message:
+          "\rDiscovering Codex usage sources... | 0 directories | 100 JSONL files | 0 candidates",
+      },
+      {
+        at: 200,
+        message:
+          "\rDiscovering Codex usage sources... | 0 directories | 200 JSONL files | 0 candidates",
+      },
+    ]);
+
+    reporter.finish();
+
+    expect(output.slice(3)).toEqual([
+      expect.objectContaining({
+        at: 249,
+        message: expect.stringContaining("\rAnalyzing local Codex usage... 100%"),
+      }),
+      { at: 249, message: "\n" },
+    ]);
+  });
+
   it("emits one final redirected summary and ignores repeated finalization", () => {
     const output: string[] = [];
     const reporter = createUsageProgressReporter({

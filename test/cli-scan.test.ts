@@ -809,6 +809,7 @@ describe("scanAction", () => {
     ]);
     const launches: Array<{ readonly prompt: string; readonly promptPath?: string | undefined }> =
       [];
+    const stderr: string[] = [];
     const reportOutputRoot = path.join(directory, "cleanup-reports");
     const reportDirectory = path.join(reportOutputRoot, "2026-06-20T03-04-05-006Z");
 
@@ -820,12 +821,13 @@ describe("scanAction", () => {
         homeDir,
         env: {},
         stdinIsTty: true,
+        stderrIsTty: false,
         prompts: queuedPrompts({
           selects: ["all", "cleanup"],
           confirms: [true],
         }),
         writeStdout: () => {},
-        writeStderr: () => {},
+        writeStderr: (message) => stderr.push(message),
         spinner: { run: async (_message, operation) => await operation() },
         isRepairAgentAvailable: async (command) => command === "codex",
         cleanupReportOutputRoot: reportOutputRoot,
@@ -842,6 +844,11 @@ describe("scanAction", () => {
     expect(report.skills.map((skill) => skill.name)).toEqual(["active-unused"]);
     expect(report.usage?.totalSkillsAnalyzed).toBe(2);
     expect(JSON.stringify(report.usage)).toContain("disabled-unused");
+    expect(stderr).toHaveLength(2);
+    expect(
+      stderr.every((message) => /^Analyzing local Codex usage\.\.\..*\n$/u.test(message)),
+    ).toBe(true);
+    expect(stderr.join("")).not.toContain("\r");
   });
 
   it("does not offer cleanup handoff when only used skills are present", async () => {
@@ -1051,6 +1058,7 @@ describe("scanAction", () => {
     const launches: Array<{ readonly prompt: string; readonly promptPath?: string | undefined }> =
       [];
     const nextStepChoices: string[][] = [];
+    const stderr: string[] = [];
     const reportOutputRoot = path.join(directory, "cleanup-reports");
     const reportDirectory = path.join(reportOutputRoot, "2026-06-20T04-05-06-007Z");
 
@@ -1062,6 +1070,7 @@ describe("scanAction", () => {
         homeDir,
         env: {},
         stdinIsTty: true,
+        stderrIsTty: false,
         prompts: {
           ...queuedPrompts({
             selects: ["all", "usage-recommendation-repair", "shorten-description"],
@@ -1086,7 +1095,7 @@ describe("scanAction", () => {
           },
         },
         writeStdout: (message) => stdout.push(message),
-        writeStderr: () => {},
+        writeStderr: (message) => stderr.push(message),
         spinner: { run: async (_message, operation) => await operation() },
         isRepairAgentAvailable: async (command) => command === "codex",
         cleanupReportOutputRoot: reportOutputRoot,
@@ -1109,6 +1118,11 @@ describe("scanAction", () => {
     expect(report.skills.map((skill) => skill.name)).toEqual(["long-used-skill"]);
     expect(report.usage?.totalSkillsAnalyzed).toBe(2);
     expect(JSON.stringify(report.usage)).toContain("disabled-long-skill");
+    expect(stderr).toHaveLength(2);
+    expect(
+      stderr.every((message) => /^Analyzing local Codex usage\.\.\..*\n$/u.test(message)),
+    ).toBe(true);
+    expect(stderr.join("")).not.toContain("\r");
   });
 
   it("lets users cancel cleanup agent launch after report writing", async () => {
