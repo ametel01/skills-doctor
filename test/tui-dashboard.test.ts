@@ -302,6 +302,25 @@ describe("TUI dashboard", () => {
     }
   });
 
+  it("truncates colored Unicode choice rows without malformed ANSI sequences", () => {
+    const output = renderTuiDashboard(
+      makeReport(),
+      [
+        {
+          name: `Inspect ${"🧪".repeat(40)} security findings`,
+          value: "review",
+          description: `Keep ${"🧪".repeat(40)} evidence visible`,
+        },
+        { name: "Exit", value: "exit", description: "Quit skills-doctor" },
+      ],
+      { color: true, columns: 60 },
+    );
+
+    expectPrintableLinesWithin(output, 60);
+    expect(output).toContain("🧪");
+    expect(output).toContain("\x1b[0m");
+  });
+
   it("keeps the version brand card visible on medium-width terminals", () => {
     expect(renderTuiDashboard(makeReport(), [], { color: false, columns: 111 })).not.toContain(
       "v1.0.0",
@@ -466,6 +485,8 @@ const expectPrintableLinesWithin = (output: string, columns: number): void => {
   // biome-ignore lint/complexity/useRegexLiterals: keep the ESC character out of source regex literals.
   const ansiPattern = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
   for (const line of output.trimEnd().split("\n")) {
-    expect(Array.from(line.replace(ansiPattern, "")).length).toBeLessThanOrEqual(columns);
+    const printable = line.replace(ansiPattern, "");
+    expect(printable).not.toContain("\x1b");
+    expect(Array.from(printable).length).toBeLessThanOrEqual(columns);
   }
 };
