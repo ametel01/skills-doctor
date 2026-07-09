@@ -1,6 +1,7 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
 import { scanAction, shouldUseTuiDashboard } from "../src/cli/commands/scan.js";
@@ -79,6 +80,46 @@ describe("scanAction", () => {
 
     expect(stdout.join("")).toContain("Skills: 1 scanned");
     expect(stdout.join("")).not.toContain("\x1b[");
+  });
+
+  it("keeps a clean interactive dashboard non-navigable and preserves scrollback", async () => {
+    await cp(fixturePath("valid-strong"), directory, { recursive: true });
+    const stdout: string[] = [];
+    const select = inquirerPromptAdapter.select;
+    const scanOptions = {
+      cwd: directory,
+      homeDir: path.join(directory, "home"),
+      env: {},
+      stdinIsTty: true,
+      stdoutIsTty: true,
+      stdinHasRawMode: true,
+      writeStdout: (message: string) => stdout.push(message),
+      writeStderr: () => {},
+      spinner: {
+        run: async <Value>(_message: string, operation: () => Promise<Value>) => await operation(),
+      },
+    };
+    const cleanReport = await scanAction(".", { yes: true }, scanOptions);
+    expect(cleanReport.findingCount).toBe(0);
+    stdout.length = 0;
+    Object.defineProperty(inquirerPromptAdapter, "select", {
+      configurable: true,
+      value: async () => "all",
+    });
+
+    try {
+      await scanAction(".", { logs: false }, scanOptions);
+    } finally {
+      Object.defineProperty(inquirerPromptAdapter, "select", { configurable: true, value: select });
+    }
+
+    const output = stdout.join("");
+    expect(output).not.toContain("\x1b[3J");
+    expect(output).not.toContain("\x1b[?25l");
+    expect(output).toContain("\x1b[?25h");
+    expect(output).not.toContain("navigate");
+    expect(output).not.toContain("select");
+    expect(output).not.toContain("quit");
   });
 
   it("keeps ambiguous roots conservative when TERM=dumb", async () => {
@@ -1990,6 +2031,9 @@ const writeStrongSkill = async (skillDir: string, name: string): Promise<void> =
     ].join("\n"),
   );
 };
+
+const fixturePath = (name: string): string =>
+  fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 
 const writeLongSkill = async (skillDir: string, name: string): Promise<void> => {
   await writeValidEvals(skillDir, name);

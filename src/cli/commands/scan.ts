@@ -64,7 +64,8 @@ import {
 import {
   renderTuiDashboard,
   selectTuiAction,
-  TUI_CLEAR_SCREEN,
+  TUI_REPAINT_SCREEN,
+  TUI_SHOW_CURSOR,
   waitForTuiContinue,
 } from "../utils/tui-dashboard.js";
 
@@ -254,10 +255,10 @@ export const scanAction = async (
     });
     if (useTui && !shouldReview) {
       writeStdout(
-        `${TUI_CLEAR_SCREEN}${renderTuiDashboard(report, [], {
+        `${TUI_REPAINT_SCREEN}${renderTuiDashboard(report, [], {
           color: terminalCapabilities.canUseAnsi,
           columns: options.terminalColumns ?? process.stdout.columns,
-        })}`,
+        })}${TUI_SHOW_CURSOR}`,
       );
     } else if (!useTui || !shouldReview) {
       await printScoreHeader({
