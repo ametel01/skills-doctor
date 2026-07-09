@@ -22,10 +22,19 @@ export const buildCleanupHandoffPrompt = (input: BuildCleanupHandoffPromptInput)
     `Skills analyzed: ${usage.totalSkillsAnalyzed}`,
     `Enabled skills: ${usage.enabledSkillCount}`,
     `Disabled skills: ${usage.disabledSkillCount}`,
-    `Usage: ${usage.usedSkillCount} used, ${usage.unusedSkillCount} unused, ${usage.unknownSkillCount} unknown`,
+    `Enabled skill usage: ${usage.usedSkillCount} used, ${usage.unusedSkillCount} unused, ${usage.unknownSkillCount} unknown`,
     `Coverage: ${usage.coverageStatus}`,
     `Context budget pressure: ${usage.contextPressure.level}`,
   ];
+
+  const disabledRecoveryCount = usage.skillsByUsage.filter(
+    (skill) => !skill.enabled && skill.usageCount > 0,
+  ).length;
+  if (disabledRecoveryCount > 0) {
+    lines.push(
+      `Disabled recovery: ${disabledRecoveryCount} disabled skill${disabledRecoveryCount === 1 ? "" : "s"} with detected usage`,
+    );
+  }
 
   if (input.reportDirectory !== undefined) {
     lines.push(`Usage report directory: ${input.reportDirectory}`);

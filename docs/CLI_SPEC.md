@@ -326,7 +326,10 @@ recommendations and leave unselected candidates, keep, review,
 shorten-description, and merge-candidate recommendations as read-only report
 context.
 Skills disabled through Codex `[[skills.config]]` entries are excluded from
-scan, finding, usage-ranking, and cleanup-candidate results.
+quality scan/finding results, enabled-skill usage rollups and ranking sections,
+and cleanup candidates. Their per-skill rows remain in usage reports; disabled
+skills with detected usage are shown in a dedicated recovery section so users
+can review whether to recover or re-enable them.
 
 ## Error Handling
 

@@ -563,7 +563,11 @@ const buildAnalysis = (input: {
     totalSkills: input.catalog.length,
     enabledSkillCount: summaries.filter((summary) => summary.enabled).length,
     disabledSkillCount: summaries.filter((summary) => !summary.enabled).length,
-    usedSkillCount: summaries.filter((summary) => summary.usageCount > 0).length,
+    usedSkillCount: summaries.filter(
+      (summary) =>
+        summary.enabled &&
+        (summary.tier === "frequent" || summary.tier === "recent" || summary.tier === "rare"),
+    ).length,
     unusedSkillCount: summaries.filter((summary) => summary.enabled && summary.tier === "unused")
       .length,
     unknownSkillCount: summaries.filter((summary) => summary.enabled && summary.tier === "unknown")

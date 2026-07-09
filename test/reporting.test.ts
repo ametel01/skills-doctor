@@ -533,7 +533,7 @@ describe("scan reports", () => {
 
     const rendered = renderHumanSummary(report);
 
-    expect(rendered).toContain("Usage analysis: 1 used, 1 unused, 0 unknown");
+    expect(rendered).toContain("Usage analysis (enabled skills): 1 used, 1 unused, 0 unknown");
     expect(rendered).toContain("Usage coverage: complete");
     expect(rendered).toContain("Context budget pressure: high");
     expect(rendered).toContain("Recent Codex logs show skill descriptions were shortened.");
@@ -599,6 +599,7 @@ describe("scan reports", () => {
     const rendered = renderHumanSummary(report, { includeScore: false, color: true });
 
     expect(rendered).toContain("\x1b[36mSkills\x1b[39m");
+    expect(rendered).toContain("Usage analysis (enabled skills)");
     expect(rendered).toContain("\x1b[32m1\x1b[39m used");
     expect(rendered).toContain("\x1b[33m1\x1b[39m unused");
     expect(rendered).toContain("Usage coverage\x1b[39m: \x1b[32mcomplete\x1b[39m");

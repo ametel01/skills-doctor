@@ -1423,16 +1423,21 @@ const formatFindingLocation = (finding: Finding): string =>
 const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions = {}): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";
   const shouldColor = Boolean(options.color);
+  const disabledRecoverySkills = report.usage.skillsByUsage.filter(
+    (skill) => !skill.enabled && skill.usageCount > 0,
+  );
   const lines = [
-    `${usageLabel("Usage ranking", shouldColor)}:`,
+    `${usageLabel("Usage ranking (enabled skills)", shouldColor)}:`,
     "",
     usageLabel("Summary", shouldColor),
     ...renderTable(
       ["Metric", "Count"],
       [
+        ["Enabled skills", String(report.usage.enabledSkillCount)],
         ["Used", String(report.usage.usedSkillCount)],
         ["Unused", String(report.usage.unusedSkillCount)],
         ["Unknown", String(report.usage.unknownSkillCount)],
+        ["Disabled recovery", String(disabledRecoverySkills.length)],
         ["Coverage", report.usage.coverageStatus],
         ["Duplicates", String(report.usage.duplicateSkillCount)],
         ["Plugins", String(report.usage.pluginContributedSkillCount)],
@@ -1447,7 +1452,9 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
   ];
 
   for (const tier of ["frequent", "recent", "rare"] as const) {
-    const skills = report.usage.skillsByUsage.filter((skill) => skill.tier === tier);
+    const skills = report.usage.skillsByUsage.filter(
+      (skill) => skill.enabled && skill.tier === tier,
+    );
     if (skills.length === 0) continue;
     lines.push(
       "",
@@ -1481,7 +1488,9 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
     );
   }
 
-  const unusedSkills = report.usage.skillsByUsage.filter((skill) => skill.tier === "unused");
+  const unusedSkills = report.usage.skillsByUsage.filter(
+    (skill) => skill.enabled && skill.tier === "unused",
+  );
   if (unusedSkills.length > 0) {
     const previewLimit = 10;
     const preview = unusedSkills.slice(0, previewLimit);
@@ -1506,6 +1515,39 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
             (text, _rowIndex, row) => colorizeEnabled(row[1] ?? text.trim(), text, shouldColor),
             (text, _rowIndex, row) => colorizeCoverage(row[2] ?? text.trim(), text, shouldColor),
             (text) => dim(text, shouldColor),
+            (text) => dim(text, shouldColor),
+          ],
+        },
+      ),
+    );
+  }
+
+  if (disabledRecoverySkills.length > 0) {
+    lines.push(
+      "",
+      warning("Disabled recovery", shouldColor),
+      `  ${warning(String(disabledRecoverySkills.length), shouldColor)} disabled skill${disabledRecoverySkills.length === 1 ? "" : "s"} with detected usage. Review whether to recover or re-enable ${disabledRecoverySkills.length === 1 ? "it" : "them"}.`,
+      "",
+      ...renderTable(
+        ["Skill", "Uses", "Recent", "Confidence", "Evidence", "Coverage", "Last used"],
+        disabledRecoverySkills.map((skill) => [
+          skill.skillName,
+          String(skill.usageCount),
+          String(skill.recentUsageCount),
+          skill.confidence,
+          formatEvidenceKind(skill.lastEvidenceKind),
+          skill.coverageStatus,
+          formatUsageTimestamp(skill.lastUsedAt),
+        ]),
+        {
+          colorizers: [
+            (text) => accent(text, shouldColor),
+            (text) => warning(text, shouldColor),
+            (text) => warning(text, shouldColor),
+            (text, _rowIndex, row) =>
+              colorizeUsageConfidence(row[3] ?? text.trim(), text, shouldColor),
+            (text) => dim(text, shouldColor),
+            (text, _rowIndex, row) => colorizeCoverage(row[5] ?? text.trim(), text, shouldColor),
             (text) => dim(text, shouldColor),
           ],
         },
@@ -1544,10 +1586,11 @@ const colorizeUsageSummaryCount = (
   text: string,
   shouldColor: boolean,
 ): string => {
-  if (rowIndex === 0) return success(text, shouldColor);
-  if (rowIndex === 1 || rowIndex === 4) return warning(text, shouldColor);
-  if (rowIndex === 3) return colorizeCoverage(text.trim(), text, shouldColor);
-  if (rowIndex === 5) return accent(text, shouldColor);
+  if (rowIndex === 0) return accent(text, shouldColor);
+  if (rowIndex === 1) return success(text, shouldColor);
+  if (rowIndex === 2 || rowIndex === 4 || rowIndex === 6) return warning(text, shouldColor);
+  if (rowIndex === 5) return colorizeCoverage(text.trim(), text, shouldColor);
+  if (rowIndex === 7) return accent(text, shouldColor);
   return dim(text, shouldColor);
 };
 

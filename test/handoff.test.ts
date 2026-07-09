@@ -222,6 +222,7 @@ describe("cleanup handoff", () => {
     expect(prompt).toContain("Coverage: complete");
     expect(prompt).toContain("Evidence kind: none");
     expect(prompt).toContain("Make only reversible Codex skills-config disable changes");
+    expect(prompt).toContain("Enabled skill usage: 1 used, 1 unused, 0 unknown");
     expect(prompt).not.toContain("RAW PRIVATE TRANSCRIPT");
   });
 
@@ -305,6 +306,9 @@ describe("cleanup handoff", () => {
     );
     await expect(readFile(result.usageMarkdownPath, "utf8")).resolves.toContain(
       "Coverage: complete",
+    );
+    await expect(readFile(result.usageMarkdownPath, "utf8")).resolves.toContain(
+      "Enabled skill usage: 1 used, 1 unused, 0 unknown",
     );
   });
 
