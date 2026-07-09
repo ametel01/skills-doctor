@@ -208,6 +208,52 @@ describe("scanAction", () => {
     expect(stdout.join("")).toContain("Usage analysis (enabled skills):");
   });
 
+  it("renders actual usage-analysis progress in interactive runs", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const homeDir = path.join(directory, "home");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "user",
+        content: "Use $good-skill for this.",
+      },
+      {
+        timestamp: "2026-06-20T00:01:00.000Z",
+        role: "assistant",
+        content: "No skill announcement here.",
+      },
+    ]);
+    const stderr: string[] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        stdoutIsTty: false,
+        prompts: queuedPrompts({ selects: ["all"] }),
+        writeStdout: () => {},
+        writeStderr: (message) => stderr.push(message),
+      },
+    );
+
+    const progressOutput = stderr.join("");
+    expect(progressOutput).toContain("Discovering Codex usage sources...");
+    expect(progressOutput).toContain("1 candidates");
+    expect(progressOutput).toContain("Analyzing local Codex usage...");
+    expect(progressOutput).toContain("100%");
+    expect(progressOutput).toContain("1/1 source");
+    expect(progressOutput).toContain("2 records");
+    expect(progressOutput).toContain("1 matches");
+    expect(report.usage).toMatchObject({
+      totalSkillsAnalyzed: 1,
+      usedSkillCount: 1,
+    });
+  });
+
   it("reports a measurable elapsed scan time with injected clock", async () => {
     const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
     await mkdir(skillDir, { recursive: true });

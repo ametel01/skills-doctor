@@ -52,7 +52,11 @@ import {
 } from "../utils/prompts.js";
 import { printScoreHeader } from "../utils/render-score-header.js";
 import { shouldSkipPrompts } from "../utils/should-skip-prompts.js";
-import { createSpinner, type SpinnerFactory } from "../utils/spinner.js";
+import {
+  createSpinner,
+  createUsageProgressReporter,
+  type SpinnerFactory,
+} from "../utils/spinner.js";
 import {
   resolveTerminalCapabilities,
   type TerminalCapabilities,
@@ -222,6 +226,11 @@ export const scanAction = async (
           homeDir: options.homeDir,
           discoverUsageSources: options.discoverUsageSources ?? discoverUsageSources,
           analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
+          usageProgress: createUsageProgressReporter({
+            enabled: !skipPrompts && !flags.json,
+            write: writeStderr,
+            isTty: process.stderr.isTTY,
+          }),
         }),
       )
     : undefined;
@@ -272,6 +281,7 @@ export const scanAction = async (
           spinner,
           prompts,
           write: writeStdout,
+          writeStderr,
           isRepairAgentAvailable: options.isRepairAgentAvailable,
           now,
           repairReportOutputRoot: options.repairReportOutputRoot,
@@ -318,13 +328,23 @@ const buildUsageReportInput = async (input: {
   readonly analyzeSkillUsage: (
     input: AnalyzeSkillUsageInput,
   ) => ReturnType<typeof analyzeSkillUsage>;
+  readonly usageProgress?: ReturnType<typeof createUsageProgressReporter> | undefined;
 }): Promise<NonNullable<Parameters<typeof buildScanReport>[0]["usage"]>> => {
-  const discovered = await input.discoverUsageSources({ homeDir: input.homeDir });
-  const analysis = await input.analyzeSkillUsage({
-    skills: [...input.scan.skills, ...(input.scan.disabledSkills ?? [])],
-    usageSourcePaths: discovered.usageSourcePaths,
-    coverageDiagnostics: discovered.diagnostics,
+  const discovered = await input.discoverUsageSources({
+    homeDir: input.homeDir,
+    onProgress: input.usageProgress?.onDiscoveryProgress,
   });
+  let analysis: Awaited<ReturnType<typeof analyzeSkillUsage>>;
+  try {
+    analysis = await input.analyzeSkillUsage({
+      skills: [...input.scan.skills, ...(input.scan.disabledSkills ?? [])],
+      usageSourcePaths: discovered.usageSourcePaths,
+      coverageDiagnostics: discovered.diagnostics,
+      onProgress: input.usageProgress?.onProgress,
+    });
+  } finally {
+    input.usageProgress?.finish();
+  }
   return {
     analysis,
     contextPressure: discovered.contextPressure,
@@ -518,6 +538,7 @@ type ReviewFindingsInput = {
   readonly spinner: SpinnerFactory;
   readonly prompts: PromptAdapter;
   readonly write: (message: string) => void;
+  readonly writeStderr: (message: string) => void;
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe | undefined;
   readonly now?: () => number;
   readonly repairReportOutputRoot?: string | undefined;
@@ -845,6 +866,11 @@ const runCleanupAgentFlow = async (
         homeDir: input.homeDir,
         discoverUsageSources: input.discoverUsageSources,
         analyzeSkillUsage: input.analyzeSkillUsage,
+        usageProgress: createUsageProgressReporter({
+          enabled: true,
+          write: input.writeStderr,
+          isTty: process.stderr.isTTY,
+        }),
       }),
     );
     const nextReport = buildScanReport({
@@ -946,6 +972,11 @@ const runUsageRecommendationAgentFlow = async (
         homeDir: input.homeDir,
         discoverUsageSources: input.discoverUsageSources,
         analyzeSkillUsage: input.analyzeSkillUsage,
+        usageProgress: createUsageProgressReporter({
+          enabled: true,
+          write: input.writeStderr,
+          isTty: process.stderr.isTTY,
+        }),
       }),
     );
     const nextReport = buildScanReport({

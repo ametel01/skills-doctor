@@ -1,5 +1,7 @@
-import { open } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import path from "node:path";
+import { createInterface } from "node:readline";
 import type { Diagnostic, SkillRecord } from "./types.js";
 
 export type SkillUsageTier = "frequent" | "recent" | "rare" | "unused" | "unknown";
@@ -85,6 +87,26 @@ export type SkillUsageAnalysis = {
   readonly recommendations: readonly SkillCleanupRecommendation[];
 };
 
+export type SkillUsageProgressEvent = {
+  readonly phase:
+    | "started"
+    | "source-started"
+    | "source-progress"
+    | "source-completed"
+    | "completed";
+  readonly totalSources: number;
+  readonly completedSources: number;
+  readonly totalBytes: number;
+  readonly processedBytes: number;
+  readonly recordCount: number;
+  readonly parsedRecordCount: number;
+  readonly invalidRecordCount: number;
+  readonly eventCount: number;
+  readonly currentSourcePath?: string | undefined;
+  readonly currentSourceBytes?: number | undefined;
+  readonly currentSourceProcessedBytes?: number | undefined;
+};
+
 export type AnalyzeSkillUsageInput = {
   readonly skills: readonly SkillRecord[];
   readonly usageSourcePaths?: readonly string[] | undefined;
@@ -94,6 +116,7 @@ export type AnalyzeSkillUsageInput = {
   readonly maxFileBytes?: number | undefined;
   readonly frequentUseThreshold?: number | undefined;
   readonly descriptionCostThreshold?: number | undefined;
+  readonly onProgress?: ((event: SkillUsageProgressEvent) => void) | undefined;
 };
 
 type CatalogSkill = {
@@ -118,6 +141,18 @@ type ParsedUsageSource = {
   readonly diagnostics: readonly Diagnostic[];
 };
 
+type UsageProgressState = {
+  readonly totalSources: number;
+  readonly totalBytes: number;
+  readonly sourceBytes: ReadonlyMap<string, number>;
+  completedSources: number;
+  processedBytes: number;
+  recordCount: number;
+  parsedRecordCount: number;
+  invalidRecordCount: number;
+  eventCount: number;
+};
+
 const DEFAULT_RECENT_WINDOW_DAYS = 30;
 const DEFAULT_FREQUENT_USE_THRESHOLD = 5;
 const DEFAULT_DESCRIPTION_COST_THRESHOLD = 280;
@@ -131,9 +166,12 @@ export const analyzeSkillUsage = async (
   const aliasMap = buildAliasMap(catalog);
   const phraseMap = buildPhraseMap(catalog);
   const skillPathMap = buildSkillPathMap(catalog);
+  const progressState = await buildProgressState(sourcePaths);
   const events: MatchedUsageEvent[] = [];
   const sourceCoverage: UsageSourceCoverage[] = [];
   let readableSourceCount = 0;
+
+  input.onProgress?.(progressEvent(progressState, "started"));
 
   if (sourcePaths.length === 0) {
     diagnostics.push({
@@ -150,6 +188,8 @@ export const analyzeSkillUsage = async (
         aliasMap,
         phraseMap,
         skillPathMap,
+        progressState,
+        onProgress: input.onProgress,
       }),
     ),
   );
@@ -170,7 +210,7 @@ export const analyzeSkillUsage = async (
     dedupedEvents.push(event);
   }
 
-  return buildAnalysis({
+  const analysis = buildAnalysis({
     catalog,
     sourcePaths,
     readableSourceCount,
@@ -182,6 +222,8 @@ export const analyzeSkillUsage = async (
     frequentUseThreshold: input.frequentUseThreshold ?? DEFAULT_FREQUENT_USE_THRESHOLD,
     descriptionCostThreshold: input.descriptionCostThreshold ?? DEFAULT_DESCRIPTION_COST_THRESHOLD,
   });
+  input.onProgress?.(progressEvent(progressState, "completed"));
+  return analysis;
 };
 
 const parseUsageSource = async (input: {
@@ -189,6 +231,8 @@ const parseUsageSource = async (input: {
   readonly aliasMap: ReadonlyMap<string, readonly CatalogSkill[]>;
   readonly phraseMap: ReadonlyMap<string, readonly CatalogSkill[]>;
   readonly skillPathMap: ReadonlyMap<string, readonly CatalogSkill[]>;
+  readonly progressState: UsageProgressState;
+  readonly onProgress: ((event: SkillUsageProgressEvent) => void) | undefined;
 }): Promise<ParsedUsageSource> => {
   const events: MatchedUsageEvent[] = [];
   const diagnostics: Diagnostic[] = [];
@@ -196,7 +240,63 @@ const parseUsageSource = async (input: {
   let recordCount = 0;
   let parsedRecordCount = 0;
   let invalidRecordCount = 0;
-  const handle = await open(input.sourcePath, "r").catch((error: unknown) => {
+  let currentSourceProcessedBytes = 0;
+  const currentSourceBytes = input.progressState.sourceBytes.get(input.sourcePath) ?? 0;
+
+  input.onProgress?.(
+    progressEvent(input.progressState, "source-started", {
+      currentSourcePath: input.sourcePath,
+      currentSourceBytes,
+      currentSourceProcessedBytes,
+    }),
+  );
+
+  const stream = createReadStream(input.sourcePath, { encoding: "utf8" });
+  stream.on("data", (chunk) => {
+    const byteLength = Buffer.byteLength(chunk);
+    currentSourceProcessedBytes += byteLength;
+    input.progressState.processedBytes += byteLength;
+    input.onProgress?.(
+      progressEvent(input.progressState, "source-progress", {
+        currentSourcePath: input.sourcePath,
+        currentSourceBytes,
+        currentSourceProcessedBytes,
+      }),
+    );
+  });
+
+  const lines = createInterface({
+    input: stream,
+    crlfDelay: Number.POSITIVE_INFINITY,
+  });
+
+  const completeSource = (readable: boolean): ParsedUsageSource => {
+    input.progressState.completedSources += 1;
+    input.onProgress?.(
+      progressEvent(input.progressState, "source-completed", {
+        currentSourcePath: input.sourcePath,
+        currentSourceBytes,
+        currentSourceProcessedBytes,
+      }),
+    );
+    return {
+      sourcePath: input.sourcePath,
+      readable,
+      events,
+      diagnostics,
+      coverage: {
+        sourcePath: input.sourcePath,
+        status: diagnosticCodes.size === 0 ? "complete" : "incomplete",
+        recordCount,
+        parsedRecordCount,
+        invalidRecordCount,
+        eventCount: events.length,
+        diagnosticCodes: [...diagnosticCodes].sort(),
+      },
+    };
+  };
+
+  const handleReadError = (error: unknown): ParsedUsageSource => {
     const diagnostic = {
       code: "usage-source-unreadable",
       severity: "warning",
@@ -205,45 +305,30 @@ const parseUsageSource = async (input: {
     } satisfies Diagnostic;
     diagnostics.push(diagnostic);
     diagnosticCodes.add(diagnostic.code);
-    return undefined;
-  });
-
-  if (handle === undefined) {
-    return {
-      sourcePath: input.sourcePath,
-      readable: false,
-      events,
-      diagnostics,
-      coverage: {
-        sourcePath: input.sourcePath,
-        status: "incomplete",
-        recordCount,
-        parsedRecordCount,
-        invalidRecordCount,
-        eventCount: events.length,
-        diagnosticCodes: [...diagnosticCodes].sort(),
-      },
-    };
-  }
+    return completeSource(false);
+  };
 
   try {
-    for await (const line of handle.readLines()) {
+    for await (const line of lines) {
       const trimmed = line.trim();
       if (trimmed.length === 0) continue;
       recordCount += 1;
+      input.progressState.recordCount += 1;
 
       const record = parseJsonLine(trimmed, input.sourcePath, diagnostics);
       if (record === undefined) {
         invalidRecordCount += 1;
+        input.progressState.invalidRecordCount += 1;
         diagnosticCodes.add("usage-source-invalid-json");
         continue;
       }
       parsedRecordCount += 1;
+      input.progressState.parsedRecordCount += 1;
 
       const timestamp = extractTimestamp(record);
       const dedupeMarker = extractTurnMarker(record) ?? timestamp ?? String(recordCount);
 
-      for (const match of matchRecordSkillUse({
+      const matches = matchRecordSkillUse({
         record,
         aliasMap: input.aliasMap,
         phraseMap: input.phraseMap,
@@ -251,7 +336,9 @@ const parseUsageSource = async (input: {
         sourcePath: input.sourcePath,
         diagnostics,
         diagnosticCodes,
-      })) {
+      });
+      input.progressState.eventCount += matches.length;
+      for (const match of matches) {
         events.push({
           skillKey: skillKey(match.skill.skill),
           dedupeMarker,
@@ -265,34 +352,60 @@ const parseUsageSource = async (input: {
       }
     }
   } catch (error: unknown) {
-    const diagnostic = {
-      code: "usage-source-unreadable",
-      severity: "warning",
-      message: error instanceof Error ? error.message : `Unable to read ${input.sourcePath}`,
-      path: input.sourcePath,
-    } satisfies Diagnostic;
-    diagnostics.push(diagnostic);
-    diagnosticCodes.add(diagnostic.code);
-  } finally {
-    await handle.close();
+    return handleReadError(error);
   }
 
+  return completeSource(true);
+};
+
+const buildProgressState = async (sourcePaths: readonly string[]): Promise<UsageProgressState> => {
+  const entries = await Promise.all(
+    sourcePaths.map(async (sourcePath) => {
+      const sourceStat = await stat(sourcePath).catch(() => undefined);
+      return [sourcePath, sourceStat?.size ?? 0] as const;
+    }),
+  );
+  const sourceBytes = new Map(entries);
   return {
-    sourcePath: input.sourcePath,
-    readable: true,
-    events,
-    diagnostics,
-    coverage: {
-      sourcePath: input.sourcePath,
-      status: diagnosticCodes.size === 0 ? "complete" : "incomplete",
-      recordCount,
-      parsedRecordCount,
-      invalidRecordCount,
-      eventCount: events.length,
-      diagnosticCodes: [...diagnosticCodes].sort(),
-    },
+    totalSources: sourcePaths.length,
+    totalBytes: entries.reduce((sum, [, size]) => sum + size, 0),
+    sourceBytes,
+    completedSources: 0,
+    processedBytes: 0,
+    recordCount: 0,
+    parsedRecordCount: 0,
+    invalidRecordCount: 0,
+    eventCount: 0,
   };
 };
+
+const progressEvent = (
+  state: UsageProgressState,
+  phase: SkillUsageProgressEvent["phase"],
+  current?: Pick<
+    SkillUsageProgressEvent,
+    "currentSourcePath" | "currentSourceBytes" | "currentSourceProcessedBytes"
+  >,
+): SkillUsageProgressEvent => ({
+  phase,
+  totalSources: state.totalSources,
+  completedSources: state.completedSources,
+  totalBytes: state.totalBytes,
+  processedBytes: Math.min(state.processedBytes, state.totalBytes),
+  recordCount: state.recordCount,
+  parsedRecordCount: state.parsedRecordCount,
+  invalidRecordCount: state.invalidRecordCount,
+  eventCount: state.eventCount,
+  ...(current?.currentSourcePath === undefined
+    ? {}
+    : { currentSourcePath: current.currentSourcePath }),
+  ...(current?.currentSourceBytes === undefined
+    ? {}
+    : { currentSourceBytes: current.currentSourceBytes }),
+  ...(current?.currentSourceProcessedBytes === undefined
+    ? {}
+    : { currentSourceProcessedBytes: current.currentSourceProcessedBytes }),
+});
 
 const parseJsonLine = (
   line: string,

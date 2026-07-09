@@ -7,6 +7,7 @@ import {
   parseSkillContent,
   type SkillRecord,
   type SkillUsageAnalysis,
+  type SkillUsageProgressEvent,
   type SkillUsageSummary,
 } from "../src/index.js";
 
@@ -102,6 +103,57 @@ describe("skill usage analysis", () => {
       usageCount: 3,
       recentUsageCount: 1,
       tier: "unknown",
+    });
+  });
+
+  it("reports usage progress from actual source bytes and parsed records", async () => {
+    const usageSource = path.join(directory, "session.jsonl");
+    const records = [
+      JSON.stringify(user("2026-06-20T00:00:00.000Z", "Use $agent-coding-workflow for this.")),
+      "{invalid json",
+      JSON.stringify(
+        assistant("2026-06-20T00:01:00.000Z", "No skill announcement in this record."),
+      ),
+    ];
+    const sourceContent = `${records.join("\n")}\n`;
+    await mkdir(path.dirname(usageSource), { recursive: true });
+    await writeFile(usageSource, sourceContent);
+    const progress: SkillUsageProgressEvent[] = [];
+
+    const analysis = await analyzeSkillUsage({
+      skills: [buildRecord({ name: "agent-coding-workflow", source: "global" })],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+      onProgress: (event) => progress.push(event),
+    });
+
+    expect(progress.map((event) => event.phase)).toEqual(
+      expect.arrayContaining([
+        "started",
+        "source-started",
+        "source-progress",
+        "source-completed",
+        "completed",
+      ]),
+    );
+    expect(progress.at(-1)).toMatchObject({
+      phase: "completed",
+      totalSources: 1,
+      completedSources: 1,
+      totalBytes: Buffer.byteLength(sourceContent),
+      processedBytes: Buffer.byteLength(sourceContent),
+      recordCount: 3,
+      parsedRecordCount: 2,
+      invalidRecordCount: 1,
+      eventCount: 1,
+    });
+    expect(analysis.sourceCoverage[0]).toMatchObject({
+      sourcePath: usageSource,
+      recordCount: 3,
+      parsedRecordCount: 2,
+      invalidRecordCount: 1,
+      eventCount: 1,
+      diagnosticCodes: ["usage-source-invalid-json"],
     });
   });
 
