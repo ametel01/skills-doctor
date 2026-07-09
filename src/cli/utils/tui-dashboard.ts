@@ -244,11 +244,25 @@ export const waitForTuiContinue = async (input: {
   input.write(`\n${dim("Press any key to return to the dashboard.", Boolean(input.color))}`);
   await new Promise<void>((resolve, reject) => {
     const wasRaw = stdin.isRaw;
+    const wasPaused = stdin.isPaused();
+    let cleanedUp = false;
     const cleanup = () => {
-      stdin.off("keypress", onKeypress);
-      stdin.setRawMode?.(wasRaw === true);
-      stdin.pause();
-      input.write("\n");
+      if (cleanedUp) return;
+      cleanedUp = true;
+      const attemptCleanup = (operation: () => void) => {
+        try {
+          operation();
+        } catch {
+          // Cleanup is best-effort so one failed restoration cannot skip later steps.
+        }
+      };
+      attemptCleanup(() => stdin.off("keypress", onKeypress));
+      attemptCleanup(() => stdin.setRawMode?.(wasRaw === true));
+      attemptCleanup(() => {
+        if (wasPaused) stdin.pause();
+        else stdin.resume();
+      });
+      attemptCleanup(() => input.write("\n"));
     };
     const onKeypress = (_character: string | undefined, key: readline.Key) => {
       cleanup();
@@ -259,10 +273,15 @@ export const waitForTuiContinue = async (input: {
       resolve();
     };
 
-    readline.emitKeypressEvents(stdin);
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.on("keypress", onKeypress);
+    try {
+      readline.emitKeypressEvents(stdin);
+      stdin.setRawMode(true);
+      stdin.resume();
+      stdin.on("keypress", onKeypress);
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
   });
 };
 

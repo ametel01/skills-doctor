@@ -7,6 +7,7 @@ import {
   TUI_HIDE_CURSOR,
   TUI_REPAINT_SCREEN,
   TUI_SHOW_CURSOR,
+  waitForTuiContinue,
 } from "../src/cli/utils/tui-dashboard.js";
 import type { ScanReport } from "../src/index.js";
 
@@ -199,6 +200,30 @@ describe("TUI dashboard", () => {
     expect(stdin.listenerCount("keypress")).toBe(0);
     expect(stdout.listenerCount("resize")).toBe(0);
     expect(writes.filter((message) => message === TUI_SHOW_CURSOR)).toHaveLength(1);
+  });
+
+  it("restores terminal state when continuing cannot register a keypress listener", async () => {
+    const stdin = new FakeStdin(false, true);
+    const writes: string[] = [];
+    const on = stdin.on.bind(stdin);
+    Object.defineProperty(stdin, "on", {
+      value: (eventName: string | symbol, listener: (...args: unknown[]) => void) => {
+        if (eventName === "keypress") throw new Error("keypress registration failed");
+        return on(eventName, listener);
+      },
+    });
+
+    await expect(
+      waitForTuiContinue({
+        stdin: stdin as unknown as NodeJS.ReadStream,
+        write: (message) => writes.push(message),
+      }),
+    ).rejects.toThrow("keypress registration failed");
+    expect(stdin.rawModes).toEqual([true, false]);
+    expect(stdin.pauseCalls).toBe(1);
+    expect(stdin.resumeCalls).toBe(1);
+    expect(stdin.listenerCount("keypress")).toBe(0);
+    expect(writes).toEqual(["\nPress any key to return to the dashboard.", "\n"]);
   });
 
   it("does not overrun adaptive breakpoint widths", () => {
