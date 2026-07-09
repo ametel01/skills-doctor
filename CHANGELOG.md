@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added real progress reporting for local Codex usage discovery and analysis, including discovered JSONL source counts, byte-based parsing progress, parsed record counts, and detected usage matches.
+
 ## [0.6.2] - 2026-07-05
 
 ### Added

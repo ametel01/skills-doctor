@@ -2,7 +2,11 @@ import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { discoverUsageSources, type ReadCodexSqlitePressure } from "../src/index.js";
+import {
+  type DiscoverUsageSourcesProgressEvent,
+  discoverUsageSources,
+  type ReadCodexSqlitePressure,
+} from "../src/index.js";
 
 const WARNING = "Skill descriptions were shortened to fit the 2% skills context budget";
 
@@ -43,6 +47,37 @@ describe("Codex usage source discovery", () => {
       level: "high",
       recentWarningCount: 2,
       latestWarningTimestamp: "2026-06-20T00:00:00.000Z",
+    });
+  });
+
+  it("reports discovery progress from actual directories and JSONL candidates", async () => {
+    const sessionPath = path.join(homeDir, ".codex", "sessions", "2026", "session.jsonl");
+    const historyPath = path.join(homeDir, ".codex", "history.jsonl");
+    await writeJsonl(sessionPath, [{ timestamp: "2026-06-19T00:00:00.000Z" }]);
+    await writeJsonl(historyPath, [{ timestamp: "2026-06-20T00:00:00.000Z" }]);
+    const progress: DiscoverUsageSourcesProgressEvent[] = [];
+
+    await discoverUsageSources({
+      homeDir,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+      onProgress: (event) => progress.push(event),
+    });
+
+    expect(progress.map((event) => event.phase)).toEqual(
+      expect.arrayContaining([
+        "started",
+        "directory-scanned",
+        "file-inspected",
+        "candidate-found",
+        "completed",
+      ]),
+    );
+    expect(progress.at(-1)).toMatchObject({
+      phase: "completed",
+      scannedDirectoryCount: 2,
+      inspectedJsonlFileCount: 2,
+      candidateSourceCount: 2,
+      includedSourceCount: 2,
     });
   });
 

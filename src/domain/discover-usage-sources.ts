@@ -47,8 +47,23 @@ export type DiscoverUsageSourcesInput = {
   readonly maxSessionFiles?: number | undefined;
   readonly maxFileBytes?: number | undefined;
   readonly readSqlitePressure?: ReadCodexSqlitePressure | undefined;
+  readonly onProgress?: ((event: DiscoverUsageSourcesProgressEvent) => void) | undefined;
   /** @internal Test-only filesystem adapter; production callers should use the real local Codex paths. */
   readonly fileSystem?: UsageSourceFileSystem | undefined;
+};
+
+export type DiscoverUsageSourcesProgressEvent = {
+  readonly phase:
+    | "started"
+    | "directory-scanned"
+    | "file-inspected"
+    | "candidate-found"
+    | "completed";
+  readonly scannedDirectoryCount: number;
+  readonly inspectedJsonlFileCount: number;
+  readonly candidateSourceCount: number;
+  readonly includedSourceCount: number;
+  readonly currentPath?: string | undefined;
 };
 
 export type DiscoverUsageSourcesResult = {
@@ -89,6 +104,14 @@ export const discoverUsageSources = async (
   const historyPath = path.join(codexDir, "history.jsonl");
   const sqlitePath = path.join(codexDir, "logs_2.sqlite");
   const diagnostics: Diagnostic[] = [];
+  const progressState: UsageDiscoveryProgressState = {
+    scannedDirectoryCount: 0,
+    inspectedJsonlFileCount: 0,
+    candidateSourceCount: 0,
+    includedSourceCount: 0,
+  };
+
+  input.onProgress?.(discoveryProgressEvent(progressState, "started"));
 
   const sessionFiles = await findJsonlFiles({
     directory: sessionsDir,
@@ -96,17 +119,26 @@ export const discoverUsageSources = async (
     maxFiles: maxSessionFiles,
     diagnostics,
     fileSystem: input.fileSystem,
+    progressState,
+    onProgress: input.onProgress,
   });
+  progressState.inspectedJsonlFileCount += 1;
+  input.onProgress?.(discoveryProgressEvent(progressState, "file-inspected", historyPath));
   const historyFile = await fileIfRecentUsageEventExists(
     historyPath,
     since,
     diagnostics,
     input.fileSystem,
   );
+  if (historyFile !== undefined) {
+    progressState.candidateSourceCount += 1;
+    input.onProgress?.(discoveryProgressEvent(progressState, "candidate-found", historyPath));
+  }
   const usageSourcePaths = [
     ...sessionFiles.map((candidate) => candidate.filePath),
     ...(historyFile === undefined ? [] : [historyFile.filePath]),
   ];
+  progressState.includedSourceCount = usageSourcePaths.length;
 
   const jsonlDiagnostics: Diagnostic[] = [];
   const sqliteDiagnostics: Diagnostic[] = [];
@@ -125,6 +157,7 @@ export const discoverUsageSources = async (
     }),
   ]);
   diagnostics.push(...jsonlDiagnostics, ...sqliteDiagnostics);
+  input.onProgress?.(discoveryProgressEvent(progressState, "completed"));
 
   return {
     usageSourcePaths,
@@ -143,6 +176,8 @@ const findJsonlFiles = async (input: {
   readonly maxFiles: number;
   readonly diagnostics: Diagnostic[];
   readonly fileSystem: UsageSourceFileSystem | undefined;
+  readonly progressState: UsageDiscoveryProgressState;
+  readonly onProgress: ((event: DiscoverUsageSourcesProgressEvent) => void) | undefined;
 }): Promise<readonly CandidateFile[]> => {
   if (input.maxFiles <= 0) {
     input.diagnostics.push({
@@ -179,6 +214,13 @@ type DiscoveryState = {
   candidates: CandidateFile[];
 };
 
+type UsageDiscoveryProgressState = {
+  scannedDirectoryCount: number;
+  inspectedJsonlFileCount: number;
+  candidateSourceCount: number;
+  includedSourceCount: number;
+};
+
 const collectJsonlFiles = async (input: {
   readonly directory: string;
   readonly since: Date;
@@ -186,9 +228,15 @@ const collectJsonlFiles = async (input: {
   readonly diagnostics: Diagnostic[];
   readonly fileSystem: UsageSourceFileSystem | undefined;
   readonly state: DiscoveryState;
+  readonly progressState: UsageDiscoveryProgressState;
+  readonly onProgress: ((event: DiscoverUsageSourcesProgressEvent) => void) | undefined;
 }): Promise<void> => {
   const entries = await readDirectory(input.directory, input.fileSystem, input.diagnostics);
   if (entries === undefined) return;
+  input.progressState.scannedDirectoryCount += 1;
+  input.onProgress?.(
+    discoveryProgressEvent(input.progressState, "directory-scanned", input.directory),
+  );
 
   const sortedEntries = [...entries].sort(compareDiscoveryEntries);
   for (const entry of sortedEntries) {
@@ -203,15 +251,34 @@ const collectJsonlFiles = async (input: {
   for (const entry of candidateFiles) {
     const entryPath = path.join(input.directory, entry.name);
     if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+    input.progressState.inspectedJsonlFileCount += 1;
+    input.onProgress?.(discoveryProgressEvent(input.progressState, "file-inspected", entryPath));
     const candidate = await fileIfRecentUsageEventExists(
       entryPath,
       input.since,
       input.diagnostics,
       input.fileSystem,
     );
-    if (candidate !== undefined) input.state.candidates.push(candidate);
+    if (candidate !== undefined) {
+      input.state.candidates.push(candidate);
+      input.progressState.candidateSourceCount += 1;
+      input.onProgress?.(discoveryProgressEvent(input.progressState, "candidate-found", entryPath));
+    }
   }
 };
+
+const discoveryProgressEvent = (
+  state: UsageDiscoveryProgressState,
+  phase: DiscoverUsageSourcesProgressEvent["phase"],
+  currentPath?: string | undefined,
+): DiscoverUsageSourcesProgressEvent => ({
+  phase,
+  scannedDirectoryCount: state.scannedDirectoryCount,
+  inspectedJsonlFileCount: state.inspectedJsonlFileCount,
+  candidateSourceCount: state.candidateSourceCount,
+  includedSourceCount: state.includedSourceCount,
+  ...(currentPath === undefined ? {} : { currentPath }),
+});
 
 const readDirectory = async (
   directory: string,

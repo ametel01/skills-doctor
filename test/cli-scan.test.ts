@@ -208,6 +208,217 @@ describe("scanAction", () => {
     expect(stdout.join("")).toContain("Usage analysis (enabled skills):");
   });
 
+  it("renders actual usage-analysis progress in interactive runs", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const homeDir = path.join(directory, "home");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "user",
+        content: "Use $good-skill for this.",
+      },
+      {
+        timestamp: "2026-06-20T00:01:00.000Z",
+        role: "assistant",
+        content: "No skill announcement here.",
+      },
+    ]);
+    const stderr: string[] = [];
+
+    const report = await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        stdoutIsTty: false,
+        stderrIsTty: true,
+        prompts: queuedPrompts({ selects: ["all"] }),
+        writeStdout: () => {},
+        writeStderr: (message) => stderr.push(message),
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    const progressOutput = stderr.join("");
+    expect(progressOutput).toContain("Discovering Codex usage sources...");
+    expect(progressOutput).toContain("1 candidates");
+    expect(progressOutput).toContain("Analyzing local Codex usage...");
+    expect(progressOutput).toContain("100%");
+    expect(progressOutput).toContain("1/1 source");
+    expect(progressOutput).toContain("2 records");
+    expect(progressOutput).toContain("1 matches");
+    expect(report.usage).toMatchObject({
+      totalSkillsAnalyzed: 1,
+      usedSkillCount: 1,
+    });
+  });
+
+  it("emits one redirected usage-progress summary from the injected stderr capability", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const homeDir = path.join(directory, "home");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "user",
+        content: "Use $good-skill for this.",
+      },
+    ]);
+    const stderr: string[] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        stdoutIsTty: false,
+        stderrIsTty: false,
+        prompts: queuedPrompts({ selects: ["all"] }),
+        writeStdout: () => {},
+        writeStderr: (message) => stderr.push(message),
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(stderr).toEqual([
+      expect.stringContaining(
+        "Analyzing local Codex usage... 100% | 1/1 source | 1 records | 1 matches\n",
+      ),
+    ]);
+  });
+
+  it("flushes the last discovery progress summary when discovery fails", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const stderr: string[] = [];
+
+    await expect(
+      scanAction(
+        ".",
+        {},
+        {
+          cwd: directory,
+          homeDir: path.join(directory, "home"),
+          env: {},
+          stdinIsTty: true,
+          stderrIsTty: false,
+          prompts: queuedPrompts({ selects: ["all"] }),
+          writeStdout: () => {},
+          writeStderr: (message) => stderr.push(message),
+          spinner: { run: async (_message, operation) => await operation() },
+          discoverUsageSources: async (input) => {
+            input.onProgress?.({
+              phase: "file-inspected",
+              scannedDirectoryCount: 2,
+              inspectedJsonlFileCount: 3,
+              candidateSourceCount: 1,
+              includedSourceCount: 1,
+            });
+            throw new Error("discovery failed");
+          },
+        },
+      ),
+    ).rejects.toThrow("discovery failed");
+
+    expect(stderr).toEqual([
+      "Discovering Codex usage sources... | 2 directories | 3 JSONL files | 1 candidates\n",
+    ]);
+  });
+
+  it("flushes the last analysis progress summary when analysis fails", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const stderr: string[] = [];
+
+    await expect(
+      scanAction(
+        ".",
+        {},
+        {
+          cwd: directory,
+          homeDir: path.join(directory, "home"),
+          env: {},
+          stdinIsTty: true,
+          stderrIsTty: false,
+          prompts: queuedPrompts({ selects: ["all"] }),
+          writeStdout: () => {},
+          writeStderr: (message) => stderr.push(message),
+          spinner: { run: async (_message, operation) => await operation() },
+          discoverUsageSources: async () => ({
+            usageSourcePaths: [],
+            diagnostics: [],
+            contextPressure: { level: "low", recentWarningCount: 0 },
+          }),
+          analyzeSkillUsage: async (input) => {
+            input.onProgress?.({
+              phase: "source-progress",
+              totalSources: 1,
+              completedSources: 0,
+              totalBytes: 100,
+              processedBytes: 20,
+              recordCount: 1,
+              parsedRecordCount: 1,
+              invalidRecordCount: 0,
+              eventCount: 0,
+            });
+            throw new Error("analysis failed");
+          },
+        },
+      ),
+    ).rejects.toThrow("analysis failed");
+
+    expect(stderr).toEqual([
+      "Analyzing local Codex usage... 20% | 0/1 source | 1 records | 0 matches\n",
+    ]);
+  });
+
+  it("keeps the final discovery summary when analysis fails before reporting progress", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const stderr: string[] = [];
+
+    await expect(
+      scanAction(
+        ".",
+        {},
+        {
+          cwd: directory,
+          homeDir: path.join(directory, "home"),
+          env: {},
+          stdinIsTty: true,
+          stderrIsTty: false,
+          prompts: queuedPrompts({ selects: ["all"] }),
+          writeStdout: () => {},
+          writeStderr: (message) => stderr.push(message),
+          spinner: { run: async (_message, operation) => await operation() },
+          discoverUsageSources: async (input) => {
+            input.onProgress?.({
+              phase: "completed",
+              scannedDirectoryCount: 2,
+              inspectedJsonlFileCount: 3,
+              candidateSourceCount: 1,
+              includedSourceCount: 1,
+            });
+            return {
+              usageSourcePaths: [],
+              diagnostics: [],
+              contextPressure: { level: "low", recentWarningCount: 0 },
+            };
+          },
+          analyzeSkillUsage: async () => {
+            throw new Error("analysis failed before progress");
+          },
+        },
+      ),
+    ).rejects.toThrow("analysis failed before progress");
+
+    expect(stderr).toEqual([
+      "Discovering Codex usage sources... | 2 directories | 3 JSONL files | 1 candidates\n",
+    ]);
+  });
+
   it("reports a measurable elapsed scan time with injected clock", async () => {
     const skillDir = path.join(directory, ".agents", "skills", "bad-skill");
     await mkdir(skillDir, { recursive: true });
@@ -598,6 +809,7 @@ describe("scanAction", () => {
     ]);
     const launches: Array<{ readonly prompt: string; readonly promptPath?: string | undefined }> =
       [];
+    const stderr: string[] = [];
     const reportOutputRoot = path.join(directory, "cleanup-reports");
     const reportDirectory = path.join(reportOutputRoot, "2026-06-20T03-04-05-006Z");
 
@@ -609,12 +821,13 @@ describe("scanAction", () => {
         homeDir,
         env: {},
         stdinIsTty: true,
+        stderrIsTty: false,
         prompts: queuedPrompts({
           selects: ["all", "cleanup"],
           confirms: [true],
         }),
         writeStdout: () => {},
-        writeStderr: () => {},
+        writeStderr: (message) => stderr.push(message),
         spinner: { run: async (_message, operation) => await operation() },
         isRepairAgentAvailable: async (command) => command === "codex",
         cleanupReportOutputRoot: reportOutputRoot,
@@ -631,6 +844,11 @@ describe("scanAction", () => {
     expect(report.skills.map((skill) => skill.name)).toEqual(["active-unused"]);
     expect(report.usage?.totalSkillsAnalyzed).toBe(2);
     expect(JSON.stringify(report.usage)).toContain("disabled-unused");
+    expect(stderr).toHaveLength(2);
+    expect(
+      stderr.every((message) => /^Analyzing local Codex usage\.\.\..*\n$/u.test(message)),
+    ).toBe(true);
+    expect(stderr.join("")).not.toContain("\r");
   });
 
   it("does not offer cleanup handoff when only used skills are present", async () => {
@@ -840,6 +1058,7 @@ describe("scanAction", () => {
     const launches: Array<{ readonly prompt: string; readonly promptPath?: string | undefined }> =
       [];
     const nextStepChoices: string[][] = [];
+    const stderr: string[] = [];
     const reportOutputRoot = path.join(directory, "cleanup-reports");
     const reportDirectory = path.join(reportOutputRoot, "2026-06-20T04-05-06-007Z");
 
@@ -851,6 +1070,7 @@ describe("scanAction", () => {
         homeDir,
         env: {},
         stdinIsTty: true,
+        stderrIsTty: false,
         prompts: {
           ...queuedPrompts({
             selects: ["all", "usage-recommendation-repair", "shorten-description"],
@@ -875,7 +1095,7 @@ describe("scanAction", () => {
           },
         },
         writeStdout: (message) => stdout.push(message),
-        writeStderr: () => {},
+        writeStderr: (message) => stderr.push(message),
         spinner: { run: async (_message, operation) => await operation() },
         isRepairAgentAvailable: async (command) => command === "codex",
         cleanupReportOutputRoot: reportOutputRoot,
@@ -898,6 +1118,11 @@ describe("scanAction", () => {
     expect(report.skills.map((skill) => skill.name)).toEqual(["long-used-skill"]);
     expect(report.usage?.totalSkillsAnalyzed).toBe(2);
     expect(JSON.stringify(report.usage)).toContain("disabled-long-skill");
+    expect(stderr).toHaveLength(2);
+    expect(
+      stderr.every((message) => /^Analyzing local Codex usage\.\.\..*\n$/u.test(message)),
+    ).toBe(true);
+    expect(stderr.join("")).not.toContain("\r");
   });
 
   it("lets users cancel cleanup agent launch after report writing", async () => {
