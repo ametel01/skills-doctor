@@ -289,6 +289,19 @@ describe("TUI dashboard", () => {
     }
   });
 
+  it("stacks metrics and keeps every dashboard line within narrow terminal widths", () => {
+    for (const columns of [60, 76]) {
+      const output = renderTuiDashboard(makeReport({ securityFindingCount: 100 }), choices(), {
+        color: true,
+        columns,
+      });
+
+      expectPrintableLinesWithin(output, columns);
+      expect(output).toContain("Security findings");
+      expect(output).toContain("Usage (enabled)");
+    }
+  });
+
   it("keeps the version brand card visible on medium-width terminals", () => {
     expect(renderTuiDashboard(makeReport(), [], { color: false, columns: 111 })).not.toContain(
       "v1.0.0",
@@ -448,3 +461,11 @@ const makeReport = (
   },
   handoffRequested: false,
 });
+
+const expectPrintableLinesWithin = (output: string, columns: number): void => {
+  // biome-ignore lint/complexity/useRegexLiterals: keep the ESC character out of source regex literals.
+  const ansiPattern = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
+  for (const line of output.trimEnd().split("\n")) {
+    expect(Array.from(line.replace(ansiPattern, "")).length).toBeLessThanOrEqual(columns);
+  }
+};

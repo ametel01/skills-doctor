@@ -23,7 +23,7 @@ type TuiOutput = Pick<NodeJS.WriteStream, "on" | "off"> & {
   readonly columns?: number | undefined;
 };
 
-const MIN_COLUMNS = 76;
+const MIN_COLUMNS = 20;
 const DEFAULT_COLUMNS = 120;
 const HEADER_GAP = 4;
 const BRAND_WIDE_WIDTH = 48;
@@ -431,10 +431,10 @@ const renderMetricStrip = (
 
   metricRows.forEach((rowMetrics, rowIndex) => {
     const count = rowMetrics.length;
-    const columnWidth = Math.max(15, Math.floor((width - 2 - (count - 1)) / count));
+    const columnWidth = Math.max(1, Math.floor((width - 2 - (count - 1)) / count));
     for (const metricLineIndex of [0, 1, 2, 3, 4]) {
       const cells = rowMetrics.map((metric) =>
-        padRight(` ${metric[metricLineIndex] ?? ""}`, columnWidth),
+        fitToWidth(` ${metric[metricLineIndex] ?? ""}`, columnWidth),
       );
       lines.push(
         `${border("│", shouldColor)}${cells.join(border("│", shouldColor))}${border("│", shouldColor)}`,
@@ -564,8 +564,8 @@ const renderChoiceRow = <Value extends string>(
   const arrow = dim("→", shouldColor);
   const left = `${shortcutBadge}  ${name}`;
   const descriptionColumn = Math.max(28, Math.floor(width * 0.28));
-  const content = `${padRight(left, descriptionColumn)} ${description}`;
-  const row = `${padRight(content, width - visibleLength(arrow) - 1)} ${arrow}`;
+  const content = `${padRight(left, Math.min(descriptionColumn, width))} ${description}`;
+  const row = `${fitToWidth(content, Math.max(0, width - visibleLength(arrow) - 1))} ${arrow}`;
   return selected
     ? `${selectedBorder("╭", shouldColor)}${selectedRow(row, shouldColor)}${selectedBorder("╮", shouldColor)}`
     : ` ${row} `;
@@ -601,7 +601,7 @@ const box = (
   return [
     `${border("╭", shouldColor)}${titleSegment}${border("─".repeat(topRuleWidth), shouldColor)}${border("╮", shouldColor)}`,
     ...bodyLines.map((line) => {
-      const content = padRight(line, width - 4);
+      const content = fitToWidth(line, Math.max(0, width - 4));
       return `${border("│", shouldColor)} ${content} ${border("│", shouldColor)}`;
     }),
     `${border("╰", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("╯", shouldColor)}`,
@@ -616,14 +616,14 @@ const framedPanel = (
 ): readonly string[] => [
   `${panelBorder("╭", shouldColor)}${panelBorder("─".repeat(width - 2), shouldColor)}${panelBorder("╮", shouldColor)}`,
   ...bodyLines.map((line) => {
-    const content = padRight(line, width - 4);
+    const content = fitToWidth(line, Math.max(0, width - 4));
     return `${panelBorder("│", shouldColor)} ${content} ${panelBorder("│", shouldColor)}`;
   }),
   `${panelBorder("╰", shouldColor)}${panelBorder("─".repeat(width - 2), shouldColor)}${panelBorder("╯", shouldColor)}`,
 ];
 
 const getHeaderLeftWidth = (width: number): number =>
-  Math.max(32, width - getBrandWidth(width) - (getBrandWidth(width) === 0 ? 0 : HEADER_GAP));
+  Math.max(1, width - getBrandWidth(width) - (getBrandWidth(width) === 0 ? 0 : HEADER_GAP));
 
 const normalizeColumns = (columns: number | undefined): number => {
   if (columns === undefined || !Number.isFinite(columns)) return DEFAULT_COLUMNS;
@@ -637,9 +637,10 @@ const getBrandWidth = (width: number): number => {
 };
 
 const getMetricColumnsPerRow = (width: number, metricCount: number): number => {
+  if (width < METRIC_MEDIUM_COLUMNS) return 1;
   if (width >= METRIC_WIDE_COLUMNS) return metricCount;
   if (width >= METRIC_MEDIUM_COLUMNS) return Math.min(3, metricCount);
-  return Math.min(2, metricCount);
+  return 1;
 };
 
 const chunk = <Value>(items: readonly Value[], size: number): readonly Value[][] => {
@@ -736,7 +737,9 @@ const truncateVisible = (text: string, width: number): string => {
     index += character.length;
   }
 
-  return result;
+  return stripAnsi(text) === stripAnsi(result) || !text.includes("\x1b[")
+    ? result
+    : `${result}\x1b[0m`;
 };
 
 const visibleLength = (text: string): number => stripAnsi(text).length;
