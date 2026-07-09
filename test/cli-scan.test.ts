@@ -234,9 +234,11 @@ describe("scanAction", () => {
         env: {},
         stdinIsTty: true,
         stdoutIsTty: false,
+        stderrIsTty: true,
         prompts: queuedPrompts({ selects: ["all"] }),
         writeStdout: () => {},
         writeStderr: (message) => stderr.push(message),
+        spinner: { run: async (_message, operation) => await operation() },
       },
     );
 
@@ -252,6 +254,169 @@ describe("scanAction", () => {
       totalSkillsAnalyzed: 1,
       usedSkillCount: 1,
     });
+  });
+
+  it("emits one redirected usage-progress summary from the injected stderr capability", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const homeDir = path.join(directory, "home");
+    await writeJsonl(path.join(homeDir, ".codex", "sessions", "session.jsonl"), [
+      {
+        timestamp: "2026-06-20T00:00:00.000Z",
+        role: "user",
+        content: "Use $good-skill for this.",
+      },
+    ]);
+    const stderr: string[] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir,
+        env: {},
+        stdinIsTty: true,
+        stdoutIsTty: false,
+        stderrIsTty: false,
+        prompts: queuedPrompts({ selects: ["all"] }),
+        writeStdout: () => {},
+        writeStderr: (message) => stderr.push(message),
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(stderr).toEqual([
+      expect.stringContaining(
+        "Analyzing local Codex usage... 100% | 1/1 source | 1 records | 1 matches\n",
+      ),
+    ]);
+  });
+
+  it("flushes the last discovery progress summary when discovery fails", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const stderr: string[] = [];
+
+    await expect(
+      scanAction(
+        ".",
+        {},
+        {
+          cwd: directory,
+          homeDir: path.join(directory, "home"),
+          env: {},
+          stdinIsTty: true,
+          stderrIsTty: false,
+          prompts: queuedPrompts({ selects: ["all"] }),
+          writeStdout: () => {},
+          writeStderr: (message) => stderr.push(message),
+          spinner: { run: async (_message, operation) => await operation() },
+          discoverUsageSources: async (input) => {
+            input.onProgress?.({
+              phase: "file-inspected",
+              scannedDirectoryCount: 2,
+              inspectedJsonlFileCount: 3,
+              candidateSourceCount: 1,
+              includedSourceCount: 1,
+            });
+            throw new Error("discovery failed");
+          },
+        },
+      ),
+    ).rejects.toThrow("discovery failed");
+
+    expect(stderr).toEqual([
+      "Discovering Codex usage sources... | 2 directories | 3 JSONL files | 1 candidates\n",
+    ]);
+  });
+
+  it("flushes the last analysis progress summary when analysis fails", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const stderr: string[] = [];
+
+    await expect(
+      scanAction(
+        ".",
+        {},
+        {
+          cwd: directory,
+          homeDir: path.join(directory, "home"),
+          env: {},
+          stdinIsTty: true,
+          stderrIsTty: false,
+          prompts: queuedPrompts({ selects: ["all"] }),
+          writeStdout: () => {},
+          writeStderr: (message) => stderr.push(message),
+          spinner: { run: async (_message, operation) => await operation() },
+          discoverUsageSources: async () => ({
+            usageSourcePaths: [],
+            diagnostics: [],
+            contextPressure: { level: "low", recentWarningCount: 0 },
+          }),
+          analyzeSkillUsage: async (input) => {
+            input.onProgress?.({
+              phase: "source-progress",
+              totalSources: 1,
+              completedSources: 0,
+              totalBytes: 100,
+              processedBytes: 20,
+              recordCount: 1,
+              parsedRecordCount: 1,
+              invalidRecordCount: 0,
+              eventCount: 0,
+            });
+            throw new Error("analysis failed");
+          },
+        },
+      ),
+    ).rejects.toThrow("analysis failed");
+
+    expect(stderr).toEqual([
+      "Analyzing local Codex usage... 20% | 0/1 source | 1 records | 0 matches\n",
+    ]);
+  });
+
+  it("keeps the final discovery summary when analysis fails before reporting progress", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const stderr: string[] = [];
+
+    await expect(
+      scanAction(
+        ".",
+        {},
+        {
+          cwd: directory,
+          homeDir: path.join(directory, "home"),
+          env: {},
+          stdinIsTty: true,
+          stderrIsTty: false,
+          prompts: queuedPrompts({ selects: ["all"] }),
+          writeStdout: () => {},
+          writeStderr: (message) => stderr.push(message),
+          spinner: { run: async (_message, operation) => await operation() },
+          discoverUsageSources: async (input) => {
+            input.onProgress?.({
+              phase: "completed",
+              scannedDirectoryCount: 2,
+              inspectedJsonlFileCount: 3,
+              candidateSourceCount: 1,
+              includedSourceCount: 1,
+            });
+            return {
+              usageSourcePaths: [],
+              diagnostics: [],
+              contextPressure: { level: "low", recentWarningCount: 0 },
+            };
+          },
+          analyzeSkillUsage: async () => {
+            throw new Error("analysis failed before progress");
+          },
+        },
+      ),
+    ).rejects.toThrow("analysis failed before progress");
+
+    expect(stderr).toEqual([
+      "Discovering Codex usage sources... | 2 directories | 3 JSONL files | 1 candidates\n",
+    ]);
   });
 
   it("reports a measurable elapsed scan time with injected clock", async () => {

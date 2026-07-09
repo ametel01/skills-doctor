@@ -88,6 +88,7 @@ export type ScanActionOptions = {
   readonly prompts?: PromptAdapter;
   readonly writeStdout?: (message: string) => void;
   readonly writeStderr?: (message: string) => void;
+  readonly stderrIsTty?: boolean;
   readonly stdoutIsTty?: boolean;
   readonly terminalColumns?: number | undefined;
   readonly animateScoreHeader?: boolean;
@@ -137,6 +138,7 @@ export const scanAction = async (
   const prompts = options.prompts ?? inquirerPromptAdapter;
   const writeStdout = options.writeStdout ?? ((message) => process.stdout.write(message));
   const writeStderr = options.writeStderr ?? ((message) => process.stderr.write(message));
+  const stderrIsTty = options.stderrIsTty ?? process.stderr.isTTY === true;
   const stdoutIsTty = options.stdoutIsTty ?? process.stdout.isTTY === true;
   const stdinIsTty = options.stdinIsTty ?? process.stdin.isTTY === true;
   const terminalCapabilities = resolveTerminalCapabilities({
@@ -220,19 +222,17 @@ export const scanAction = async (
   );
   const elapsedMilliseconds = Math.max(0, Math.round(now() - startedAt));
   const usageInput = shouldRunUsageAnalysis({ flags, skipPrompts })
-    ? await spinner.run("Analyzing local Codex usage...", () =>
-        buildUsageReportInput({
-          scan,
-          homeDir: options.homeDir,
-          discoverUsageSources: options.discoverUsageSources ?? discoverUsageSources,
-          analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
-          usageProgress: createUsageProgressReporter({
-            enabled: !skipPrompts && !flags.json,
-            write: writeStderr,
-            isTty: process.stderr.isTTY,
-          }),
+    ? await buildUsageReportInput({
+        scan,
+        homeDir: options.homeDir,
+        discoverUsageSources: options.discoverUsageSources ?? discoverUsageSources,
+        analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
+        usageProgress: createUsageProgressReporter({
+          enabled: !skipPrompts && !flags.json,
+          write: writeStderr,
+          isTty: stderrIsTty,
         }),
-      )
+      })
     : undefined;
   const report = buildScanReport({
     version: options.version ?? "0.0.0",
@@ -282,6 +282,7 @@ export const scanAction = async (
           prompts,
           write: writeStdout,
           writeStderr,
+          stderrIsTty,
           isRepairAgentAvailable: options.isRepairAgentAvailable,
           now,
           repairReportOutputRoot: options.repairReportOutputRoot,
@@ -330,25 +331,24 @@ const buildUsageReportInput = async (input: {
   ) => ReturnType<typeof analyzeSkillUsage>;
   readonly usageProgress?: ReturnType<typeof createUsageProgressReporter> | undefined;
 }): Promise<NonNullable<Parameters<typeof buildScanReport>[0]["usage"]>> => {
-  const discovered = await input.discoverUsageSources({
-    homeDir: input.homeDir,
-    onProgress: input.usageProgress?.onDiscoveryProgress,
-  });
-  let analysis: Awaited<ReturnType<typeof analyzeSkillUsage>>;
   try {
-    analysis = await input.analyzeSkillUsage({
+    const discovered = await input.discoverUsageSources({
+      homeDir: input.homeDir,
+      onProgress: input.usageProgress?.onDiscoveryProgress,
+    });
+    const analysis = await input.analyzeSkillUsage({
       skills: [...input.scan.skills, ...(input.scan.disabledSkills ?? [])],
       usageSourcePaths: discovered.usageSourcePaths,
       coverageDiagnostics: discovered.diagnostics,
       onProgress: input.usageProgress?.onProgress,
     });
+    return {
+      analysis,
+      contextPressure: discovered.contextPressure,
+    };
   } finally {
     input.usageProgress?.finish();
   }
-  return {
-    analysis,
-    contextPressure: discovered.contextPressure,
-  };
 };
 
 const shouldShowReviewMenu = (report: ScanReport): boolean =>
@@ -539,6 +539,7 @@ type ReviewFindingsInput = {
   readonly prompts: PromptAdapter;
   readonly write: (message: string) => void;
   readonly writeStderr: (message: string) => void;
+  readonly stderrIsTty: boolean;
   readonly isRepairAgentAvailable?: AgentAvailabilityProbe | undefined;
   readonly now?: () => number;
   readonly repairReportOutputRoot?: string | undefined;
@@ -860,19 +861,17 @@ const runCleanupAgentFlow = async (
       input.now === undefined || reScanStartedAt === undefined
         ? 0
         : Math.max(0, Math.round(input.now() - reScanStartedAt));
-    const nextUsageInput = await input.spinner.run("Re-analyzing local Codex usage...", () =>
-      buildUsageReportInput({
-        scan: nextScan,
-        homeDir: input.homeDir,
-        discoverUsageSources: input.discoverUsageSources,
-        analyzeSkillUsage: input.analyzeSkillUsage,
-        usageProgress: createUsageProgressReporter({
-          enabled: true,
-          write: input.writeStderr,
-          isTty: process.stderr.isTTY,
-        }),
+    const nextUsageInput = await buildUsageReportInput({
+      scan: nextScan,
+      homeDir: input.homeDir,
+      discoverUsageSources: input.discoverUsageSources,
+      analyzeSkillUsage: input.analyzeSkillUsage,
+      usageProgress: createUsageProgressReporter({
+        enabled: true,
+        write: input.writeStderr,
+        isTty: input.stderrIsTty,
       }),
-    );
+    });
     const nextReport = buildScanReport({
       version: input.version,
       directory: input.cwd,
@@ -966,19 +965,17 @@ const runUsageRecommendationAgentFlow = async (
       input.now === undefined || reScanStartedAt === undefined
         ? 0
         : Math.max(0, Math.round(input.now() - reScanStartedAt));
-    const nextUsageInput = await input.spinner.run("Re-analyzing local Codex usage...", () =>
-      buildUsageReportInput({
-        scan: nextScan,
-        homeDir: input.homeDir,
-        discoverUsageSources: input.discoverUsageSources,
-        analyzeSkillUsage: input.analyzeSkillUsage,
-        usageProgress: createUsageProgressReporter({
-          enabled: true,
-          write: input.writeStderr,
-          isTty: process.stderr.isTTY,
-        }),
+    const nextUsageInput = await buildUsageReportInput({
+      scan: nextScan,
+      homeDir: input.homeDir,
+      discoverUsageSources: input.discoverUsageSources,
+      analyzeSkillUsage: input.analyzeSkillUsage,
+      usageProgress: createUsageProgressReporter({
+        enabled: true,
+        write: input.writeStderr,
+        isTty: input.stderrIsTty,
       }),
-    );
+    });
     const nextReport = buildScanReport({
       version: input.version,
       directory: input.cwd,

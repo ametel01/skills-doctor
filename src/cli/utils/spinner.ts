@@ -33,13 +33,17 @@ export const createUsageProgressReporter = (input: {
   readonly enabled: boolean;
   readonly write?: (message: string) => void;
   readonly isTty?: boolean | undefined;
+  readonly now?: () => number;
 }): UsageProgressReporter => {
   const write =
     input.write ??
     ((message: string) => {
       process.stderr.write(message);
     });
+  const now = input.now ?? performance.now.bind(performance);
   let lastMessage = "";
+  let lastRenderedMessage = "";
+  let lastRenderedAt = Number.NEGATIVE_INFINITY;
   let finished = false;
 
   const render = (event: SkillUsageProgressEvent): string => {
@@ -59,31 +63,37 @@ export const createUsageProgressReporter = (input: {
     ].join(" | ");
   };
 
-  const writeMessage = (message: string) => {
-    if (!input.enabled || message === lastMessage) return;
+  const writeTtyMessage = (message: string) => {
+    if (message === lastRenderedMessage) return;
+    write(`\r${message}`);
+    lastRenderedMessage = message;
+    lastRenderedAt = now();
+  };
+
+  const update = (message: string, completed: boolean) => {
+    if (!input.enabled || finished) return;
     lastMessage = message;
-    if (input.isTty === true) {
-      write(`\r${message}`);
-    } else {
-      write(`${message}\n`);
-    }
+    if (input.isTty !== true) return;
+    if (completed || now() - lastRenderedAt >= 100) writeTtyMessage(message);
   };
 
   return {
     onDiscoveryProgress: (event) => {
-      if (finished) return;
-      writeMessage(renderDiscoveryProgress(event));
+      update(renderDiscoveryProgress(event), event.phase === "completed");
     },
     onProgress: (event) => {
-      if (finished) return;
-      writeMessage(render(event));
+      update(render(event), event.phase === "completed");
     },
     finish: () => {
-      if (!input.enabled || finished) return;
+      if (finished) return;
       finished = true;
-      if (input.isTty === true && lastMessage.length > 0) {
+      if (!input.enabled || lastMessage.length === 0) return;
+      if (input.isTty === true) {
+        if (lastMessage !== lastRenderedMessage) writeTtyMessage(lastMessage);
         write("\n");
+        return;
       }
+      write(`${lastMessage}\n`);
     },
   };
 };
