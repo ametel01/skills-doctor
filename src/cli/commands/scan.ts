@@ -54,6 +54,10 @@ import { printScoreHeader } from "../utils/render-score-header.js";
 import { shouldSkipPrompts } from "../utils/should-skip-prompts.js";
 import { createSpinner, type SpinnerFactory } from "../utils/spinner.js";
 import {
+  resolveTerminalCapabilities,
+  type TerminalCapabilities,
+} from "../utils/terminal-capabilities.js";
+import {
   renderTuiDashboard,
   selectTuiAction,
   TUI_CLEAR_SCREEN,
@@ -76,6 +80,7 @@ export type ScanActionOptions = {
   readonly homeDir?: string | undefined;
   readonly env?: NodeJS.ProcessEnv;
   readonly stdinIsTty?: boolean;
+  readonly stdinHasRawMode?: boolean;
   readonly prompts?: PromptAdapter;
   readonly writeStdout?: (message: string) => void;
   readonly writeStderr?: (message: string) => void;
@@ -130,12 +135,19 @@ export const scanAction = async (
   const writeStderr = options.writeStderr ?? ((message) => process.stderr.write(message));
   const stdoutIsTty = options.stdoutIsTty ?? process.stdout.isTTY === true;
   const stdinIsTty = options.stdinIsTty ?? process.stdin.isTTY === true;
+  const terminalCapabilities = resolveTerminalCapabilities({
+    env: options.env,
+    stdinIsTty,
+    stdoutIsTty,
+    stdinHasRawMode: options.stdinHasRawMode ?? process.stdin.setRawMode !== undefined,
+  });
   const now = options.now ?? performance.now.bind(performance);
   const skipPrompts = shouldSkipPrompts({
     yes: Boolean(flags.yes),
     json: Boolean(flags.json),
     env: options.env,
     stdinIsTty,
+    canPrompt: terminalCapabilities.canPrompt,
   });
   const spinner =
     options.spinner ??
@@ -228,13 +240,13 @@ export const scanAction = async (
     const shouldReview = !skipPrompts && shouldShowReviewMenu(report);
     const useTui = shouldUseTuiDashboard({
       prompts,
-      stdinIsTty,
-      stdoutIsTty,
+      skipPrompts,
+      terminalCapabilities,
     });
     if (useTui && !shouldReview) {
       writeStdout(
         `${TUI_CLEAR_SCREEN}${renderTuiDashboard(report, [], {
-          color: true,
+          color: terminalCapabilities.canUseAnsi,
           columns: options.terminalColumns ?? process.stdout.columns,
         })}`,
       );
@@ -242,11 +254,13 @@ export const scanAction = async (
       await printScoreHeader({
         score: report.score,
         write: writeStdout,
-        color: stdoutIsTty,
+        color: terminalCapabilities.canUseAnsi,
         columns: options.terminalColumns ?? process.stdout.columns,
-        animate: options.animateScoreHeader ?? (!skipPrompts && stdoutIsTty),
+        animate: options.animateScoreHeader ?? (!skipPrompts && terminalCapabilities.canUseAnsi),
       });
-      writeStdout(renderHumanSummary(report, { includeScore: false, color: stdoutIsTty }));
+      writeStdout(
+        renderHumanSummary(report, { includeScore: false, color: terminalCapabilities.canUseAnsi }),
+      );
     }
     if (shouldReview) {
       finalReport =
@@ -265,7 +279,7 @@ export const scanAction = async (
           cleanupReportOutputRoot: options.cleanupReportOutputRoot,
           cleanupReportTimestamp: options.cleanupReportTimestamp,
           launchAgent: options.launchAgent ?? launchRepairAgent,
-          color: stdoutIsTty,
+          color: terminalCapabilities.canUseAnsi,
           homeDir: options.homeDir,
           discoverUsageSources: options.discoverUsageSources ?? discoverUsageSources,
           analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
@@ -320,15 +334,14 @@ const buildUsageReportInput = async (input: {
 const shouldShowReviewMenu = (report: ScanReport): boolean =>
   report.findingCount > 0 || hasActionableUsageRecommendations(report);
 
-const shouldUseTuiDashboard = (input: {
+export const shouldUseTuiDashboard = (input: {
   readonly prompts: PromptAdapter;
-  readonly stdinIsTty: boolean;
-  readonly stdoutIsTty: boolean;
+  readonly skipPrompts: boolean;
+  readonly terminalCapabilities: TerminalCapabilities;
 }): boolean =>
   input.prompts === inquirerPromptAdapter &&
-  input.stdinIsTty &&
-  input.stdoutIsTty &&
-  process.stdin.setRawMode !== undefined;
+  !input.skipPrompts &&
+  input.terminalCapabilities.canUseTui;
 
 const parseFailOnSeverity = (value: string | undefined): ScanGateSeverity | undefined => {
   if (value === undefined) return undefined;

@@ -22,7 +22,9 @@ Use these files as implementation evidence:
   - `src/cli/utils/handle-error.ts`
   - `src/cli/utils/json-mode.ts`
   - `src/cli/utils/prompts.ts`
+  - `src/cli/utils/should-skip-prompts.ts`
   - `src/cli/utils/spinner.ts`
+  - `src/cli/utils/terminal-capabilities.ts`
   - `src/cli/utils/cleanup-handoff-to-agent.ts`
   - `src/cli/utils/handoff-to-agent.ts`
   - `src/cli/utils/launch-agent.ts`
@@ -347,6 +349,7 @@ Prompts are skipped when:
 - `--json` is set
 - CI or another non-interactive signal is detected
 - stdin is not interactive
+- the terminal explicitly reports `TERM=dumb`
 
 When prompts are skipped, the CLI should choose conservative defaults only when
 that is unambiguous. A single detected standard root is unambiguous. Multiple
@@ -354,6 +357,19 @@ local/global scopes or multiple Claude/Codex ecosystems are ambiguous and should
 throw a `CliInputError` with clear next steps instead of scanning all roots.
 
 ## Terminal Output
+
+`src/cli/utils/terminal-capabilities.ts` resolves terminal capability without
+consulting prompt policy. `canPrompt` needs interactive stdin and a terminal
+other than explicit case-insensitive `TERM=dumb`; `canUseTui` additionally
+needs interactive stdout and stdin raw-mode support; `canUseAnsi` needs capable
+TTY stdout. `--yes`, `--json`, CI, hooks, and agent environments suppress
+prompts without changing those capability facts. The TUI requires the
+production Inquirer adapter, unsuppressed prompts, and `canUseTui`.
+
+`TERM=dumb` uses the normal readable plain-text summary: no dashboard control
+sequences, ANSI color, or score animation. A non-TTY stdout or missing raw mode
+also prevents the TUI; interactive stdin may still use line prompts in those
+cases.
 
 Human output should be concise and deterministic enough to test. The current
 terminal surface includes:
