@@ -1,5 +1,14 @@
+import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
-import { renderTuiDashboard } from "../src/cli/utils/tui-dashboard.js";
+import { PromptCancelledError } from "../src/cli/utils/prompts.js";
+import {
+  renderTuiDashboard,
+  selectTuiAction,
+  TUI_HIDE_CURSOR,
+  TUI_REPAINT_SCREEN,
+  TUI_SHOW_CURSOR,
+  waitForTuiContinue,
+} from "../src/cli/utils/tui-dashboard.js";
 import type { ScanReport } from "../src/index.js";
 
 describe("TUI dashboard", () => {
@@ -114,6 +123,109 @@ describe("TUI dashboard", () => {
     expect(output).toContain("0 unknown · 1 disabled recovery");
   });
 
+  it("omits interactive controls when the dashboard has no choices", () => {
+    const output = renderTuiDashboard(makeReport(), [], { color: false, columns: 120 });
+
+    expect(output).not.toContain("navigate");
+    expect(output).not.toContain("select");
+    expect(output).not.toContain("quit");
+  });
+
+  it("repaints without erasing scrollback and restores terminal state after selection", async () => {
+    const stdin = new FakeStdin(false, true);
+    const stdout = new EventEmitter();
+    const writes: string[] = [];
+
+    const selected = selectTuiAction(makeReport(), choices(), {
+      color: false,
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      stdout: stdout as never,
+      write: (message) => writes.push(message),
+    });
+    stdin.emit("keypress", undefined, { name: "return" });
+
+    await expect(selected).resolves.toBe("review");
+    expect(writes.join("")).toContain(TUI_HIDE_CURSOR);
+    expect(writes.join("")).toContain(TUI_REPAINT_SCREEN);
+    expect(writes.join("")).not.toContain("\x1b[3J");
+    expect(writes.filter((message) => message === TUI_SHOW_CURSOR)).toHaveLength(1);
+    expect(stdin.rawModes).toEqual([true, false]);
+    expect(stdin.pauseCalls).toBe(1);
+    expect(stdin.resumeCalls).toBe(1);
+    expect(stdin.listenerCount("keypress")).toBe(0);
+    expect(stdout.listenerCount("resize")).toBe(0);
+  });
+
+  it("restores a previously raw terminal after Ctrl-C cancellation", async () => {
+    const stdin = new FakeStdin(true, false);
+    const stdout = new EventEmitter();
+    const writes: string[] = [];
+    const selected = selectTuiAction(makeReport(), choices(), {
+      color: false,
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      stdout: stdout as never,
+      write: (message) => writes.push(message),
+    });
+    stdin.emit("keypress", undefined, { ctrl: true, name: "c" });
+
+    await expect(selected).rejects.toBeInstanceOf(PromptCancelledError);
+    expect(stdin.rawModes).toEqual([true, true]);
+    expect(stdin.resumeCalls).toBe(2);
+    expect(stdin.listenerCount("keypress")).toBe(0);
+    expect(stdout.listenerCount("resize")).toBe(0);
+    expect(writes.filter((message) => message === TUI_SHOW_CURSOR)).toHaveLength(1);
+  });
+
+  it("cleans up after an initial dashboard write fails", async () => {
+    const stdin = new FakeStdin(false, true);
+    const stdout = new EventEmitter();
+    const writes: string[] = [];
+    let shouldFail = true;
+
+    const selected = selectTuiAction(makeReport(), choices(), {
+      color: false,
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      stdout: stdout as never,
+      write: (message) => {
+        writes.push(message);
+        if (shouldFail && message.includes(TUI_REPAINT_SCREEN)) {
+          shouldFail = false;
+          throw new Error("write failed");
+        }
+      },
+    });
+
+    await expect(selected).rejects.toThrow("write failed");
+    expect(stdin.rawModes).toEqual([true, false]);
+    expect(stdin.listenerCount("keypress")).toBe(0);
+    expect(stdout.listenerCount("resize")).toBe(0);
+    expect(writes.filter((message) => message === TUI_SHOW_CURSOR)).toHaveLength(1);
+  });
+
+  it("restores terminal state when continuing cannot register a keypress listener", async () => {
+    const stdin = new FakeStdin(false, true);
+    const writes: string[] = [];
+    const on = stdin.on.bind(stdin);
+    Object.defineProperty(stdin, "on", {
+      value: (eventName: string | symbol, listener: (...args: unknown[]) => void) => {
+        if (eventName === "keypress") throw new Error("keypress registration failed");
+        return on(eventName, listener);
+      },
+    });
+
+    await expect(
+      waitForTuiContinue({
+        stdin: stdin as unknown as NodeJS.ReadStream,
+        write: (message) => writes.push(message),
+      }),
+    ).rejects.toThrow("keypress registration failed");
+    expect(stdin.rawModes).toEqual([true, false]);
+    expect(stdin.pauseCalls).toBe(1);
+    expect(stdin.resumeCalls).toBe(1);
+    expect(stdin.listenerCount("keypress")).toBe(0);
+    expect(writes).toEqual(["\nPress any key to return to the dashboard.", "\n"]);
+  });
+
   it("does not overrun adaptive breakpoint widths", () => {
     for (const columns of [100, 111, 112, 120, 132, 149, 150, 169, 170, 180]) {
       const output = renderTuiDashboard(makeReport({ securityFindingCount: 100 }), [], {
@@ -144,6 +256,49 @@ describe("TUI dashboard", () => {
     );
   });
 });
+
+class FakeStdin extends EventEmitter {
+  isRaw: boolean;
+  rawModes: boolean[] = [];
+  pauseCalls = 0;
+  resumeCalls = 0;
+
+  constructor(
+    isRaw: boolean,
+    private paused: boolean,
+  ) {
+    super();
+    this.isRaw = isRaw;
+  }
+
+  setRawMode(enabled: boolean): this {
+    this.rawModes.push(enabled);
+    this.isRaw = enabled;
+    return this;
+  }
+
+  pause(): this {
+    this.pauseCalls += 1;
+    this.paused = true;
+    return this;
+  }
+
+  resume(): this {
+    this.resumeCalls += 1;
+    this.paused = false;
+    return this;
+  }
+
+  isPaused(): boolean {
+    return this.paused;
+  }
+}
+
+const choices = () =>
+  [
+    { name: "Review findings", value: "review", description: "Inspect findings" },
+    { name: "Exit", value: "exit", description: "Quit" },
+  ] as const;
 
 const makeReport = (
   overrides: Partial<Pick<ScanReport, "securityFindingCount" | "securityPriorityCounts">> = {},

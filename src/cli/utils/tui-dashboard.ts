@@ -16,6 +16,11 @@ export type TuiDashboardOptions = {
 export type TuiSelectOptions = TuiDashboardOptions & {
   readonly write: (message: string) => void;
   readonly stdin?: NodeJS.ReadStream | undefined;
+  readonly stdout?: TuiOutput | undefined;
+};
+
+type TuiOutput = Pick<NodeJS.WriteStream, "on" | "off"> & {
+  readonly columns?: number | undefined;
 };
 
 const MIN_COLUMNS = 76;
@@ -28,7 +33,9 @@ const BRAND_WIDE_COLUMNS = 150;
 const METRIC_WIDE_COLUMNS = 170;
 const METRIC_MEDIUM_COLUMNS = 96;
 const ESC = "\x1b[";
-export const TUI_CLEAR_SCREEN = `${ESC}?25l${ESC}3J${ESC}2J${ESC}H`;
+export const TUI_HIDE_CURSOR = `${ESC}?25l`;
+export const TUI_SHOW_CURSOR = `${ESC}?25h`;
+export const TUI_REPAINT_SCREEN = `${ESC}2J${ESC}H`;
 // biome-ignore lint/complexity/useRegexLiterals: literal ESC triggers noControlCharactersInRegex.
 const ANSI_PATTERN = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
 // biome-ignore lint/complexity/useRegexLiterals: literal ESC triggers noControlCharactersInRegex.
@@ -55,7 +62,9 @@ export const renderTuiDashboard = <Value extends string>(
     lines.push("", ...renderNextStepPanel(choices, selectedIndex, width, shouldColor));
   }
 
-  lines.push("", renderControls(shouldColor));
+  if (choices.length > 0) {
+    lines.push("", renderControls(shouldColor));
+  }
   return `${lines.map((line) => paintScreenLine(line, width, shouldColor)).join("\n")}\n`;
 };
 
@@ -72,13 +81,14 @@ export const selectTuiAction = async <Value extends string>(
   if (stdin.setRawMode === undefined) {
     throw new Error("TUI select requires a raw-mode TTY.");
   }
+  const stdout = options.stdout ?? process.stdout;
 
   let selectedIndex = 0;
   const followsTerminalResize = options.columns === undefined;
   const render = () => {
-    const columns = options.columns ?? process.stdout.columns;
+    const columns = options.columns ?? stdout.columns;
     options.write(
-      `${TUI_CLEAR_SCREEN}${renderTuiDashboard(report, choices, {
+      `${TUI_REPAINT_SCREEN}${renderTuiDashboard(report, choices, {
         columns,
         color: options.color,
         selectedIndex,
@@ -88,15 +98,32 @@ export const selectTuiAction = async <Value extends string>(
 
   return await new Promise<Value>((resolve, reject) => {
     const wasRaw = stdin.isRaw;
+    const wasPaused = stdin.isPaused();
+    let cleanedUp = false;
+    let cursorHidden = false;
 
     const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      const attemptCleanup = (operation: () => void) => {
+        try {
+          operation();
+        } catch {
+          // Cleanup is best-effort so one failed restoration cannot skip later steps.
+        }
+      };
       if (followsTerminalResize) {
-        process.stdout.off("resize", render);
+        attemptCleanup(() => stdout.off("resize", onResize));
       }
-      stdin.off("keypress", onKeypress);
-      stdin.setRawMode?.(wasRaw === true);
-      stdin.pause();
-      options.write(`${ESC}?25h`);
+      attemptCleanup(() => stdin.off("keypress", onKeypress));
+      attemptCleanup(() => stdin.setRawMode?.(wasRaw === true));
+      attemptCleanup(() => {
+        if (wasPaused) stdin.pause();
+        else stdin.resume();
+      });
+      if (cursorHidden) {
+        attemptCleanup(() => options.write(TUI_SHOW_CURSOR));
+      }
     };
 
     const finish = (value: Value) => {
@@ -109,6 +136,11 @@ export const selectTuiAction = async <Value extends string>(
       reject(new PromptCancelledError());
     };
 
+    const fail = (error: unknown) => {
+      cleanup();
+      reject(error);
+    };
+
     const onKeypress = (character: string | undefined, key: readline.Key) => {
       if (key.ctrl && key.name === "c") {
         cancel();
@@ -116,22 +148,38 @@ export const selectTuiAction = async <Value extends string>(
       }
       if (key.name === "up" || key.name === "k") {
         selectedIndex = (selectedIndex - 1 + choices.length) % choices.length;
-        render();
+        try {
+          render();
+        } catch (error) {
+          fail(error);
+        }
         return;
       }
       if (key.name === "down" || key.name === "j") {
         selectedIndex = (selectedIndex + 1) % choices.length;
-        render();
+        try {
+          render();
+        } catch (error) {
+          fail(error);
+        }
         return;
       }
       if (key.name === "home") {
         selectedIndex = 0;
-        render();
+        try {
+          render();
+        } catch (error) {
+          fail(error);
+        }
         return;
       }
       if (key.name === "end") {
         selectedIndex = choices.length - 1;
-        render();
+        try {
+          render();
+        } catch (error) {
+          fail(error);
+        }
         return;
       }
       if (key.name === "return" || key.name === "enter") {
@@ -149,20 +197,39 @@ export const selectTuiAction = async <Value extends string>(
       const shortcutIndex = resolveShortcutIndex(character, choices);
       if (shortcutIndex !== undefined) {
         selectedIndex = shortcutIndex;
-        render();
+        try {
+          render();
+        } catch (error) {
+          fail(error);
+          return;
+        }
         const choice = choices[selectedIndex];
         if (choice !== undefined) finish(choice.value);
       }
     };
 
-    readline.emitKeypressEvents(stdin);
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.on("keypress", onKeypress);
-    if (followsTerminalResize) {
-      process.stdout.on("resize", render);
+    const onResize = () => {
+      try {
+        render();
+      } catch (error) {
+        fail(error);
+      }
+    };
+
+    try {
+      readline.emitKeypressEvents(stdin);
+      stdin.setRawMode(true);
+      stdin.resume();
+      stdin.on("keypress", onKeypress);
+      if (followsTerminalResize) {
+        stdout.on("resize", onResize);
+      }
+      cursorHidden = true;
+      options.write(TUI_HIDE_CURSOR);
+      render();
+    } catch (error) {
+      fail(error);
     }
-    render();
   });
 };
 
@@ -177,11 +244,25 @@ export const waitForTuiContinue = async (input: {
   input.write(`\n${dim("Press any key to return to the dashboard.", Boolean(input.color))}`);
   await new Promise<void>((resolve, reject) => {
     const wasRaw = stdin.isRaw;
+    const wasPaused = stdin.isPaused();
+    let cleanedUp = false;
     const cleanup = () => {
-      stdin.off("keypress", onKeypress);
-      stdin.setRawMode?.(wasRaw === true);
-      stdin.pause();
-      input.write("\n");
+      if (cleanedUp) return;
+      cleanedUp = true;
+      const attemptCleanup = (operation: () => void) => {
+        try {
+          operation();
+        } catch {
+          // Cleanup is best-effort so one failed restoration cannot skip later steps.
+        }
+      };
+      attemptCleanup(() => stdin.off("keypress", onKeypress));
+      attemptCleanup(() => stdin.setRawMode?.(wasRaw === true));
+      attemptCleanup(() => {
+        if (wasPaused) stdin.pause();
+        else stdin.resume();
+      });
+      attemptCleanup(() => input.write("\n"));
     };
     const onKeypress = (_character: string | undefined, key: readline.Key) => {
       cleanup();
@@ -192,10 +273,15 @@ export const waitForTuiContinue = async (input: {
       resolve();
     };
 
-    readline.emitKeypressEvents(stdin);
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.on("keypress", onKeypress);
+    try {
+      readline.emitKeypressEvents(stdin);
+      stdin.setRawMode(true);
+      stdin.resume();
+      stdin.on("keypress", onKeypress);
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
   });
 };
 
