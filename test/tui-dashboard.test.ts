@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import type { Key } from "node:readline";
 import { describe, expect, it } from "vitest";
 import { PromptCancelledError } from "../src/cli/utils/prompts.js";
+import { stripTerminalAnsi, terminalCellWidth } from "../src/cli/utils/terminal-width.js";
 import {
   renderTuiDashboard,
   selectTuiAction,
@@ -302,23 +303,26 @@ describe("TUI dashboard", () => {
     }
   });
 
-  it("truncates colored Unicode choice rows without malformed ANSI sequences", () => {
-    const output = renderTuiDashboard(
-      makeReport(),
-      [
-        {
-          name: `Inspect ${"🧪".repeat(40)} security findings`,
-          value: "review",
-          description: `Keep ${"🧪".repeat(40)} evidence visible`,
-        },
-        { name: "Exit", value: "exit", description: "Quit skills-doctor" },
-      ],
-      { color: true, columns: 60 },
-    );
+  it("truncates colored emoji, CJK, and combining choice rows within 60 and 76 columns", () => {
+    const glyphs = "🧪中e\u0301".repeat(40);
+    for (const columns of [60, 76]) {
+      const output = renderTuiDashboard(
+        makeReport(),
+        [
+          {
+            name: `Inspect ${glyphs} security findings`,
+            value: "review",
+            description: `Keep ${glyphs} evidence visible`,
+          },
+          { name: "Exit", value: "exit", description: "Quit skills-doctor" },
+        ],
+        { color: true, columns },
+      );
 
-    expectPrintableLinesWithin(output, 60);
-    expect(output).toContain("🧪");
-    expect(output).toContain("\x1b[0m");
+      expectPrintableLinesWithin(output, columns);
+      expect(output).toContain("🧪中e\u0301");
+      expect(output).toContain("\x1b[0m");
+    }
   });
 
   it("keeps the version brand card visible on medium-width terminals", () => {
@@ -482,11 +486,9 @@ const makeReport = (
 });
 
 const expectPrintableLinesWithin = (output: string, columns: number): void => {
-  // biome-ignore lint/complexity/useRegexLiterals: keep the ESC character out of source regex literals.
-  const ansiPattern = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
   for (const line of output.trimEnd().split("\n")) {
-    const printable = line.replace(ansiPattern, "");
+    const printable = stripTerminalAnsi(line);
     expect(printable).not.toContain("\x1b");
-    expect(Array.from(printable).length).toBeLessThanOrEqual(columns);
+    expect(terminalCellWidth(printable)).toBeLessThanOrEqual(columns);
   }
 };

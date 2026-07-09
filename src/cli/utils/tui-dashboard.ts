@@ -6,6 +6,7 @@ import readline from "node:readline";
 import type { ScanReport } from "../../domain/build-report.js";
 import type { Choice } from "./prompts.js";
 import { PromptCancelledError } from "./prompts.js";
+import { padTerminalCells, terminalCellWidth, truncateTerminalCells } from "./terminal-width.js";
 
 export type TuiDashboardOptions = {
   readonly columns?: number | undefined;
@@ -36,10 +37,6 @@ const ESC = "\x1b[";
 export const TUI_HIDE_CURSOR = `${ESC}?25l`;
 export const TUI_SHOW_CURSOR = `${ESC}?25h`;
 export const TUI_REPAINT_SCREEN = `${ESC}2J${ESC}H`;
-// biome-ignore lint/complexity/useRegexLiterals: literal ESC triggers noControlCharactersInRegex.
-const ANSI_PATTERN = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
-// biome-ignore lint/complexity/useRegexLiterals: literal ESC triggers noControlCharactersInRegex.
-const ANSI_SEQUENCE_PATTERN = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "y");
 
 export const renderTuiDashboard = <Value extends string>(
   report: ScanReport,
@@ -707,44 +704,14 @@ const shortcutForChoice = <Value extends string>(
   return nonExitIndex < 9 ? String(nonExitIndex + 1) : undefined;
 };
 
-const padRight = (text: string, width: number): string =>
-  `${text}${" ".repeat(Math.max(0, width - visibleLength(text)))}`;
+const padRight = (text: string, width: number): string => padTerminalCells(text, width);
 
 const fitToWidth = (text: string, width: number): string =>
   padRight(truncateVisible(text, width), width);
 
-const truncateVisible = (text: string, width: number): string => {
-  if (width <= 0) return "";
-  if (visibleLength(text) <= width) return text;
+const truncateVisible = (text: string, width: number): string => truncateTerminalCells(text, width);
 
-  let visible = 0;
-  let index = 0;
-  let result = "";
-  while (index < text.length && visible < width) {
-    ANSI_SEQUENCE_PATTERN.lastIndex = index;
-    const ansiMatch = ANSI_SEQUENCE_PATTERN.exec(text);
-    if (ansiMatch?.index === index) {
-      result += ansiMatch[0];
-      index += ansiMatch[0].length;
-      continue;
-    }
-
-    const codePoint = text.codePointAt(index);
-    if (codePoint === undefined) break;
-    const character = String.fromCodePoint(codePoint);
-    result += character;
-    visible += 1;
-    index += character.length;
-  }
-
-  return stripAnsi(text) === stripAnsi(result) || !text.includes("\x1b[")
-    ? result
-    : `${result}\x1b[0m`;
-};
-
-const visibleLength = (text: string): number => stripAnsi(text).length;
-
-const stripAnsi = (text: string): string => text.replace(ANSI_PATTERN, "");
+const visibleLength = (text: string): number => terminalCellWidth(text);
 
 const selectedRow = (text: string, shouldColor: boolean): string =>
   shouldColor ? `\x1b[48;2;19;38;79m${text}\x1b[49m` : text;

@@ -13,6 +13,7 @@ import {
   type PromptAdapter,
 } from "../src/cli/utils/prompts.js";
 import { resolveTerminalCapabilities } from "../src/cli/utils/terminal-capabilities.js";
+import { stripTerminalAnsi, terminalCellWidth } from "../src/cli/utils/terminal-width.js";
 import { defaultReportOutputRoot } from "../src/domain/default-report-output-root.js";
 
 describe("scanAction", () => {
@@ -2288,10 +2289,10 @@ const recordingPrompts = (input: {
 };
 
 const expectPrintableLinesWithin = (output: string, columns: number): void => {
-  // biome-ignore lint/complexity/useRegexLiterals: keep the ESC character out of source regex literals.
-  const ansiPattern = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
   for (const line of output.trimEnd().split("\n")) {
-    expect(Array.from(line.replace(ansiPattern, "")).length, line).toBeLessThanOrEqual(columns);
+    const printable = stripTerminalAnsi(line);
+    expect(printable, line).not.toContain("\x1b");
+    expect(terminalCellWidth(printable), line).toBeLessThanOrEqual(columns);
   }
 };
 

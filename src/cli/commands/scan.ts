@@ -62,6 +62,13 @@ import {
   type TerminalCapabilities,
 } from "../utils/terminal-capabilities.js";
 import {
+  padTerminalCells,
+  stripTerminalAnsi,
+  terminalCellWidth,
+  terminalGraphemes,
+  truncateTerminalCells,
+} from "../utils/terminal-width.js";
+import {
   renderTuiDashboard,
   selectTuiAction,
   TUI_REPAINT_SCREEN,
@@ -1242,8 +1249,6 @@ type RenderTerminalOptions = {
 const DEFAULT_TERMINAL_COLUMNS = 120;
 const MIN_TERMINAL_COLUMNS = 20;
 const TABLE_COLUMNS_BREAKPOINT = 120;
-// biome-ignore lint/complexity/useRegexLiterals: literal ESC avoids a control character in the source regex.
-const ANSI_ESCAPE_PATTERN = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
 
 const resolveTerminalColumns = (columns: number | undefined): number => {
   if (columns === undefined || !Number.isFinite(columns)) return DEFAULT_TERMINAL_COLUMNS;
@@ -1405,14 +1410,12 @@ const renderSecurityIncidentTable = (
 };
 
 const formatFixedCell = (text: string, width: number): string =>
-  truncateCell(text, width).padEnd(width, " ");
+  padTerminalCells(truncateCell(text, width), width);
 
 const truncateCell = (text: string, width: number): string => {
   if (visibleTextLength(text) <= width) return text;
   if (width <= 3) return ".".repeat(width);
-  return `${Array.from(text)
-    .slice(0, width - 3)
-    .join("")}...`;
+  return truncateTerminalCells(text, width, { suffix: "..." });
 };
 
 const formatSecuritySeverity = (priority: SecurityPriority | undefined): string => {
@@ -1773,7 +1776,10 @@ const renderTable = (
 ): readonly string[] => {
   if (rows.length === 0) return [];
   const naturalWidths = headers.map((header, columnIndex) =>
-    Math.max(header.length, ...rows.map((row) => row[columnIndex]?.length ?? 0)),
+    Math.max(
+      terminalCellWidth(header),
+      ...rows.map((row) => visibleTextLength(row[columnIndex] ?? "")),
+    ),
   );
   const widths = fitColumnWidths(naturalWidths, headers, resolveTerminalColumns(options.columns));
   return [
@@ -1802,8 +1808,12 @@ const fitColumnWidths = (
   columns: number,
 ): readonly number[] => {
   const gaps = Math.max(0, headers.length - 1) * 2;
-  const budget = Math.max(headers.length, columns - 2 - gaps);
-  const widths = headers.map((header) => Math.max(1, Math.min(header.length, budget)));
+  const minimumWidth = headers.reduce(
+    (sum, header) => sum + Math.max(1, terminalCellWidth(header)),
+    0,
+  );
+  const budget = Math.max(minimumWidth, columns - 2 - gaps);
+  const widths = headers.map((header) => Math.max(1, Math.min(terminalCellWidth(header), budget)));
   let remaining = Math.max(0, budget - widths.reduce((sum, width) => sum + width, 0));
   while (remaining > 0) {
     let expanded = false;
@@ -1848,7 +1858,7 @@ const colorizeUsageRecordLine = (
 };
 
 const wrapTerminalLine = (text: string, columns: number): readonly string[] =>
-  wrapPlainTerminalLine(text.replace(ANSI_ESCAPE_PATTERN, ""), columns);
+  wrapPlainTerminalLine(stripTerminalAnsi(text), columns);
 
 const wrapPlainTerminalLine = (text: string, columns: number): readonly string[] => {
   const width = Math.max(1, columns);
@@ -1863,8 +1873,8 @@ const wrapPlainTerminalLine = (text: string, columns: number): readonly string[]
     }
     if (line.trimEnd().length > 0) lines.push(line.trimEnd());
     line = "";
-    for (const character of word.trimStart()) {
-      if (visibleTextLength(line) === width) {
+    for (const character of terminalGraphemes(word.trimStart())) {
+      if (visibleTextLength(line) + visibleTextLength(character) > width) {
         lines.push(line);
         line = "";
       }
@@ -1884,11 +1894,10 @@ const compactTerminalPath = (value: string, columns: number): string => {
   const basename = path.basename(pathValue);
   const tail = `${basename}${suffix}`;
   const headWidth = Math.max(1, maximum - visibleTextLength(tail) - 3);
-  return `${Array.from(pathValue).slice(0, headWidth).join("")}...${tail}`;
+  return `${truncateTerminalCells(pathValue, headWidth)}...${tail}`;
 };
 
-const visibleTextLength = (text: string): number =>
-  Array.from(text.replace(ANSI_ESCAPE_PATTERN, "")).length;
+const visibleTextLength = (text: string): number => terminalCellWidth(text);
 
 const padCell = (text: string, width: number): string => {
   const truncated = truncateCell(text, width);
