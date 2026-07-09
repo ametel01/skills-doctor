@@ -3,6 +3,7 @@ export type PromptSkipInput = {
   readonly json?: boolean;
   readonly env?: NodeJS.ProcessEnv | undefined;
   readonly stdinIsTty?: boolean;
+  readonly canPrompt?: boolean;
 };
 
 const NON_INTERACTIVE_ENV_KEYS = [
@@ -25,10 +26,11 @@ const NON_INTERACTIVE_ENV_KEYS = [
 
 export const shouldSkipPrompts = (input: PromptSkipInput = {}): boolean => {
   const env = input.env ?? process.env;
+  const canPrompt = input.canPrompt ?? input.stdinIsTty !== false;
   return (
     Boolean(input.yes) ||
     Boolean(input.json) ||
-    input.stdinIsTty === false ||
+    !canPrompt ||
     NON_INTERACTIVE_ENV_KEYS.some((key) => Boolean(env[key]))
   );
 };

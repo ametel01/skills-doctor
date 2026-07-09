@@ -3,13 +3,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
-import { scanAction } from "../src/cli/commands/scan.js";
+import { scanAction, shouldUseTuiDashboard } from "../src/cli/commands/scan.js";
 import { BackToMainMenuError, CliInputError } from "../src/cli/utils/handle-error.js";
 import {
   BACK_TO_MAIN_MENU_VALUE,
   type Choice,
+  inquirerPromptAdapter,
   type PromptAdapter,
 } from "../src/cli/utils/prompts.js";
+import { resolveTerminalCapabilities } from "../src/cli/utils/terminal-capabilities.js";
 import { defaultReportOutputRoot } from "../src/domain/default-report-output-root.js";
 
 describe("scanAction", () => {
@@ -52,6 +54,82 @@ describe("scanAction", () => {
     expect(stdout.join("")).toContain("Skills: 1 scanned");
     expect(stdout.join("")).not.toContain("Top affected skills:");
     expect(process.exitCode).toBe(1);
+  });
+
+  it("uses a plain non-interactive summary when TERM=dumb", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "good-skill"), "good-skill");
+    const stdout: string[] = [];
+
+    await scanAction(
+      ".",
+      {},
+      {
+        cwd: directory,
+        homeDir: path.join(directory, "home"),
+        env: { TERM: "dUmB" },
+        stdinIsTty: true,
+        stdoutIsTty: true,
+        stdinHasRawMode: true,
+        prompts: throwingPrompts(),
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => {},
+        spinner: { run: async (_message, operation) => await operation() },
+      },
+    );
+
+    expect(stdout.join("")).toContain("Skills: 1 scanned");
+    expect(stdout.join("")).not.toContain("\x1b[");
+  });
+
+  it("keeps ambiguous roots conservative when TERM=dumb", async () => {
+    await writeStrongSkill(path.join(directory, ".agents", "skills", "codex-skill"), "codex-skill");
+    await writeStrongSkill(
+      path.join(directory, ".claude", "skills", "claude-skill"),
+      "claude-skill",
+    );
+
+    await expect(
+      scanAction(
+        ".",
+        {},
+        {
+          cwd: directory,
+          homeDir: path.join(directory, "home"),
+          env: { TERM: "dumb" },
+          stdinIsTty: true,
+          stdoutIsTty: true,
+          stdinHasRawMode: true,
+          prompts: throwingPrompts(),
+          writeStdout: () => {},
+          writeStderr: () => {},
+          spinner: { run: async (_message, operation) => await operation() },
+        },
+      ),
+    ).rejects.toBeInstanceOf(CliInputError);
+  });
+
+  it("requires unsuppressed production prompts before entering the TUI", () => {
+    const terminalCapabilities = resolveTerminalCapabilities({
+      env: {},
+      stdinIsTty: true,
+      stdoutIsTty: true,
+      stdinHasRawMode: true,
+    });
+
+    expect(
+      shouldUseTuiDashboard({
+        prompts: inquirerPromptAdapter,
+        skipPrompts: false,
+        terminalCapabilities,
+      }),
+    ).toBe(true);
+    expect(
+      shouldUseTuiDashboard({
+        prompts: inquirerPromptAdapter,
+        skipPrompts: true,
+        terminalCapabilities,
+      }),
+    ).toBe(false);
   });
 
   it("includes usage in JSON only when --usage is requested", async () => {
