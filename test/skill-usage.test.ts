@@ -698,15 +698,19 @@ describe("skill usage analysis", () => {
     expect(actions(analysis, "project-local-unused")).toEqual([]);
   });
 
-  it("reports disabled but used skills for recovery review instead of cleanup", async () => {
+  it("keeps enabled usage rollups separate from disabled recovery evidence", async () => {
     const usageSource = path.join(directory, "session.jsonl");
     await writeJsonl(usageSource, [
+      user("2026-06-20T00:00:00.000Z", "Use $enabled-used for this task."),
+      assistant("2026-06-20T00:00:00.000Z", "Using the `enabled-unknown` skill."),
       assistant("2026-06-20T00:00:00.000Z", "Using the `disabled-used` skill."),
     ]);
 
     const analysis = await analyzeSkillUsage({
       skills: [
+        buildRecord({ name: "enabled-used", source: "global" }),
         buildRecord({ name: "active-unused", source: "global" }),
+        buildRecord({ name: "enabled-unknown", source: "global" }),
         buildRecord({ name: "disabled-used", source: "global", enabled: false }),
         buildRecord({ name: "disabled-unused", source: "global", enabled: false }),
       ],
@@ -715,12 +719,22 @@ describe("skill usage analysis", () => {
     });
 
     expect(analysis).toMatchObject({
-      totalSkills: 3,
-      enabledSkillCount: 1,
+      totalSkills: 5,
+      enabledSkillCount: 3,
       disabledSkillCount: 2,
       usedSkillCount: 1,
       unusedSkillCount: 1,
+      unknownSkillCount: 1,
     });
+    expect(analysis.usedSkillCount + analysis.unusedSkillCount + analysis.unknownSkillCount).toBe(
+      analysis.enabledSkillCount,
+    );
+    expect(summary(analysis, "enabled-used")).toMatchObject({ tier: "recent", usageCount: 1 });
+    expect(summary(analysis, "enabled-unknown")).toMatchObject({
+      tier: "unknown",
+      usageCount: 1,
+    });
+    expect(actions(analysis, "enabled-unknown")).toEqual(["review"]);
     expect(summary(analysis, "disabled-used")).toMatchObject({
       enabled: false,
       usageCount: 1,

@@ -69,8 +69,8 @@ describe("CLI bin", () => {
     await writeJsonl(path.join(homeDirectory, ".codex", "sessions", "session.jsonl"), [
       {
         timestamp: "2026-06-20T00:00:00.000Z",
-        role: "assistant",
-        content: "Using the `good-skill` skill.",
+        role: "user",
+        content: "Use $good-skill for this packaged CLI scan.",
       },
     ]);
 

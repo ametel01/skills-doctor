@@ -375,8 +375,9 @@ const buildMetrics = (report: ScanReport, shouldColor: boolean): readonly (reado
   const reviewItemCount =
     usage?.recommendations.filter((recommendation) => recommendation.action === "review").length ??
     0;
+  const disabledRecoveryCount =
+    usage?.skillsByUsage.filter((skill) => !skill.enabled && skill.usageCount > 0).length ?? 0;
   const pressure = usage?.contextPressure.level ?? "unknown";
-  const coverage = usage?.coverageStatus ?? "unknown";
   return [
     [
       `${blue("⌕", shouldColor)} ${blue("Skills", shouldColor)}`,
@@ -410,7 +411,7 @@ const buildMetrics = (report: ScanReport, shouldColor: boolean): readonly (reado
       "",
     ],
     [
-      `${violet("◷", shouldColor)} ${violet("Usage analysis", shouldColor)}`,
+      `${violet("◷", shouldColor)} ${violet("Usage (enabled)", shouldColor)}`,
       "",
       usage === undefined
         ? dim("not run", shouldColor)
@@ -420,7 +421,7 @@ const buildMetrics = (report: ScanReport, shouldColor: boolean): readonly (reado
         : `${amber(String(usage.unusedSkillCount), shouldColor)} ${dim("unused", shouldColor)}`,
       usage === undefined
         ? ""
-        : `${colorizeCoverage(coverage, shouldColor)} ${dim("coverage", shouldColor)}`,
+        : `${dim(String(usage.unknownSkillCount), shouldColor)} ${dim("unknown", shouldColor)}${disabledRecoveryCount === 0 ? "" : ` · ${amber(String(disabledRecoveryCount), shouldColor)} ${dim("disabled recovery", shouldColor)}`}`,
     ],
     [
       `${orange("◌", shouldColor)} ${orange("Context budget", shouldColor)}`,
@@ -589,9 +590,6 @@ const renderPressureDots = (level: string, shouldColor: boolean): string => {
   if (level === "high") return danger("● ● ●", shouldColor);
   return dim("● ● ●", shouldColor);
 };
-
-const colorizeCoverage = (status: string, shouldColor: boolean): string =>
-  status === "complete" ? success(status, shouldColor) : amber(status, shouldColor);
 
 const resolveShortcutIndex = <Value extends string>(
   character: string | undefined,

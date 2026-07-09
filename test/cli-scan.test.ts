@@ -127,7 +127,7 @@ describe("scanAction", () => {
       totalSkillsAnalyzed: 1,
       unknownSkillCount: 1,
     });
-    expect(stdout.join("")).toContain("Usage analysis:");
+    expect(stdout.join("")).toContain("Usage analysis (enabled skills):");
   });
 
   it("reports a measurable elapsed scan time with injected clock", async () => {
@@ -312,8 +312,8 @@ describe("scanAction", () => {
         content: "No skill announcement here.",
       },
     ]);
-    const stdout: string[] = [];
     const nextStepChoices: string[][] = [];
+    const stdout: string[] = [];
     const reportOutputRoot = path.join(directory, "cleanup-reports");
     const reportDirectory = path.join(reportOutputRoot, "2026-06-20T01-02-03-004Z");
 
@@ -441,7 +441,7 @@ describe("scanAction", () => {
         content: "Using the `disabled-used` skill.",
       },
     ]);
-    const nextStepChoices: string[][] = [];
+    const stdout: string[] = [];
 
     const report = await scanAction(
       ".",
@@ -451,11 +451,11 @@ describe("scanAction", () => {
         homeDir,
         env: {},
         stdinIsTty: true,
-        prompts: recordingPrompts({
-          selects: ["all", "exit"],
-          nextStepChoices,
+        stdoutIsTty: true,
+        prompts: queuedPrompts({
+          selects: ["all", "all", "usage-ranking", "exit"],
         }),
-        writeStdout: () => {},
+        writeStdout: (message) => stdout.push(message),
         writeStderr: () => {},
         spinner: { run: async (_message, operation) => await operation() },
       },
@@ -463,8 +463,9 @@ describe("scanAction", () => {
 
     expect(report.skillCount).toBe(1);
     expect(report.findings.map((finding) => finding.skillPath)).not.toContain(disabledSkillPath);
-    expect(report.usage?.usedSkillCount).toBe(1);
+    expect(report.usage?.usedSkillCount).toBe(0);
     expect(report.usage?.unusedSkillCount).toBe(1);
+    expect(report.usage?.unknownSkillCount).toBe(0);
     expect(report.usage?.skillsByUsage).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -490,7 +491,11 @@ describe("scanAction", () => {
     expect(report.usage?.topRecommendations).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ skillName: "disabled-used" })]),
     );
-    expect(nextStepChoices[0]).toContain("Fix usage recommendations with Claude or Codex");
+    const output = stdout.join("");
+    expect(output).toContain("Usage ranking (enabled skills)");
+    expect(output).toContain("Disabled recovery");
+    expect(output).toContain("disabled skill with detected usage");
+    expect(output).toContain("disabled-used");
   });
 
   it("keeps Codex-disabled skills out of cleanup re-scan findings while preserving usage reports", async () => {
@@ -647,9 +652,9 @@ describe("scanAction", () => {
     );
 
     const output = stdout.join("");
-    expect(output).toContain("\x1b[36mUsage ranking\x1b[39m:");
+    expect(output).toContain("\x1b[36mUsage ranking (enabled skills)\x1b[39m:");
     expect(output).toContain("\x1b[36mSummary\x1b[39m");
-    expect(output).toContain("Metric      Count");
+    expect(output).toContain("Metric             Count");
     expect(output).toContain("\x1b[2mUnused\x1b[22m");
     expect(output).toContain("enabled skills have no detected usage.");
     expect(output).toContain("Skill                 Enabled");

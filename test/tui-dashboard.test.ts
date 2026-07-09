@@ -39,10 +39,10 @@ describe("TUI dashboard", () => {
     expect(output).toContain("Skills");
     expect(output).toContain("Issues");
     expect(output).toContain("Security findings");
-    expect(output).toContain("Usage analysis");
+    expect(output).toContain("Usage (enabled)");
     expect(output).toContain("23 used");
     expect(output).toContain("43 unused");
-    expect(output).toContain("complete coverage");
+    expect(output).toContain("0 unknown");
     expect(output).toContain("Context budget");
     expect(output).toContain("Cleanup candidates");
     expect(output).toContain("0 review items");
@@ -63,6 +63,55 @@ describe("TUI dashboard", () => {
     expect(renderedLines[0]?.length).toBe(180);
     expect(renderedLines.some((line) => line.includes("Security findings"))).toBe(true);
     expect(renderedLines.some((line) => line.includes("v1.0.0"))).toBe(true);
+  });
+
+  it("shows disabled detected use as recovery outside enabled usage metrics", () => {
+    const report = makeReport();
+    if (report.usage === undefined) throw new Error("Expected dashboard usage fixture.");
+    const output = renderTuiDashboard(
+      {
+        ...report,
+        usage: {
+          ...report.usage,
+          totalSkillsAnalyzed: 67,
+          disabledSkillCount: 1,
+          skillsByUsage: [
+            {
+              skillName: "disabled-used",
+              directoryName: "disabled-used",
+              ecosystem: "codex",
+              source: "global",
+              enabled: false,
+              rootPath: "/home/user/.agents/skills",
+              skillPath: "/home/user/.agents/skills/disabled-used/SKILL.md",
+              usageCount: 1,
+              recentUsageCount: 1,
+              tier: "recent",
+              confidence: "high",
+              coverageStatus: "complete",
+              lastUsedAt: "2026-06-20T00:00:00.000Z",
+              lastEvidenceKind: "explicit-user-invocation",
+              descriptionLength: 100,
+              recommendations: [
+                {
+                  action: "review",
+                  skillName: "disabled-used",
+                  skillPath: "/home/user/.agents/skills/disabled-used/SKILL.md",
+                  reason:
+                    "Skill is disabled but has detected local usage; review whether to recover or re-enable it.",
+                  confidence: "high",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      [],
+      { color: false, columns: 150 },
+    );
+
+    expect(output).toContain("Usage (enabled)");
+    expect(output).toContain("0 unknown · 1 disabled recovery");
   });
 
   it("does not overrun adaptive breakpoint widths", () => {

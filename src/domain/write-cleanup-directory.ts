@@ -62,15 +62,22 @@ const renderUsageMarkdown = (report: ScanReport, usage: ScanReportUsage): string
     `Skills analyzed: ${usage.totalSkillsAnalyzed}`,
     `Enabled skills: ${usage.enabledSkillCount}`,
     `Disabled skills: ${usage.disabledSkillCount}`,
-    `Used: ${usage.usedSkillCount}`,
-    `Unused: ${usage.unusedSkillCount}`,
-    `Unknown: ${usage.unknownSkillCount}`,
+    `Enabled skill usage: ${usage.usedSkillCount} used, ${usage.unusedSkillCount} unused, ${usage.unknownSkillCount} unknown`,
     `Duplicate same-name skills: ${usage.duplicateSkillCount}`,
     `Plugin-contributed skills: ${usage.pluginContributedSkillCount}`,
     "",
     "## Recommendations",
     "",
   ];
+
+  const disabledRecoveryCount = usage.skillsByUsage.filter(
+    (skill) => !skill.enabled && skill.usageCount > 0,
+  ).length;
+  if (disabledRecoveryCount > 0) {
+    lines.push(
+      `Disabled recovery: ${disabledRecoveryCount} disabled skill${disabledRecoveryCount === 1 ? "" : "s"} with detected usage`,
+    );
+  }
 
   for (const recommendation of usage.recommendations) {
     lines.push(

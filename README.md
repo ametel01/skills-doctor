@@ -162,8 +162,10 @@ disable unused global/plugin skills only through Codex `[[skills.config]]`
 entries in `~/.codex/config.toml`, and verify with `npx skills-doctor@latest`.
 Grouped usage-recommendation prompts are scoped to the selected action, such as
 shortening context-heavy descriptions or reviewing duplicate skill names.
-Skills already disabled in Codex config are omitted from scan, usage-ranking,
-and cleanup-candidate results.
+Skills already disabled in Codex config are omitted from quality scanning,
+enabled-skill usage rollups, and cleanup candidates. They remain in usage report
+artifacts, and a disabled skill with detected usage is shown as a recovery item
+so you can review whether to recover or re-enable it.
 
 ## JSON Mode
 

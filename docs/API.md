@@ -344,6 +344,11 @@ a hard dependency.
 `ScanReportUsage` contains source paths, source diagnostics, context pressure,
 aggregate counts, sanitized `events`, `coverageStatus`, `sourceCoverage`,
 `skillsByUsage`, recommendations, and all disable-candidate recommendations.
+`usedSkillCount`, `unusedSkillCount`, and `unknownSkillCount` form a mutually
+exclusive enabled-skill partition. `totalSkillsAnalyzed` includes both enabled
+and disabled rows, which remain in `skillsByUsage`; disabled rows never become
+cleanup candidates, and rows with detected usage retain a `review`
+recommendation for recovery or re-enablement.
 Each `skillsByUsage` item includes `usageCount` for all detected uses in
 analyzed sources and `recentUsageCount` for detected timestamped uses in the
 30-day recent window, plus `lastUsedAt`, `lastEvidenceKind`, `enabled`, and

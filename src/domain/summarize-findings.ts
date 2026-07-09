@@ -114,8 +114,14 @@ export const renderHumanSummary = (
   }
   if (report.usage !== undefined) {
     lines.push(
-      `${label("Usage analysis", shouldColor)}: ${success(String(report.usage.usedSkillCount), shouldColor)} used, ${warning(String(report.usage.unusedSkillCount), shouldColor)} unused, ${dim(String(report.usage.unknownSkillCount), shouldColor)} unknown`,
+      `${label("Usage analysis (enabled skills)", shouldColor)}: ${success(String(report.usage.usedSkillCount), shouldColor)} used, ${warning(String(report.usage.unusedSkillCount), shouldColor)} unused, ${dim(String(report.usage.unknownSkillCount), shouldColor)} unknown`,
     );
+    const disabledRecoveryCount = countDisabledUsageRecovery(report);
+    if (disabledRecoveryCount > 0) {
+      lines.push(
+        `${label("Disabled recovery", shouldColor)}: ${warning(String(disabledRecoveryCount), shouldColor)} disabled skill${disabledRecoveryCount === 1 ? "" : "s"} with detected usage`,
+      );
+    }
     lines.push(
       `${label("Usage coverage", shouldColor)}: ${colorizeCoverage(report.usage.coverageStatus, shouldColor)}`,
     );
@@ -141,6 +147,9 @@ export const renderHumanSummary = (
 
   return `${lines.join("\n")}\n`;
 };
+
+const countDisabledUsageRecovery = (report: ScanReport): number =>
+  report.usage?.skillsByUsage.filter((skill) => !skill.enabled && skill.usageCount > 0).length ?? 0;
 
 const countCleanupCandidates = (report: ScanReport): number =>
   report.usage?.recommendations.filter(
