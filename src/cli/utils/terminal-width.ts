@@ -74,8 +74,12 @@ const finishTruncation = (text: string, suffix: string, hadAnsi: boolean): strin
 const graphemeCellWidth = (grapheme: string): number => {
   const codePoints = [...grapheme];
   if (codePoints.length === 0 || codePoints.every(isZeroWidth)) return 0;
-  return codePoints.some(isWide) ? 2 : 1;
+  return codePoints.some(isWide) || isEmojiPresentationGrapheme(codePoints) ? 2 : 1;
 };
+
+const isEmojiPresentationGrapheme = (codePoints: readonly string[]): boolean =>
+  codePoints.some((character) => isEmojiVariationSelector(character) || isKeycap(character)) ||
+  codePoints.some(isRegionalIndicator);
 
 const isZeroWidth = (character: string): boolean =>
   /^\p{Mark}$/u.test(character) || character === "\u200d" || isVariationSelector(character);
@@ -85,6 +89,15 @@ const isVariationSelector = (character: string): boolean => {
   return (
     (codePoint >= 0xfe00 && codePoint <= 0xfe0f) || (codePoint >= 0xe0100 && codePoint <= 0xe01ef)
   );
+};
+
+const isEmojiVariationSelector = (character: string): boolean => character === "\ufe0f";
+
+const isKeycap = (character: string): boolean => character === "\u20e3";
+
+const isRegionalIndicator = (character: string): boolean => {
+  const codePoint = character.codePointAt(0) ?? 0;
+  return codePoint >= 0x1f1e6 && codePoint <= 0x1f1ff;
 };
 
 const isWide = (character: string): boolean => {

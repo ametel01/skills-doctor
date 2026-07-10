@@ -1914,13 +1914,13 @@ describe("scanAction", () => {
   });
 
   it("shows and renders a separate security report from the interactive review menu", async () => {
-    const skillDir = path.join(directory, ".agents", "skills", "security-warning-skill");
+    const skillDir = path.join(directory, ".agents", "skills", "security-❤️🇵🇭#️⃣-warning-skill");
     await mkdir(skillDir, { recursive: true });
     await writeFile(
       path.join(skillDir, "SKILL.md"),
       [
         "---",
-        "name: security-warning-skill",
+        "name: security-❤️🇵🇭#️⃣-warning-skill",
         "description: Use this skill when testing security CLI findings.",
         "---",
         "",
@@ -1940,6 +1940,7 @@ describe("scanAction", () => {
         homeDir: path.join(directory, "home"),
         env: {},
         stdinIsTty: true,
+        stdoutIsTty: true,
         terminalColumns: 60,
         prompts: recordingPrompts({
           selects: ["all", "security", "exit"],
@@ -1983,7 +1984,7 @@ describe("scanAction", () => {
   });
 
   it("stacks long security details through 119 columns and switches to a table at 120", async () => {
-    const skillName = `long-security-skill-${"segment-".repeat(16)}tail`;
+    const skillName = `long-security-❤️🇵🇭#️⃣-${"segment-".repeat(16)}tail`;
     const skillDir = path.join(directory, ".agents", "skills", skillName);
     await mkdir(skillDir, { recursive: true });
     await writeFile(
@@ -2000,7 +2001,7 @@ describe("scanAction", () => {
       ].join("\n"),
     );
 
-    for (const terminalColumns of [60, 119, 120]) {
+    for (const terminalColumns of [60, 76, 119, 120]) {
       const stdout: string[] = [];
       await scanAction(
         ".",
@@ -2010,6 +2011,7 @@ describe("scanAction", () => {
           homeDir: path.join(directory, "home"),
           env: {},
           stdinIsTty: true,
+          stdoutIsTty: true,
           terminalColumns,
           prompts: recordingPrompts({
             selects: ["all", "security", "exit"],
