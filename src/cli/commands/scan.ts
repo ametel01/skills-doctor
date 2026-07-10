@@ -62,6 +62,13 @@ import {
   type TerminalCapabilities,
 } from "../utils/terminal-capabilities.js";
 import {
+  padTerminalCells,
+  stripTerminalAnsi,
+  terminalCellWidth,
+  terminalGraphemes,
+  truncateTerminalCells,
+} from "../utils/terminal-width.js";
+import {
   renderTuiDashboard,
   selectTuiAction,
   TUI_REPAINT_SCREEN,
@@ -140,6 +147,7 @@ export const scanAction = async (
   const writeStdout = options.writeStdout ?? ((message) => process.stdout.write(message));
   const writeStderr = options.writeStderr ?? ((message) => process.stderr.write(message));
   const stderrIsTty = options.stderrIsTty ?? process.stderr.isTTY === true;
+  const terminalColumns = resolveTerminalColumns(options.terminalColumns ?? process.stdout.columns);
   const stdoutIsTty = options.stdoutIsTty ?? process.stdout.isTTY === true;
   const stdinIsTty = options.stdinIsTty ?? process.stdin.isTTY === true;
   const terminalCapabilities = resolveTerminalCapabilities({
@@ -257,7 +265,7 @@ export const scanAction = async (
       writeStdout(
         `${TUI_REPAINT_SCREEN}${renderTuiDashboard(report, [], {
           color: terminalCapabilities.canUseAnsi,
-          columns: options.terminalColumns ?? process.stdout.columns,
+          columns: terminalColumns,
         })}${TUI_SHOW_CURSOR}`,
       );
     } else if (!useTui || !shouldReview) {
@@ -265,7 +273,7 @@ export const scanAction = async (
         score: report.score,
         write: writeStdout,
         color: terminalCapabilities.canUseAnsi,
-        columns: options.terminalColumns ?? process.stdout.columns,
+        columns: terminalColumns,
         animate: options.animateScoreHeader ?? (!skipPrompts && terminalCapabilities.canUseAnsi),
       });
       writeStdout(
@@ -297,7 +305,7 @@ export const scanAction = async (
           analyzeSkillUsage: options.analyzeSkillUsage ?? analyzeSkillUsage,
           stdinIsTty,
           useTui,
-          terminalColumns: options.terminalColumns,
+          terminalColumns,
         })) ?? report;
     }
   }
@@ -576,12 +584,17 @@ const reviewScan = async (
       continue;
     }
     if (action === "usage-ranking") {
-      write(renderUsageRanking(report, { color: input.color }));
+      write(renderUsageRanking(report, { color: input.color, columns: input.terminalColumns }));
       await maybeWaitForTuiContinue(input);
       continue;
     }
     if (action === "cleanup-recommendations") {
-      write(renderCleanupRecommendations(report, { color: input.color }));
+      write(
+        renderCleanupRecommendations(report, {
+          color: input.color,
+          columns: input.terminalColumns,
+        }),
+      );
       await maybeWaitForTuiContinue(input);
       continue;
     }
@@ -627,6 +640,7 @@ const reviewScan = async (
       write(
         renderSecurityFindings(selectedFindings, {
           color: input.color,
+          columns: input.terminalColumns,
           roots: report.scannedRoots,
         }),
       );
@@ -1228,7 +1242,17 @@ const writeCleanupHandoffSummary = (
 
 type RenderTerminalOptions = {
   readonly color?: boolean | undefined;
+  readonly columns?: number | undefined;
   readonly roots?: readonly SkillRoot[] | undefined;
+};
+
+const DEFAULT_TERMINAL_COLUMNS = 120;
+const MIN_TERMINAL_COLUMNS = 20;
+const TABLE_COLUMNS_BREAKPOINT = 120;
+
+const resolveTerminalColumns = (columns: number | undefined): number => {
+  if (columns === undefined || !Number.isFinite(columns)) return DEFAULT_TERMINAL_COLUMNS;
+  return Math.max(MIN_TERMINAL_COLUMNS, Math.floor(columns));
 };
 
 const renderFindings = (
@@ -1253,12 +1277,17 @@ const renderSecurityFindings = (
   options: RenderTerminalOptions = {},
 ): string => {
   const shouldColor = Boolean(options.color);
+  const columns = resolveTerminalColumns(options.columns);
   const incidents = buildSecurityReviewIncidents(findings);
   const lines = [
-    `${usageLabel("Security review", shouldColor)}: ${warning(String(incidents.length), shouldColor)} incident${incidents.length === 1 ? "" : "s"} from ${warning(String(findings.length), shouldColor)} suspicious pattern${findings.length === 1 ? "" : "s"}`,
+    ...wrapTerminalLine(
+      `${usageLabel("Security review", shouldColor)}: ${warning(String(incidents.length), shouldColor)} incident${incidents.length === 1 ? "" : "s"} from ${warning(String(findings.length), shouldColor)} suspicious pattern${findings.length === 1 ? "" : "s"}`,
+      columns,
+    ),
     "",
     usageLabel("Severity summary", shouldColor),
     ...renderTable(["Severity", "Incidents"], summarizeSecurityIncidentSeverity(incidents), {
+      columns,
       colorizers: [
         (text, _rowIndex, row) =>
           colorizeSecuritySeverity(row[0] ?? text.trim(), text, shouldColor),
@@ -1268,16 +1297,26 @@ const renderSecurityFindings = (
     "",
     usageLabel("Category summary", shouldColor),
     ...renderTable(["Category", "Incidents"], summarizeSecurityIncidentCategories(incidents), {
+      columns,
       colorizers: [(text) => accent(text, shouldColor), (text) => warning(text, shouldColor)],
     }),
     "",
     usageLabel("Incidents", shouldColor),
-    ...renderSecurityIncidentTable(incidents, shouldColor, options.roots),
+    ...renderSecurityIncidentTable(incidents, shouldColor, options.roots, columns),
     "",
     usageLabel("Suggested next actions", shouldColor),
-    `- Review ${danger("Critical", shouldColor)} rows first, especially data exposure, remote execution, secret access, and destructive action.`,
-    `- Use ${accent("Fix selected security findings", shouldColor)} to create a scoped repair handoff.`,
-    `- Full evidence remains available in generated reports and repair handoffs.`,
+    ...wrapTerminalLine(
+      `- Review ${danger("Critical", shouldColor)} rows first, especially data exposure, remote execution, secret access, and destructive action.`,
+      columns,
+    ),
+    ...wrapTerminalLine(
+      `- Use ${accent("Fix selected security findings", shouldColor)} to create a scoped repair handoff.`,
+      columns,
+    ),
+    ...wrapTerminalLine(
+      "- Full evidence remains available in generated reports and repair handoffs.",
+      columns,
+    ),
   ];
   return lines.join("\n");
 };
@@ -1320,13 +1359,36 @@ const renderSecurityIncidentTable = (
   incidents: readonly SecurityReviewIncident[],
   shouldColor: boolean,
   roots: readonly SkillRoot[] | undefined,
+  columns: number,
 ): readonly string[] => {
   if (incidents.length === 0) return [];
   const headers = ["Severity", "Category", "Skill", "Finding", "Artifact"];
+  if (columns < TABLE_COLUMNS_BREAKPOINT) {
+    return incidents.flatMap((incident, index) => [
+      ...(index === 0 ? [] : [""]),
+      ...renderStackedRecord(
+        [
+          ["Severity", formatSecuritySeverity(incident.priority)],
+          ["Category", classifySecurityIncidentForDisplay(incident)],
+          ["Skill", incident.skillName ?? path.basename(path.dirname(incident.skillPath))],
+          ["Finding", incident.primaryFinding.title],
+          ["Artifact", compactTerminalPath(formatIncidentArtifact(incident), columns)],
+        ],
+        columns,
+        (line, fieldIndex) =>
+          fieldIndex === 0
+            ? colorizeSecuritySeverity(formatSecuritySeverity(incident.priority), line, shouldColor)
+            : fieldIndex === 1 || fieldIndex === 2
+              ? accent(line, shouldColor)
+              : fieldIndex === 4
+                ? dim(line, shouldColor)
+                : line,
+      ),
+    ]);
+  }
+  const widths = fitColumnWidths(SECURITY_INCIDENT_TABLE_WIDTHS, headers, columns);
   return [
-    `  ${headers
-      .map((header, index) => formatFixedCell(header, SECURITY_INCIDENT_TABLE_WIDTHS[index] ?? 0))
-      .join("  ")}`,
+    `  ${headers.map((header, index) => formatFixedCell(header, widths[index] ?? 0)).join("  ")}`,
     ...incidents.map((incident) => {
       const cells = [
         formatSecuritySeverity(incident.priority),
@@ -1335,9 +1397,7 @@ const renderSecurityIncidentTable = (
         incident.primaryFinding.title,
         compactArtifactPath(formatIncidentArtifact(incident), { roots }),
       ];
-      const formattedCells = cells.map((cell, index) =>
-        formatFixedCell(cell, SECURITY_INCIDENT_TABLE_WIDTHS[index] ?? 0),
-      );
+      const formattedCells = cells.map((cell, index) => formatFixedCell(cell, widths[index] ?? 0));
       return `  ${[
         colorizeSecuritySeverity(cells[0] ?? "", formattedCells[0] ?? "", shouldColor),
         accent(formattedCells[1] ?? "", shouldColor),
@@ -1350,12 +1410,12 @@ const renderSecurityIncidentTable = (
 };
 
 const formatFixedCell = (text: string, width: number): string =>
-  truncateCell(text, width).padEnd(width, " ");
+  padTerminalCells(truncateCell(text, width), width);
 
 const truncateCell = (text: string, width: number): string => {
-  if (text.length <= width) return text;
+  if (visibleTextLength(text) <= width) return text;
   if (width <= 3) return ".".repeat(width);
-  return `${text.slice(0, width - 3)}...`;
+  return truncateTerminalCells(text, width, { suffix: "..." });
 };
 
 const formatSecuritySeverity = (priority: SecurityPriority | undefined): string => {
@@ -1452,6 +1512,7 @@ const formatFindingLocation = (finding: Finding): string =>
 const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions = {}): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";
   const shouldColor = Boolean(options.color);
+  const columns = resolveTerminalColumns(options.columns);
   const disabledRecoverySkills = report.usage.skillsByUsage.filter(
     (skill) => !skill.enabled && skill.usageCount > 0,
   );
@@ -1472,6 +1533,7 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
         ["Plugins", String(report.usage.pluginContributedSkillCount)],
       ],
       {
+        columns,
         colorizers: [
           (text) => dim(text, shouldColor),
           (text, rowIndex) => colorizeUsageSummaryCount(rowIndex, text, shouldColor),
@@ -1485,36 +1547,58 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
       (skill) => skill.enabled && skill.tier === tier,
     );
     if (skills.length === 0) continue;
-    lines.push(
-      "",
-      colorizeUsageTier(toTitleCase(tier), shouldColor),
-      ...renderTable(
-        ["Skill", "Uses", "Recent", "Confidence", "Evidence", "Coverage", "Enabled", "Last used"],
-        skills.map((skill) => [
-          skill.skillName,
-          String(skill.usageCount),
-          String(skill.recentUsageCount),
-          skill.confidence,
-          formatEvidenceKind(skill.lastEvidenceKind),
-          skill.coverageStatus,
-          formatEnabled(skill.enabled),
-          formatUsageTimestamp(skill.lastUsedAt),
+    lines.push("", colorizeUsageTier(toTitleCase(tier), shouldColor));
+    if (columns < TABLE_COLUMNS_BREAKPOINT) {
+      lines.push(
+        ...skills.flatMap((skill, index) => [
+          ...(index === 0 ? [] : [""]),
+          ...renderStackedRecord(
+            [
+              ["Skill", skill.skillName],
+              ["Uses", String(skill.usageCount)],
+              ["Recent", String(skill.recentUsageCount)],
+              ["Confidence", skill.confidence],
+              ["Evidence", formatEvidenceKind(skill.lastEvidenceKind)],
+              ["Coverage", skill.coverageStatus],
+              ["Enabled", formatEnabled(skill.enabled)],
+              ["Last used", formatUsageTimestamp(skill.lastUsedAt)],
+            ],
+            columns,
+            (line, fieldIndex) => colorizeUsageRecordLine(line, fieldIndex, skill, shouldColor),
+          ),
         ]),
-        {
-          colorizers: [
-            (text) => accent(text, shouldColor),
-            (text) => success(text, shouldColor),
-            (text) => success(text, shouldColor),
-            (text, _rowIndex, row) =>
-              colorizeUsageConfidence(row[3] ?? text.trim(), text, shouldColor),
-            (text) => dim(text, shouldColor),
-            (text, _rowIndex, row) => colorizeCoverage(row[5] ?? text.trim(), text, shouldColor),
-            (text, _rowIndex, row) => colorizeEnabled(row[6] ?? text.trim(), text, shouldColor),
-            (text) => dim(text, shouldColor),
-          ],
-        },
-      ),
-    );
+      );
+    } else {
+      lines.push(
+        ...renderTable(
+          ["Skill", "Uses", "Recent", "Confidence", "Evidence", "Coverage", "Enabled", "Last used"],
+          skills.map((skill) => [
+            skill.skillName,
+            String(skill.usageCount),
+            String(skill.recentUsageCount),
+            skill.confidence,
+            formatEvidenceKind(skill.lastEvidenceKind),
+            skill.coverageStatus,
+            formatEnabled(skill.enabled),
+            formatUsageTimestamp(skill.lastUsedAt),
+          ]),
+          {
+            columns,
+            colorizers: [
+              (text) => accent(text, shouldColor),
+              (text) => success(text, shouldColor),
+              (text) => success(text, shouldColor),
+              (text, _rowIndex, row) =>
+                colorizeUsageConfidence(row[3] ?? text.trim(), text, shouldColor),
+              (text) => dim(text, shouldColor),
+              (text, _rowIndex, row) => colorizeCoverage(row[5] ?? text.trim(), text, shouldColor),
+              (text, _rowIndex, row) => colorizeEnabled(row[6] ?? text.trim(), text, shouldColor),
+              (text) => dim(text, shouldColor),
+            ],
+          },
+        ),
+      );
+    }
   }
 
   const unusedSkills = report.usage.skillsByUsage.filter(
@@ -1527,27 +1611,57 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
       "",
       dim("Unused", shouldColor),
       `  ${warning(String(unusedSkills.length), shouldColor)} enabled skills have no detected usage.`,
-      `  Showing ${warning(String(preview.length), shouldColor)}. Use "View usage recommendations" for cleanup actions.`,
-      "",
-      ...renderTable(
-        ["Skill", "Enabled", "Coverage", "Evidence", "Path"],
-        preview.map((skill) => [
-          skill.skillName,
-          formatEnabled(skill.enabled),
-          skill.coverageStatus,
-          formatEvidenceKind(skill.lastEvidenceKind),
-          compactSkillPath(skill.skillPath, { root: skill }),
-        ]),
-        {
-          colorizers: [
-            (text) => accent(text, shouldColor),
-            (text, _rowIndex, row) => colorizeEnabled(row[1] ?? text.trim(), text, shouldColor),
-            (text, _rowIndex, row) => colorizeCoverage(row[2] ?? text.trim(), text, shouldColor),
-            (text) => dim(text, shouldColor),
-            (text) => dim(text, shouldColor),
-          ],
-        },
+      ...wrapTerminalLine(
+        `  Showing ${warning(String(preview.length), shouldColor)}. Use "View usage recommendations" for cleanup actions.`,
+        columns,
       ),
+      "",
+      ...(columns < TABLE_COLUMNS_BREAKPOINT
+        ? preview.flatMap((skill, index) => [
+            ...(index === 0 ? [] : [""]),
+            ...renderStackedRecord(
+              [
+                ["Skill", skill.skillName],
+                ["Enabled", formatEnabled(skill.enabled)],
+                ["Coverage", skill.coverageStatus],
+                ["Evidence", formatEvidenceKind(skill.lastEvidenceKind)],
+                [
+                  "Path",
+                  compactTerminalPath(compactSkillPath(skill.skillPath, { root: skill }), columns),
+                ],
+              ],
+              columns,
+              (line, fieldIndex) =>
+                fieldIndex === 0
+                  ? accent(line, shouldColor)
+                  : fieldIndex === 1
+                    ? colorizeEnabled(formatEnabled(skill.enabled), line, shouldColor)
+                    : fieldIndex === 2
+                      ? colorizeCoverage(skill.coverageStatus, line, shouldColor)
+                      : dim(line, shouldColor),
+            ),
+          ])
+        : renderTable(
+            ["Skill", "Enabled", "Coverage", "Evidence", "Path"],
+            preview.map((skill) => [
+              skill.skillName,
+              formatEnabled(skill.enabled),
+              skill.coverageStatus,
+              formatEvidenceKind(skill.lastEvidenceKind),
+              compactSkillPath(skill.skillPath, { root: skill }),
+            ]),
+            {
+              columns,
+              colorizers: [
+                (text) => accent(text, shouldColor),
+                (text, _rowIndex, row) => colorizeEnabled(row[1] ?? text.trim(), text, shouldColor),
+                (text, _rowIndex, row) =>
+                  colorizeCoverage(row[2] ?? text.trim(), text, shouldColor),
+                (text) => dim(text, shouldColor),
+                (text) => dim(text, shouldColor),
+              ],
+            },
+          )),
     );
   }
 
@@ -1555,32 +1669,54 @@ const renderUsageRanking = (report: ScanReport, options: RenderTerminalOptions =
     lines.push(
       "",
       warning("Disabled recovery", shouldColor),
-      `  ${warning(String(disabledRecoverySkills.length), shouldColor)} disabled skill${disabledRecoverySkills.length === 1 ? "" : "s"} with detected usage. Review whether to recover or re-enable ${disabledRecoverySkills.length === 1 ? "it" : "them"}.`,
-      "",
-      ...renderTable(
-        ["Skill", "Uses", "Recent", "Confidence", "Evidence", "Coverage", "Last used"],
-        disabledRecoverySkills.map((skill) => [
-          skill.skillName,
-          String(skill.usageCount),
-          String(skill.recentUsageCount),
-          skill.confidence,
-          formatEvidenceKind(skill.lastEvidenceKind),
-          skill.coverageStatus,
-          formatUsageTimestamp(skill.lastUsedAt),
-        ]),
-        {
-          colorizers: [
-            (text) => accent(text, shouldColor),
-            (text) => warning(text, shouldColor),
-            (text) => warning(text, shouldColor),
-            (text, _rowIndex, row) =>
-              colorizeUsageConfidence(row[3] ?? text.trim(), text, shouldColor),
-            (text) => dim(text, shouldColor),
-            (text, _rowIndex, row) => colorizeCoverage(row[5] ?? text.trim(), text, shouldColor),
-            (text) => dim(text, shouldColor),
-          ],
-        },
+      ...wrapTerminalLine(
+        `  ${warning(String(disabledRecoverySkills.length), shouldColor)} disabled skill${disabledRecoverySkills.length === 1 ? "" : "s"} with detected usage. Review whether to recover or re-enable ${disabledRecoverySkills.length === 1 ? "it" : "them"}.`,
+        columns,
       ),
+      "",
+      ...(columns < TABLE_COLUMNS_BREAKPOINT
+        ? disabledRecoverySkills.flatMap((skill, index) => [
+            ...(index === 0 ? [] : [""]),
+            ...renderStackedRecord(
+              [
+                ["Skill", skill.skillName],
+                ["Uses", String(skill.usageCount)],
+                ["Recent", String(skill.recentUsageCount)],
+                ["Confidence", skill.confidence],
+                ["Evidence", formatEvidenceKind(skill.lastEvidenceKind)],
+                ["Coverage", skill.coverageStatus],
+                ["Last used", formatUsageTimestamp(skill.lastUsedAt)],
+              ],
+              columns,
+              (line) => warning(line, shouldColor),
+            ),
+          ])
+        : renderTable(
+            ["Skill", "Uses", "Recent", "Confidence", "Evidence", "Coverage", "Last used"],
+            disabledRecoverySkills.map((skill) => [
+              skill.skillName,
+              String(skill.usageCount),
+              String(skill.recentUsageCount),
+              skill.confidence,
+              formatEvidenceKind(skill.lastEvidenceKind),
+              skill.coverageStatus,
+              formatUsageTimestamp(skill.lastUsedAt),
+            ]),
+            {
+              columns,
+              colorizers: [
+                (text) => accent(text, shouldColor),
+                (text) => warning(text, shouldColor),
+                (text) => warning(text, shouldColor),
+                (text, _rowIndex, row) =>
+                  colorizeUsageConfidence(row[3] ?? text.trim(), text, shouldColor),
+                (text) => dim(text, shouldColor),
+                (text, _rowIndex, row) =>
+                  colorizeCoverage(row[5] ?? text.trim(), text, shouldColor),
+                (text) => dim(text, shouldColor),
+              ],
+            },
+          )),
     );
   }
 
@@ -1634,13 +1770,18 @@ const renderTable = (
   headers: readonly string[],
   rows: readonly (readonly string[])[],
   options: {
+    readonly columns?: number | undefined;
     readonly colorizers?: readonly TableColorizer[] | undefined;
   } = {},
 ): readonly string[] => {
   if (rows.length === 0) return [];
-  const widths = headers.map((header, columnIndex) =>
-    Math.max(header.length, ...rows.map((row) => row[columnIndex]?.length ?? 0)),
+  const naturalWidths = headers.map((header, columnIndex) =>
+    Math.max(
+      terminalCellWidth(header),
+      ...rows.map((row) => visibleTextLength(row[columnIndex] ?? "")),
+    ),
   );
+  const widths = fitColumnWidths(naturalWidths, headers, resolveTerminalColumns(options.columns));
   return [
     `  ${headers.map((header, index) => formatTableCell(header, index, headers.length, widths)).join("  ")}`,
     ...rows.map((row, rowIndex) => {
@@ -1661,14 +1802,117 @@ const renderTable = (
   ];
 };
 
-const padCell = (text: string, width: number): string => text.padEnd(width, " ");
+const fitColumnWidths = (
+  naturalWidths: readonly number[],
+  headers: readonly string[],
+  columns: number,
+): readonly number[] => {
+  const gaps = Math.max(0, headers.length - 1) * 2;
+  const minimumWidth = headers.reduce(
+    (sum, header) => sum + Math.max(1, terminalCellWidth(header)),
+    0,
+  );
+  const budget = Math.max(minimumWidth, columns - 2 - gaps);
+  const widths = headers.map((header) => Math.max(1, Math.min(terminalCellWidth(header), budget)));
+  let remaining = Math.max(0, budget - widths.reduce((sum, width) => sum + width, 0));
+  while (remaining > 0) {
+    let expanded = false;
+    for (let index = 0; index < widths.length && remaining > 0; index += 1) {
+      if ((widths[index] ?? 0) >= (naturalWidths[index] ?? 0)) continue;
+      widths[index] = (widths[index] ?? 0) + 1;
+      remaining -= 1;
+      expanded = true;
+    }
+    if (!expanded) break;
+  }
+  return widths;
+};
+
+const renderStackedRecord = (
+  fields: readonly (readonly [string, string])[],
+  columns: number,
+  colorize: (line: string, fieldIndex: number) => string = (line) => line,
+): readonly string[] =>
+  fields.flatMap(([label, value], fieldIndex) =>
+    wrapPlainTerminalLine(`  ${label}: ${value}`, columns).map((line) =>
+      colorize(line, fieldIndex),
+    ),
+  );
+
+const colorizeUsageRecordLine = (
+  line: string,
+  fieldIndex: number,
+  skill: {
+    readonly confidence: string;
+    readonly coverageStatus: string;
+    readonly enabled: boolean;
+  },
+  shouldColor: boolean,
+): string => {
+  if (fieldIndex === 0) return accent(line, shouldColor);
+  if (fieldIndex === 1 || fieldIndex === 2) return success(line, shouldColor);
+  if (fieldIndex === 3) return colorizeUsageConfidence(skill.confidence, line, shouldColor);
+  if (fieldIndex === 5) return colorizeCoverage(skill.coverageStatus, line, shouldColor);
+  if (fieldIndex === 6) return colorizeEnabled(formatEnabled(skill.enabled), line, shouldColor);
+  return dim(line, shouldColor);
+};
+
+const wrapTerminalLine = (text: string, columns: number): readonly string[] =>
+  wrapPlainTerminalLine(stripTerminalAnsi(text), columns);
+
+const wrapPlainTerminalLine = (text: string, columns: number): readonly string[] => {
+  const width = Math.max(1, columns);
+  const words = text.split(/(\s+)/u);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    if (word.length === 0) continue;
+    if (visibleTextLength(line) + visibleTextLength(word) <= width) {
+      line += word;
+      continue;
+    }
+    if (line.trimEnd().length > 0) lines.push(line.trimEnd());
+    line = "";
+    for (const character of terminalGraphemes(word.trimStart())) {
+      if (visibleTextLength(line) + visibleTextLength(character) > width) {
+        lines.push(line);
+        line = "";
+      }
+      line += character;
+    }
+  }
+  if (line.length > 0) lines.push(line.trimEnd());
+  return lines.length === 0 ? [""] : lines;
+};
+
+const compactTerminalPath = (value: string, columns: number): string => {
+  const maximum = Math.max(8, columns - 12);
+  if (visibleTextLength(value) <= maximum) return value;
+  const lineMatch = value.match(/:(\d+)$/u);
+  const suffix = lineMatch?.[0] ?? "";
+  const pathValue = suffix.length === 0 ? value : value.slice(0, -suffix.length);
+  const basename = path.basename(pathValue);
+  const tail = `${basename}${suffix}`;
+  const headWidth = Math.max(1, maximum - visibleTextLength(tail) - 3);
+  return `${truncateTerminalCells(pathValue, headWidth)}...${tail}`;
+};
+
+const visibleTextLength = (text: string): number => terminalCellWidth(text);
+
+const padCell = (text: string, width: number): string => {
+  const truncated = truncateCell(text, width);
+  return `${truncated}${" ".repeat(Math.max(0, width - visibleTextLength(truncated)))}`;
+};
 
 const formatTableCell = (
   text: string,
   columnIndex: number,
   columnCount: number,
   widths: readonly number[],
-): string => (columnIndex === columnCount - 1 ? text : padCell(text, widths[columnIndex] ?? 0));
+): string =>
+  columnIndex === columnCount - 1
+    ? truncateCell(text, widths[columnIndex] ?? 0)
+    : padCell(text, widths[columnIndex] ?? 0);
 
 const formatUsageTimestamp = (timestamp: string | undefined): string => {
   if (timestamp === undefined) return "never";
@@ -1807,6 +2051,7 @@ const renderCleanupRecommendations = (
 ): string => {
   if (report.usage === undefined) return "Usage analysis has not run.\n";
   const shouldColor = Boolean(options.color);
+  const columns = resolveTerminalColumns(options.columns);
   const usageBySkillPath = new Map(
     report.usage.skillsByUsage.map((summary) => [summary.skillPath, summary]),
   );
@@ -1832,31 +2077,82 @@ const renderCleanupRecommendations = (
               ),
             ]
           : []),
-        ...renderTable(
-          ["Skill", "Confidence", "Enabled", "Coverage", "Evidence", "Path"],
-          shownRecommendations.map((recommendation) => {
-            const usage = usageBySkillPath.get(recommendation.skillPath);
-            return [
-              recommendation.skillName,
-              recommendation.confidence,
-              formatEnabled(usage?.enabled ?? true),
-              usage?.coverageStatus ?? report.usage?.coverageStatus ?? "incomplete",
-              formatEvidenceKind(usage?.lastEvidenceKind),
-              compactSkillPath(recommendation.skillPath, { roots: report.scannedRoots }),
-            ];
-          }),
-          {
-            colorizers: [
-              (text) => accent(text, shouldColor),
-              (text, _rowIndex, row) =>
-                colorizeUsageConfidence(row[1] ?? text.trim(), text, shouldColor),
-              (text, _rowIndex, row) => colorizeEnabled(row[2] ?? text.trim(), text, shouldColor),
-              (text, _rowIndex, row) => colorizeCoverage(row[3] ?? text.trim(), text, shouldColor),
-              (text) => dim(text, shouldColor),
-              (text) => dim(text, shouldColor),
-            ],
-          },
-        ),
+        ...(columns < TABLE_COLUMNS_BREAKPOINT
+          ? shownRecommendations.flatMap((recommendation, index) => {
+              const usage = usageBySkillPath.get(recommendation.skillPath);
+              return [
+                ...(index === 0 ? [] : [""]),
+                ...renderStackedRecord(
+                  [
+                    ["Skill", recommendation.skillName],
+                    ["Confidence", recommendation.confidence],
+                    ["Enabled", formatEnabled(usage?.enabled ?? true)],
+                    [
+                      "Coverage",
+                      usage?.coverageStatus ?? report.usage?.coverageStatus ?? "incomplete",
+                    ],
+                    ["Evidence", formatEvidenceKind(usage?.lastEvidenceKind)],
+                    [
+                      "Path",
+                      compactTerminalPath(
+                        compactSkillPath(recommendation.skillPath, { roots: report.scannedRoots }),
+                        columns,
+                      ),
+                    ],
+                  ],
+                  columns,
+                  (line, fieldIndex) => {
+                    if (fieldIndex === 0) return accent(line, shouldColor);
+                    if (fieldIndex === 1) {
+                      return colorizeUsageConfidence(recommendation.confidence, line, shouldColor);
+                    }
+                    if (fieldIndex === 2) {
+                      return colorizeEnabled(
+                        formatEnabled(usage?.enabled ?? true),
+                        line,
+                        shouldColor,
+                      );
+                    }
+                    if (fieldIndex === 3) {
+                      return colorizeCoverage(
+                        usage?.coverageStatus ?? report.usage?.coverageStatus ?? "incomplete",
+                        line,
+                        shouldColor,
+                      );
+                    }
+                    return dim(line, shouldColor);
+                  },
+                ),
+              ];
+            })
+          : renderTable(
+              ["Skill", "Confidence", "Enabled", "Coverage", "Evidence", "Path"],
+              shownRecommendations.map((recommendation) => {
+                const usage = usageBySkillPath.get(recommendation.skillPath);
+                return [
+                  recommendation.skillName,
+                  recommendation.confidence,
+                  formatEnabled(usage?.enabled ?? true),
+                  usage?.coverageStatus ?? report.usage?.coverageStatus ?? "incomplete",
+                  formatEvidenceKind(usage?.lastEvidenceKind),
+                  compactSkillPath(recommendation.skillPath, { roots: report.scannedRoots }),
+                ];
+              }),
+              {
+                columns,
+                colorizers: [
+                  (text) => accent(text, shouldColor),
+                  (text, _rowIndex, row) =>
+                    colorizeUsageConfidence(row[1] ?? text.trim(), text, shouldColor),
+                  (text, _rowIndex, row) =>
+                    colorizeEnabled(row[2] ?? text.trim(), text, shouldColor),
+                  (text, _rowIndex, row) =>
+                    colorizeCoverage(row[3] ?? text.trim(), text, shouldColor),
+                  (text) => dim(text, shouldColor),
+                  (text) => dim(text, shouldColor),
+                ],
+              },
+            )),
       );
     }
   }

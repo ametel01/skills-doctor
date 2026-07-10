@@ -385,6 +385,15 @@ terminal surface includes:
 - usage ranking and cleanup recommendation views
 - cleanup handoff preview and post-cleanup summary
 
+Interactive output resolves one terminal-width budget per scan from the injected
+terminal width or stdout width. Missing or invalid widths use 120 columns and
+rendering supports a minimum 20-column budget. At 120 columns and above,
+security incidents and usage details use bounded tables. Below 120 columns,
+those detail records use labeled stacked fields so no columns are silently
+dropped; long paths use a middle ellipsis that keeps the basename and any line
+suffix. The dashboard removes its brand below 112 columns and stacks metrics
+one per row below 96 columns.
+
 Spinners are edge-only and live behind `src/cli/utils/spinner.ts`. Never write
 spinner or prompt output to stdout in JSON mode.
 

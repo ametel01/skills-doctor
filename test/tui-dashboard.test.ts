@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import type { Key } from "node:readline";
 import { describe, expect, it } from "vitest";
 import { PromptCancelledError } from "../src/cli/utils/prompts.js";
+import { stripTerminalAnsi, terminalCellWidth } from "../src/cli/utils/terminal-width.js";
 import {
   renderTuiDashboard,
   selectTuiAction,
@@ -289,6 +290,41 @@ describe("TUI dashboard", () => {
     }
   });
 
+  it("stacks metrics and keeps every dashboard line within narrow terminal widths", () => {
+    for (const columns of [60, 76]) {
+      const output = renderTuiDashboard(makeReport({ securityFindingCount: 100 }), choices(), {
+        color: true,
+        columns,
+      });
+
+      expectPrintableLinesWithin(output, columns);
+      expect(output).toContain("Security findings");
+      expect(output).toContain("Usage (enabled)");
+    }
+  });
+
+  it("truncates colored emoji, CJK, and combining choice rows within 60 and 76 columns", () => {
+    const glyphs = "🧪中e\u0301".repeat(40);
+    for (const columns of [60, 76]) {
+      const output = renderTuiDashboard(
+        makeReport(),
+        [
+          {
+            name: `Inspect ${glyphs} security findings`,
+            value: "review",
+            description: `Keep ${glyphs} evidence visible`,
+          },
+          { name: "Exit", value: "exit", description: "Quit skills-doctor" },
+        ],
+        { color: true, columns },
+      );
+
+      expectPrintableLinesWithin(output, columns);
+      expect(output).toContain("🧪中e\u0301");
+      expect(output).toContain("\x1b[0m");
+    }
+  });
+
   it("keeps the version brand card visible on medium-width terminals", () => {
     expect(renderTuiDashboard(makeReport(), [], { color: false, columns: 111 })).not.toContain(
       "v1.0.0",
@@ -448,3 +484,11 @@ const makeReport = (
   },
   handoffRequested: false,
 });
+
+const expectPrintableLinesWithin = (output: string, columns: number): void => {
+  for (const line of output.trimEnd().split("\n")) {
+    const printable = stripTerminalAnsi(line);
+    expect(printable).not.toContain("\x1b");
+    expect(terminalCellWidth(printable)).toBeLessThanOrEqual(columns);
+  }
+};

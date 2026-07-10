@@ -6,6 +6,7 @@ import readline from "node:readline";
 import type { ScanReport } from "../../domain/build-report.js";
 import type { Choice } from "./prompts.js";
 import { PromptCancelledError } from "./prompts.js";
+import { padTerminalCells, terminalCellWidth, truncateTerminalCells } from "./terminal-width.js";
 
 export type TuiDashboardOptions = {
   readonly columns?: number | undefined;
@@ -23,7 +24,7 @@ type TuiOutput = Pick<NodeJS.WriteStream, "on" | "off"> & {
   readonly columns?: number | undefined;
 };
 
-const MIN_COLUMNS = 76;
+const MIN_COLUMNS = 20;
 const DEFAULT_COLUMNS = 120;
 const HEADER_GAP = 4;
 const BRAND_WIDE_WIDTH = 48;
@@ -36,10 +37,6 @@ const ESC = "\x1b[";
 export const TUI_HIDE_CURSOR = `${ESC}?25l`;
 export const TUI_SHOW_CURSOR = `${ESC}?25h`;
 export const TUI_REPAINT_SCREEN = `${ESC}2J${ESC}H`;
-// biome-ignore lint/complexity/useRegexLiterals: literal ESC triggers noControlCharactersInRegex.
-const ANSI_PATTERN = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "gu");
-// biome-ignore lint/complexity/useRegexLiterals: literal ESC triggers noControlCharactersInRegex.
-const ANSI_SEQUENCE_PATTERN = new RegExp("\\x1b\\[[0-9;?]*[ -/]*[@-~]", "y");
 
 export const renderTuiDashboard = <Value extends string>(
   report: ScanReport,
@@ -431,10 +428,10 @@ const renderMetricStrip = (
 
   metricRows.forEach((rowMetrics, rowIndex) => {
     const count = rowMetrics.length;
-    const columnWidth = Math.max(15, Math.floor((width - 2 - (count - 1)) / count));
+    const columnWidth = Math.max(1, Math.floor((width - 2 - (count - 1)) / count));
     for (const metricLineIndex of [0, 1, 2, 3, 4]) {
       const cells = rowMetrics.map((metric) =>
-        padRight(` ${metric[metricLineIndex] ?? ""}`, columnWidth),
+        fitToWidth(` ${metric[metricLineIndex] ?? ""}`, columnWidth),
       );
       lines.push(
         `${border("│", shouldColor)}${cells.join(border("│", shouldColor))}${border("│", shouldColor)}`,
@@ -564,8 +561,8 @@ const renderChoiceRow = <Value extends string>(
   const arrow = dim("→", shouldColor);
   const left = `${shortcutBadge}  ${name}`;
   const descriptionColumn = Math.max(28, Math.floor(width * 0.28));
-  const content = `${padRight(left, descriptionColumn)} ${description}`;
-  const row = `${padRight(content, width - visibleLength(arrow) - 1)} ${arrow}`;
+  const content = `${padRight(left, Math.min(descriptionColumn, width))} ${description}`;
+  const row = `${fitToWidth(content, Math.max(0, width - visibleLength(arrow) - 1))} ${arrow}`;
   return selected
     ? `${selectedBorder("╭", shouldColor)}${selectedRow(row, shouldColor)}${selectedBorder("╮", shouldColor)}`
     : ` ${row} `;
@@ -601,7 +598,7 @@ const box = (
   return [
     `${border("╭", shouldColor)}${titleSegment}${border("─".repeat(topRuleWidth), shouldColor)}${border("╮", shouldColor)}`,
     ...bodyLines.map((line) => {
-      const content = padRight(line, width - 4);
+      const content = fitToWidth(line, Math.max(0, width - 4));
       return `${border("│", shouldColor)} ${content} ${border("│", shouldColor)}`;
     }),
     `${border("╰", shouldColor)}${border("─".repeat(width - 2), shouldColor)}${border("╯", shouldColor)}`,
@@ -616,14 +613,14 @@ const framedPanel = (
 ): readonly string[] => [
   `${panelBorder("╭", shouldColor)}${panelBorder("─".repeat(width - 2), shouldColor)}${panelBorder("╮", shouldColor)}`,
   ...bodyLines.map((line) => {
-    const content = padRight(line, width - 4);
+    const content = fitToWidth(line, Math.max(0, width - 4));
     return `${panelBorder("│", shouldColor)} ${content} ${panelBorder("│", shouldColor)}`;
   }),
   `${panelBorder("╰", shouldColor)}${panelBorder("─".repeat(width - 2), shouldColor)}${panelBorder("╯", shouldColor)}`,
 ];
 
 const getHeaderLeftWidth = (width: number): number =>
-  Math.max(32, width - getBrandWidth(width) - (getBrandWidth(width) === 0 ? 0 : HEADER_GAP));
+  Math.max(1, width - getBrandWidth(width) - (getBrandWidth(width) === 0 ? 0 : HEADER_GAP));
 
 const normalizeColumns = (columns: number | undefined): number => {
   if (columns === undefined || !Number.isFinite(columns)) return DEFAULT_COLUMNS;
@@ -637,9 +634,10 @@ const getBrandWidth = (width: number): number => {
 };
 
 const getMetricColumnsPerRow = (width: number, metricCount: number): number => {
+  if (width < METRIC_MEDIUM_COLUMNS) return 1;
   if (width >= METRIC_WIDE_COLUMNS) return metricCount;
   if (width >= METRIC_MEDIUM_COLUMNS) return Math.min(3, metricCount);
-  return Math.min(2, metricCount);
+  return 1;
 };
 
 const chunk = <Value>(items: readonly Value[], size: number): readonly Value[][] => {
@@ -706,42 +704,14 @@ const shortcutForChoice = <Value extends string>(
   return nonExitIndex < 9 ? String(nonExitIndex + 1) : undefined;
 };
 
-const padRight = (text: string, width: number): string =>
-  `${text}${" ".repeat(Math.max(0, width - visibleLength(text)))}`;
+const padRight = (text: string, width: number): string => padTerminalCells(text, width);
 
 const fitToWidth = (text: string, width: number): string =>
   padRight(truncateVisible(text, width), width);
 
-const truncateVisible = (text: string, width: number): string => {
-  if (width <= 0) return "";
-  if (visibleLength(text) <= width) return text;
+const truncateVisible = (text: string, width: number): string => truncateTerminalCells(text, width);
 
-  let visible = 0;
-  let index = 0;
-  let result = "";
-  while (index < text.length && visible < width) {
-    ANSI_SEQUENCE_PATTERN.lastIndex = index;
-    const ansiMatch = ANSI_SEQUENCE_PATTERN.exec(text);
-    if (ansiMatch?.index === index) {
-      result += ansiMatch[0];
-      index += ansiMatch[0].length;
-      continue;
-    }
-
-    const codePoint = text.codePointAt(index);
-    if (codePoint === undefined) break;
-    const character = String.fromCodePoint(codePoint);
-    result += character;
-    visible += 1;
-    index += character.length;
-  }
-
-  return result;
-};
-
-const visibleLength = (text: string): number => stripAnsi(text).length;
-
-const stripAnsi = (text: string): string => text.replace(ANSI_PATTERN, "");
+const visibleLength = (text: string): number => terminalCellWidth(text);
 
 const selectedRow = (text: string, shouldColor: boolean): string =>
   shouldColor ? `\x1b[48;2;19;38;79m${text}\x1b[49m` : text;
