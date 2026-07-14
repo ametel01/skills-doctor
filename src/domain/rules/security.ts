@@ -1,3 +1,4 @@
+import { redactSecretValues } from "../security/secrets.js";
 import type {
   CapabilityFact,
   CapabilityKind,
@@ -300,9 +301,6 @@ const LONG_DESCRIPTION_THRESHOLD = 300;
 const LONG_LINE_THRESHOLD = 1_000;
 const PREVENTION_PATTERN =
   /\b(do not|don't|never|avoid|refuse to|must not|should not)\b.{0,80}\b(ignore|disregard|override|bypass|send|post|upload|forward|transmit|copy|paste|exfiltrate|curl|wget|netcat|nc|scp|rsync|webhook|--yolo|--dangerously-skip-permissions|sandbox|auto-approve|confirmation|base64|encoded)\b/i;
-const EVIDENCE_SECRET_VALUE_PATTERN =
-  /(\b[A-Za-z0-9_-]*(?:secret|token|credential|password|private[_-]?key)[A-Za-z0-9_-]*\s*[:=]\s*)(["']?)[^\s"']+(\2)/gi;
-const EVIDENCE_BEARER_VALUE_PATTERN = /(\bAuthorization\s*:\s*Bearer\s+)([A-Za-z0-9._~+/-]+)/gi;
 const PROMPT_UNTRUSTED_CONTENT_PATTERN =
   /\b(untrusted|attacker-controlled|malicious|external|repo|repository|pr|pull request|user|model)\b/i;
 const PROMPT_INJECTION_TERM_PATTERN =
@@ -1733,10 +1731,7 @@ const hasSuspiciousExfiltrationDestination = (candidate: MarkdownSecurityCandida
   EXFILTRATION_SUSPICIOUS_DESTINATION_PATTERN.test(candidate.text) ||
   candidate.commandContext.hasExternalDestination;
 
-const redactEvidenceText = (text: string): string =>
-  text
-    .replace(EVIDENCE_SECRET_VALUE_PATTERN, "$1[REDACTED]")
-    .replace(EVIDENCE_BEARER_VALUE_PATTERN, "$1[REDACTED]");
+const redactEvidenceText = (text: string): string => redactSecretValues(text);
 
 const isRemoteExecutionBootstrapLine = (line: MarkdownSecurityCandidate): boolean =>
   hasRemoteFetchToExecutionPipeline(line.commandContext) ||

@@ -89,16 +89,16 @@ describe("repair agent utilities", () => {
     ).rejects.toBeInstanceOf(CliInputError);
   });
 
-  it("builds launch invocations with inline prompt as the final argument", () => {
+  it("builds launch invocations without bypassing permissions", () => {
     expect(buildRepairAgentInvocation("claude", "fix skills")).toEqual({
       command: "claude",
-      args: ["--dangerously-skip-permissions", "fix skills"],
+      args: ["fix skills"],
     });
     expect(buildRepairAgentInvocation("codex", "fix skills")).toEqual({
       command: "codex",
-      args: ["--yolo", "fix skills"],
+      args: ["fix skills"],
     });
-    expect(formatRepairAgentPreview("codex")).toBe("codex --yolo <prompt>");
+    expect(formatRepairAgentPreview("codex")).toBe("codex <prompt>");
   });
 
   it("builds launch invocations with prompt-file references when available", () => {
@@ -109,10 +109,7 @@ describe("repair agent utilities", () => {
       }),
     ).toEqual({
       command: "claude",
-      args: [
-        "--dangerously-skip-permissions",
-        "Read and follow the prompt file at: /tmp/skills-doctor/reports/handoff-prompt.md",
-      ],
+      args: ["Read and follow the prompt file at: /tmp/skills-doctor/reports/handoff-prompt.md"],
     });
     expect(
       buildRepairAgentInvocation("codex", {
@@ -121,14 +118,9 @@ describe("repair agent utilities", () => {
       }),
     ).toEqual({
       command: "codex",
-      args: [
-        "--yolo",
-        "Read and follow the prompt file at: /tmp/skills-doctor/reports/handoff-prompt.md",
-      ],
+      args: ["Read and follow the prompt file at: /tmp/skills-doctor/reports/handoff-prompt.md"],
     });
-    expect(formatRepairAgentPreview("codex", { usesPromptFile: true })).toBe(
-      "codex --yolo <prompt-file>",
-    );
+    expect(formatRepairAgentPreview("codex", { usesPromptFile: true })).toBe("codex <prompt-file>");
   });
 
   it("uses a Windows entry script when a cmd wrapper points to one", async () => {
@@ -147,7 +139,7 @@ describe("repair agent utilities", () => {
 
     expect(invocation).toEqual({
       command: process.execPath,
-      args: [entryScript, "--yolo", "repair prompt"],
+      args: [entryScript, "repair prompt"],
     });
   });
 });

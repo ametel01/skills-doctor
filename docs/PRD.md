@@ -480,12 +480,12 @@ Full report behavior:
 - Preview the launch command before running.
 - Ask for explicit confirmation before launch.
 - Pass the generated prompt as the final argument.
-- Use agent-specific approval-bypass flags only after user confirmation.
+- Preserve the selected agent's normal permission and sandbox controls.
 
 Initial launch mapping:
 
-- Claude: `claude --dangerously-skip-permissions <prompt>`
-- Codex: `codex --yolo <prompt>`
+- Claude: `claude <prompt>`
+- Codex: `codex <prompt>`
 
 On Windows, avoid shell-based multiline prompt invocation if it would corrupt
 arguments. Prefer direct binary execution or the resolved underlying Node entry

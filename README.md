@@ -146,8 +146,11 @@ next to the normal navigation keys.
 
 Launch mappings:
 
-- Claude: `claude --dangerously-skip-permissions <prompt-file>`
-- Codex: `codex --yolo <prompt-file>`
+- Claude: `claude <prompt-file>`
+- Codex: `codex <prompt-file>`
+
+The launched agent keeps its normal permission and sandbox controls. Confirming
+the handoff authorizes the launch, not a bypass of those controls.
 
 If prompt-file writing fails, the same launch commands fall back to an inline
 `<prompt>` argument.

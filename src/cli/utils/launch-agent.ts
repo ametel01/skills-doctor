@@ -19,7 +19,7 @@ export type RepairAgent = {
   readonly id: RepairAgentId;
   readonly displayName: string;
   readonly binary: string;
-  readonly autoApproveArgs: readonly string[];
+  readonly launchArgs: readonly string[];
 };
 
 export type AgentAvailabilityProbe = (command: string) => boolean | Promise<boolean>;
@@ -39,13 +39,13 @@ const REPAIR_AGENT_CONFIG: Record<RepairAgentId, RepairAgent> = {
     id: "claude",
     displayName: "Claude Code",
     binary: "claude",
-    autoApproveArgs: ["--dangerously-skip-permissions"],
+    launchArgs: [],
   },
   codex: {
     id: "codex",
     displayName: "Codex",
     binary: "codex",
-    autoApproveArgs: ["--yolo"],
+    launchArgs: [],
   },
 };
 
@@ -126,7 +126,7 @@ export const buildRepairAgentInvocation = (
   const agent = REPAIR_AGENT_CONFIG[agentId];
   return {
     command: agent.binary,
-    args: [...agent.autoApproveArgs, buildPromptArgument(promptInput)],
+    args: [...agent.launchArgs, buildPromptArgument(promptInput)],
   };
 };
 
@@ -140,7 +140,7 @@ export const formatRepairAgentPreview = (
 ): string => {
   const agent = REPAIR_AGENT_CONFIG[agentId];
   const promptPlaceholder = options.usesPromptFile === true ? "<prompt-file>" : "<prompt>";
-  return [agent.binary, ...agent.autoApproveArgs, promptPlaceholder].join(" ");
+  return [agent.binary, ...agent.launchArgs, promptPlaceholder].join(" ");
 };
 
 export type SpawnInvocationOptions = {

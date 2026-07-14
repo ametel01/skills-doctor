@@ -63,6 +63,24 @@ describe("security capability detection", () => {
       }),
     );
   });
+
+  it.each([
+    "sk-abcdefghijklmnop",
+    "ghp_abcdefghijklmnop",
+    "github_pat_abcdefghijklmnopqrst",
+    "xoxb-abcdefghijklmnopqrst",
+    "AKIAABCDEFGHIJKLMNOP",
+  ])("redacts bare credential literal %s from capability evidence", (credential) => {
+    const skillPackage = buildPackage([artifact("scripts/configure.sh", [credential])]);
+
+    const fact = deriveCapabilityFacts(skillPackage).find((candidate) =>
+      candidate.description?.includes("literal value"),
+    );
+
+    expect(fact).toBeDefined();
+    expect(JSON.stringify(fact?.evidence)).not.toContain(credential);
+    expect(JSON.stringify(fact?.evidence)).toContain("[REDACTED]");
+  });
 });
 
 const kinds = (facts: readonly { readonly kind: string }[]): readonly string[] =>
