@@ -81,6 +81,8 @@ type CandidateFile = {
 const DEFAULT_RECENT_WINDOW_DAYS = 30;
 const DEFAULT_MAX_SESSION_FILES = 200;
 const DEFAULT_MAX_FILE_BYTES = 1_000_000;
+const USAGE_DISCOVERY_CONCURRENCY = 8;
+const UNIX_TIMESTAMP_MILLISECONDS_THRESHOLD = 1_000_000_000_000;
 const CONTEXT_BUDGET_WARNING =
   "Skill descriptions were shortened to fit the 2% skills context budget";
 
@@ -190,14 +192,12 @@ const findJsonlFiles = async (input: {
     return [];
   }
 
-  const state: DiscoveryState = {
-    candidates: [],
-  };
-  await collectJsonlFiles({
+  const collected = await collectJsonlFiles({
     ...input,
-    state,
+    limiter: createUsageDiscoveryLimiter(USAGE_DISCOVERY_CONCURRENCY),
   });
-  const sortedCandidates = state.candidates.sort(compareCandidateFiles);
+  input.diagnostics.push(...collected.diagnostics);
+  const sortedCandidates = collected.candidates.sort(compareCandidateFiles);
   if (sortedCandidates.length > input.maxFiles) {
     const omittedCount = sortedCandidates.length - input.maxFiles;
     input.diagnostics.push({
@@ -210,8 +210,13 @@ const findJsonlFiles = async (input: {
   return sortedCandidates.slice(0, input.maxFiles);
 };
 
-type DiscoveryState = {
-  candidates: CandidateFile[];
+type JsonlFileCollection = {
+  readonly candidates: CandidateFile[];
+  readonly diagnostics: Diagnostic[];
+};
+
+type UsageDiscoveryLimiter = {
+  readonly run: <Result>(operation: () => Promise<Result>) => Promise<Result>;
 };
 
 type UsageDiscoveryProgressState = {
@@ -224,47 +229,112 @@ type UsageDiscoveryProgressState = {
 const collectJsonlFiles = async (input: {
   readonly directory: string;
   readonly since: Date;
-  readonly maxFiles: number;
-  readonly diagnostics: Diagnostic[];
   readonly fileSystem: UsageSourceFileSystem | undefined;
-  readonly state: DiscoveryState;
   readonly progressState: UsageDiscoveryProgressState;
   readonly onProgress: ((event: DiscoverUsageSourcesProgressEvent) => void) | undefined;
-}): Promise<void> => {
-  const entries = await readDirectory(input.directory, input.fileSystem, input.diagnostics);
-  if (entries === undefined) return;
+  readonly limiter: UsageDiscoveryLimiter;
+}): Promise<JsonlFileCollection> => {
+  const diagnostics: Diagnostic[] = [];
+  const entries = await input.limiter.run(() =>
+    readDirectory(input.directory, input.fileSystem, diagnostics),
+  );
+  if (entries === undefined) return { candidates: [], diagnostics };
   input.progressState.scannedDirectoryCount += 1;
   input.onProgress?.(
     discoveryProgressEvent(input.progressState, "directory-scanned", input.directory),
   );
 
   const sortedEntries = [...entries].sort(compareDiscoveryEntries);
+  const directoryEntries: typeof sortedEntries = [];
+  const candidateFiles: typeof sortedEntries = [];
   for (const entry of sortedEntries) {
-    if (!entry.isDirectory()) continue;
-    const entryPath = path.join(input.directory, entry.name);
-    await collectJsonlFiles({ ...input, directory: entryPath });
-  }
-
-  const candidateFiles = sortedEntries.filter(
-    (entry) => entry.isFile() && entry.name.endsWith(".jsonl"),
-  );
-  for (const entry of candidateFiles) {
-    const entryPath = path.join(input.directory, entry.name);
-    if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
-    input.progressState.inspectedJsonlFileCount += 1;
-    input.onProgress?.(discoveryProgressEvent(input.progressState, "file-inspected", entryPath));
-    const candidate = await fileIfRecentUsageEventExists(
-      entryPath,
-      input.since,
-      input.diagnostics,
-      input.fileSystem,
-    );
-    if (candidate !== undefined) {
-      input.state.candidates.push(candidate);
-      input.progressState.candidateSourceCount += 1;
-      input.onProgress?.(discoveryProgressEvent(input.progressState, "candidate-found", entryPath));
+    if (entry.isDirectory()) {
+      directoryEntries.push(entry);
+    } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+      candidateFiles.push(entry);
     }
   }
+
+  const [directoryCollections, fileCollections] = await Promise.all([
+    Promise.all(
+      directoryEntries.map((entry) =>
+        collectJsonlFiles({ ...input, directory: path.join(input.directory, entry.name) }),
+      ),
+    ),
+    Promise.all(
+      candidateFiles.map((entry) =>
+        input.limiter.run(async (): Promise<JsonlFileCollection> => {
+          const entryPath = path.join(input.directory, entry.name);
+          const fileDiagnostics: Diagnostic[] = [];
+          input.progressState.inspectedJsonlFileCount += 1;
+          input.onProgress?.(
+            discoveryProgressEvent(input.progressState, "file-inspected", entryPath),
+          );
+          const candidate = await fileIfRecentUsageEventExists(
+            entryPath,
+            input.since,
+            fileDiagnostics,
+            input.fileSystem,
+          );
+          if (candidate !== undefined) {
+            input.progressState.candidateSourceCount += 1;
+            input.onProgress?.(
+              discoveryProgressEvent(input.progressState, "candidate-found", entryPath),
+            );
+          }
+          return {
+            candidates: candidate === undefined ? [] : [candidate],
+            diagnostics: fileDiagnostics,
+          };
+        }),
+      ),
+    ),
+  ]);
+
+  return {
+    candidates: [...directoryCollections, ...fileCollections].flatMap(
+      (collection) => collection.candidates,
+    ),
+    diagnostics: [
+      ...diagnostics,
+      ...directoryCollections.flatMap((collection) => collection.diagnostics),
+      ...fileCollections.flatMap((collection) => collection.diagnostics),
+    ],
+  };
+};
+
+const createUsageDiscoveryLimiter = (limit: number): UsageDiscoveryLimiter => {
+  const concurrency = Math.max(1, Math.floor(limit));
+  const waiters: Array<() => void> = [];
+  let active = 0;
+
+  const acquire = async (): Promise<void> => {
+    if (active < concurrency) {
+      active += 1;
+      return;
+    }
+    await new Promise<void>((resolve) => waiters.push(resolve));
+  };
+
+  const release = (): void => {
+    const next = waiters.shift();
+    if (next !== undefined) {
+      next();
+      return;
+    }
+    active -= 1;
+  };
+
+  return {
+    run: async <Result>(operation: () => Promise<Result>): Promise<Result> => {
+      await acquire();
+      try {
+        return await operation();
+      } finally {
+        release();
+      }
+    },
+  };
 };
 
 const discoveryProgressEvent = (
@@ -521,16 +591,25 @@ const extractTimestampFromJsonLine = (line: string): string | undefined => {
 const extractTimestamp = (record: unknown): string | undefined => {
   if (!isRecord(record)) return undefined;
   for (const key of ["timestamp", "ts", "created_at"]) {
-    const value = record[key];
-    if (typeof value === "string") return value;
+    const timestamp = normalizeTimestamp(record[key]);
+    if (timestamp !== undefined) return timestamp;
   }
   const message = isRecord(record.message) ? record.message : undefined;
   if (message === undefined) return undefined;
   for (const key of ["timestamp", "ts", "created_at"]) {
-    const value = message[key];
-    if (typeof value === "string") return value;
+    const timestamp = normalizeTimestamp(message[key]);
+    if (timestamp !== undefined) return timestamp;
   }
   return undefined;
+};
+
+const normalizeTimestamp = (value: unknown): string | undefined => {
+  if (typeof value === "string") return value;
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  const milliseconds =
+    Math.abs(value) < UNIX_TIMESTAMP_MILLISECONDS_THRESHOLD ? value * 1000 : value;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 };
 
 const daysBefore = (now: Date, days: number): Date =>

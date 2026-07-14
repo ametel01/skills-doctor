@@ -388,6 +388,32 @@ describe("skill usage analysis", () => {
     });
   });
 
+  it("records role-less current Codex history entries as user invocations", async () => {
+    const usageSource = path.join(directory, "history.jsonl");
+    await writeJsonl(usageSource, [
+      {
+        session_id: "session-current-history",
+        text: "Use $agent-coding-workflow for this task.",
+        ts: Date.parse("2026-06-20T00:00:00.000Z") / 1000,
+      },
+    ]);
+
+    const analysis = await analyzeSkillUsage({
+      skills: [buildRecord({ name: "agent-coding-workflow", source: "global" })],
+      usageSourcePaths: [usageSource],
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(analysis.events).toEqual([
+      expect.objectContaining({
+        skillName: "agent-coding-workflow",
+        confidence: "high",
+        evidenceKind: "explicit-user-invocation",
+        timestamp: "2026-06-20T00:00:00.000Z",
+      }),
+    ]);
+  });
+
   it("records current Codex response_item user invocations and plugin-qualified aliases", async () => {
     const usageSource = path.join(directory, "session.jsonl");
     const pluginRoot = path.join(

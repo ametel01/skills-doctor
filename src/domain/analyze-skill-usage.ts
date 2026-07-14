@@ -156,6 +156,7 @@ type UsageProgressState = {
 const DEFAULT_RECENT_WINDOW_DAYS = 30;
 const DEFAULT_FREQUENT_USE_THRESHOLD = 5;
 const DEFAULT_DESCRIPTION_COST_THRESHOLD = 280;
+const UNIX_TIMESTAMP_MILLISECONDS_THRESHOLD = 1_000_000_000_000;
 
 export const analyzeSkillUsage = async (
   input: AnalyzeSkillUsageInput,
@@ -854,6 +855,7 @@ const buildSkillPathMap = (
 
 const extractRoleText = (record: unknown, role: "assistant" | "user"): string => {
   if (!isRecord(record)) return "";
+  if (role === "user" && isCurrentCodexHistoryRecord(record)) return record.text;
   if (record.role === role) return collectText(record.content ?? record.text);
   const message = isRecord(record.message) ? record.message : undefined;
   if (message?.role === role) return collectText(message.content ?? message.text);
@@ -877,6 +879,17 @@ const extractRoleText = (record: unknown, role: "assistant" | "user"): string =>
   }
   return "";
 };
+
+const isCurrentCodexHistoryRecord = (
+  record: Readonly<Record<string, unknown>>,
+): record is Readonly<Record<string, unknown>> & {
+  readonly session_id: string;
+  readonly text: string;
+  readonly ts: string | number;
+} =>
+  typeof record.session_id === "string" &&
+  typeof record.text === "string" &&
+  (typeof record.ts === "string" || typeof record.ts === "number");
 
 const isFunctionOrToolCallRecord = (record: unknown): boolean => {
   if (!isRecord(record)) return false;
@@ -947,28 +960,37 @@ const extractTurnMarker = (record: unknown): string | undefined => {
 const extractTimestamp = (record: unknown): string | undefined => {
   if (!isRecord(record)) return undefined;
   for (const key of ["timestamp", "ts", "created_at"]) {
-    const value = record[key];
-    if (typeof value === "string") return value;
+    const timestamp = normalizeTimestamp(record[key]);
+    if (timestamp !== undefined) return timestamp;
   }
   const message = isRecord(record.message) ? record.message : undefined;
   if (message === undefined) return undefined;
   for (const key of ["timestamp", "ts", "created_at"]) {
-    const value = message[key];
-    if (typeof value === "string") return value;
+    const timestamp = normalizeTimestamp(message[key]);
+    if (timestamp !== undefined) return timestamp;
   }
   const payload = isRecord(record.payload) ? record.payload : undefined;
   if (payload === undefined) return undefined;
   for (const key of ["timestamp", "ts", "created_at"]) {
-    const value = payload[key];
-    if (typeof value === "string") return value;
+    const timestamp = normalizeTimestamp(payload[key]);
+    if (timestamp !== undefined) return timestamp;
   }
   const payloadMessage = isRecord(payload.message) ? payload.message : undefined;
   if (payloadMessage === undefined) return undefined;
   for (const key of ["timestamp", "ts", "created_at"]) {
-    const value = payloadMessage[key];
-    if (typeof value === "string") return value;
+    const timestamp = normalizeTimestamp(payloadMessage[key]);
+    if (timestamp !== undefined) return timestamp;
   }
   return undefined;
+};
+
+const normalizeTimestamp = (value: unknown): string | undefined => {
+  if (typeof value === "string") return value;
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  const milliseconds =
+    Math.abs(value) < UNIX_TIMESTAMP_MILLISECONDS_THRESHOLD ? value * 1000 : value;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 };
 
 const groupEventsBySkill = (

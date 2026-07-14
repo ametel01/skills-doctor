@@ -50,6 +50,25 @@ describe("Codex usage source discovery", () => {
     });
   });
 
+  it("discovers current Codex history records with numeric Unix timestamps", async () => {
+    const historyPath = path.join(homeDir, ".codex", "history.jsonl");
+    await writeJsonl(historyPath, [
+      {
+        session_id: "session-current-history",
+        text: "Use $agent-coding-workflow for this task.",
+        ts: Date.parse("2026-06-20T00:00:00.000Z") / 1000,
+      },
+    ]);
+
+    const result = await discoverUsageSources({
+      homeDir,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+      maxSessionFiles: 0,
+    });
+
+    expect(result.usageSourcePaths).toEqual([historyPath]);
+  });
+
   it("reports discovery progress from actual directories and JSONL candidates", async () => {
     const sessionPath = path.join(homeDir, ".codex", "sessions", "2026", "session.jsonl");
     const historyPath = path.join(homeDir, ".codex", "history.jsonl");
@@ -248,6 +267,43 @@ describe("Codex usage source discovery", () => {
       level: "unknown",
       recentWarningCount: 0,
     });
+  });
+
+  it("inspects session files with bounded concurrency", async () => {
+    const sessionDir = path.join(homeDir, ".codex", "sessions", "2026", "06", "20");
+    const sessionPaths = Array.from({ length: 12 }, (_, index) =>
+      path.join(sessionDir, `session-${String(index).padStart(2, "0")}.jsonl`),
+    );
+    for (const [index, sessionPath] of sessionPaths.entries()) {
+      await writeJsonl(sessionPath, [
+        { timestamp: `2026-06-20T00:${String(index).padStart(2, "0")}:00.000Z` },
+      ]);
+    }
+    let activeSessionStats = 0;
+    let maxActiveSessionStats = 0;
+
+    const result = await discoverUsageSources({
+      homeDir,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+      maxSessionFiles: sessionPaths.length,
+      fileSystem: {
+        stat: async (filePath) => {
+          if (!filePath.startsWith(sessionDir)) return stat(filePath);
+          activeSessionStats += 1;
+          maxActiveSessionStats = Math.max(maxActiveSessionStats, activeSessionStats);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            return await stat(filePath);
+          } finally {
+            activeSessionStats -= 1;
+          }
+        },
+      },
+    });
+
+    expect(result.usageSourcePaths).toHaveLength(sessionPaths.length);
+    expect(maxActiveSessionStats).toBeGreaterThan(1);
+    expect(maxActiveSessionStats).toBeLessThanOrEqual(8);
   });
 
   it("reports unreadable known Codex sources without scanning arbitrary home files", async () => {
